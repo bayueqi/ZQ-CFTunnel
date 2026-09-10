@@ -34,7 +34,95 @@ jobs:
             target: 'aarch64-apple-darwin'
             args: '--target aarch64-apple-darwin'
 
+          # Linux x86_64 (主流 64 位桌面与服务器)
+          - platform: 'ubuntu-22.04'
+            target: 'x86_64-unknown-linux-gnu'
+            args: '--target x86_64-unknown-linux-gnu'
+
+          # Linux i686 (32 位) - 使用 gcc-multilib 本地交叉编译
+          - platform: 'ubuntu-22.04'
+            target: 'i686-unknown-linux-gnu'
+            args: '--target i686-unknown-linux-gnu'
+            cross-mode: 'multilib'
+
+          # Linux aarch64 (ARM 64 位，如树莓派 4/5、RK3588)
+          - platform: 'ubuntu-22.04'
+            target: 'aarch64-unknown-linux-gnu'
+            args: '--target aarch64-unknown-linux-gnu'
+            use-cross: true
+
+          # Linux armv7 (ARM 32 位 HF，如老款树莓派)
+          - platform: 'ubuntu-22.04'
+            target: 'armv7-unknown-linux-gnueabihf'
+            args: '--target armv7-unknown-linux-gnueabihf'
+            use-cross: true
+
     runs-on: ${{ matrix.platform }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: 安装 Linux 系统依赖 (Ubuntu 基础)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: 安装 Linux i686 32 位交叉编译依赖 (gcc-multilib)
+        if: matrix.cross-mode == 'multilib'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib libwebkit2gtk-4.1-dev:i386 libglib2.0-dev:i386 libgtk-3-dev:i386 libssl-dev:i386 libayatana-appindicator3-dev:i386 librsvg2-dev:i386 libxdo-dev:i386
+
+      - name: 安装 Linux ARM 交叉编译工具 (Cross)
+        if: matrix.platform == 'ubuntu-22.04' && matrix.use-cross
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 清理任何预存二进制 (确保不将 cloudflared 预打包进安装包)
+        run: |
+          node -e "const fs = require('fs'); ['binaries', 'src-tauri/binaries'].forEach(d => { if (fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true }); });"
+
+      - name: 构建 Tauri 应用程序并发布 Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.cross-mode == 'multilib' && '1' || '' }}
+          PKG_CONFIG_PATH: ${{ matrix.cross-mode == 'multilib' && '/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig' || '' }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CFTunnel ${{ github.ref_name }}'
+          releaseBody: |
+            ## 🚀 CFTunnel Release ${{ github.ref_name }}
+            
+            基于 Tauri 2.0 + Vue 3 + Windows 11 Fluent Design 构建的跨平台极简 Cloudflare 隧道管理客户端。
+
+            ### 📦 跨平台多架构轻量级安装包列表：
+            - **Windows**: x86_64 (64位), i686 (32位) - 便携版 / MSI 安装包 / NSIS 安装包 (超轻量 ~4MB)
+            - **macOS**: Apple Silicon (M1/M2/M3/M4) / Intel - DMG 镜像包
+            - **Linux**: x86_64, i686, aarch64 (ARM64), armv7 (ARM32) - AppImage / DEB 安装包
+            
+            *(应用启动后可在界面内一键自动检测并在线安装/更新官方 cloudflared 二进制)*
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+          useCross: ${{ matrix.use-cross || false }}    runs-on: ${{ matrix.platform }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
