@@ -889,10 +889,22 @@ fn open_cloudflared_config_dir(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn install_remote_tunnel(app: AppHandle, token: String) -> Result<String, String> {
-    let token_trimmed = token.trim();
-    if token_trimmed.is_empty() {
+    let raw = token.trim();
+    if raw.is_empty() {
         return Err("Token 不能为空".to_string());
     }
+
+    // 支持用户直接粘贴完整命令，自动提取 Token
+    // 例如: cloudflared.exe service install eyJhIjoi...
+    // 或者: cloudflared service install eyJhIjoi...
+    let token_trimmed = if raw.contains("service") && raw.contains("install") {
+        raw.split_whitespace()
+            .filter(|s| s.starts_with("eyJ"))
+            .last()
+            .unwrap_or(raw)
+    } else {
+        raw
+    };
 
     let _ = app.emit(
         "log-message",
