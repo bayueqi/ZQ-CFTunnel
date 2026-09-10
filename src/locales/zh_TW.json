@@ -1,0 +1,77 @@
+{
+  "title": "CFTunnel",
+  "header": "CFTunnel",
+  "lang_button": "繁體中文",
+  "tabs": {
+    "server": "伺服端",
+    "client": "客戶端",
+    "misc": "雜項"
+  },
+  "server_tab": {
+    "tunnel_name": "隧道名稱:",
+    "port": "本地端口:",
+    "tunnel_name_placeholder": "例如: mc (僅限純英文字母)",
+    "port_placeholder": "例如: 25565 (1-65535)",
+    "btn_create": "建立隧道",
+    "btn_start": "啟動隧道",
+    "btn_stop": "停止隧道",
+    "btn_refresh": "重新整理列表",
+    "btn_delete": "刪除隧道",
+    "btn_clear_log": "清除日誌",
+    "status_running": "執行中",
+    "status_stopped": "已停止",
+    "list_title": "已配置隧道列表",
+    "headers": {
+      "id": "隧道 ID",
+      "name": "隧道名稱",
+      "created": "建立時間",
+      "connections": "連線狀態"
+    },
+    "errors": {
+      "tunnel_invalid": "隧道名稱不能為空且只能包含純英文字母 (a-z, A-Z)",
+      "port_invalid": "端口號必須為 1-65535 的純數字",
+      "no_selection": "請先在列表中選中要刪除的隧道",
+      "delete_confirm_title": "確認刪除隧道",
+      "delete_confirm_msg": "確定要刪除隧道 \"{name}\" 嗎？此操作無法復原。"
+    }
+  },
+  "client_tab": {
+    "domain": "隧道域名:",
+    "port": "本地監聽端口:",
+    "domain_placeholder": "例如: zhishifenzi.dpdns.org",
+    "port_placeholder": "例如: 25566 (1-65535)",
+    "btn_connect": "連接客戶端",
+    "btn_disconnect": "中斷連線",
+    "status_connected": "已連線",
+    "status_disconnected": "未連線",
+    "errors": {
+      "domain_invalid": "請輸入有效的隧道域名格式",
+      "port_invalid": "本地監聽端口必須為 1-65535 的純數字"
+    }
+  },
+  "misc_tab": {
+    "btn_login": "Cloudflared 授權登入",
+    "btn_check_version": "檢查 cloudflared 版本",
+    "btn_update": "線上更新 cloudflared",
+    "btn_download": "前往官方下載頁面",
+    "btn_install": "安裝 cloudflared",
+    "btn_install_desc": "自動偵測作業系統與 CPU 架構並下載至應用目錄",
+    "btn_open_config_dir": "開啟本機設定檔目錄",
+    "btn_open_config_dir_desc": "在檔案總管中查看 ~/.cloudflared 設定檔目錄",
+    "config_dir_warning": "提示：請不要將 cert.pem 憑證檔案和 .json 隧道設定檔展示或分享給任何人，以免造成隱私外洩和隧道被盜用！"
+  },
+  "console": {
+    "title": "控制台即時日誌輸出",
+    "filter_all": "全部日誌",
+    "btn_clear": "清除日誌",
+    "btn_copy": "複製日誌",
+    "copy_logs_success": "所有日誌已複製到剪貼簿！",
+    "empty": "暫無執行日誌..."
+  },
+  "exit_modal": {
+    "title": "結束 CFTunnel",
+    "message": "確定要真正結束程式嗎？如果目前有正在執行的伺服端或客戶端隧道，結束後將立即中斷連線。",
+    "btn_confirm": "確認結束",
+    "btn_cancel": "取消"
+  }
+}

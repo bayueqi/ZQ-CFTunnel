@@ -1,0 +1,77 @@
+{
+  "title": "CFTunnel",
+  "header": "CFTunnel",
+  "lang_button": "Español",
+  "tabs": {
+    "server": "Servidor",
+    "client": "Cliente",
+    "misc": "Varios"
+  },
+  "server_tab": {
+    "tunnel_name": "Nombre del Túnel:",
+    "port": "Puerto Local:",
+    "tunnel_name_placeholder": "ej: mc (solo letras)",
+    "port_placeholder": "ej: 25565 (1-65535)",
+    "btn_create": "Crear Túnel",
+    "btn_start": "Iniciar Túnel",
+    "btn_stop": "Detener Túnel",
+    "btn_refresh": "Actualizar Lista",
+    "btn_delete": "Eliminar Túnel",
+    "btn_clear_log": "Limpiar Registros",
+    "status_running": "En ejecución",
+    "status_stopped": "Detenido",
+    "list_title": "Túneles Configurados",
+    "headers": {
+      "id": "ID del Túnel",
+      "name": "Nombre",
+      "created": "Fecha de Creación",
+      "connections": "Conexiones"
+    },
+    "errors": {
+      "tunnel_invalid": "El nombre del túnel solo debe contener letras (a-z, A-Z)",
+      "port_invalid": "El puerto debe ser un número válido entre 1 y 65535",
+      "no_selection": "Seleccione un túnel de la lista para eliminarlo",
+      "delete_confirm_title": "Confirmar Eliminación",
+      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?"
+    }
+  },
+  "client_tab": {
+    "domain": "Dominio del Túnel:",
+    "port": "Puerto de Escucha Local:",
+    "domain_placeholder": "ej: zhishifenzi.dpdns.org",
+    "port_placeholder": "ej: 25566 (1-65535)",
+    "btn_connect": "Conectar Cliente",
+    "btn_disconnect": "Desconectar",
+    "status_connected": "Conectado",
+    "status_disconnected": "Desconectado",
+    "errors": {
+      "domain_invalid": "Ingrese un dominio o nombre de host válido",
+      "port_invalid": "El puerto debe ser un número válido entre 1 y 65535"
+    }
+  },
+  "misc_tab": {
+    "btn_login": "Iniciar Sesión Cloudflared",
+    "btn_check_version": "Verificar Versión",
+    "btn_update": "Actualizar Cloudflared",
+    "btn_download": "Página de Descarga",
+    "btn_install": "Instalar cloudflared",
+    "btn_install_desc": "Detectar SO y CPU y descargar en la carpeta de la app",
+    "btn_open_config_dir": "Abrir Carpeta de Configuración Local",
+    "btn_open_config_dir_desc": "Ver carpeta ~/.cloudflared en el explorador de archivos",
+    "config_dir_warning": "Aviso: ¡No muestre ni comparta el archivo cert.pem ni los archivos .json del túnel con nadie para evitar fugas de privacidad!"
+  },
+  "console": {
+    "title": "Registros de la Consola en Vivo",
+    "filter_all": "Todos los registros",
+    "btn_clear": "Limpiar",
+    "btn_copy": "Copiar Todo",
+    "copy_logs_success": "¡Registros copiados al portapapeles!",
+    "empty": "Aún no hay registros..."
+  },
+  "exit_modal": {
+    "title": "Salir de CFTunnel",
+    "message": "¿Está seguro de que desea salir? Se interrumpirán todos los túneles activos de servidor y cliente.",
+    "btn_confirm": "Confirmar Salida",
+    "btn_cancel": "Cancelar"
+  }
+}

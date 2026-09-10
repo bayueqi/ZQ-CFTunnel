@@ -1,0 +1,77 @@
+{
+  "title": "CFTunnel",
+  "header": "CFTunnel",
+  "lang_button": "Português",
+  "tabs": {
+    "server": "Servidor",
+    "client": "Cliente",
+    "misc": "Diversos"
+  },
+  "server_tab": {
+    "tunnel_name": "Nome do Túnel:",
+    "port": "Porta Local:",
+    "tunnel_name_placeholder": "ex: mc (apenas letras)",
+    "port_placeholder": "ex: 25565 (1-65535)",
+    "btn_create": "Criar Túnel",
+    "btn_start": "Iniciar Túnel",
+    "btn_stop": "Parar Túnel",
+    "btn_refresh": "Atualizar Lista",
+    "btn_delete": "Excluir Túnel",
+    "btn_clear_log": "Limpar Logs",
+    "status_running": "Em Execução",
+    "status_stopped": "Parado",
+    "list_title": "Túneis Configurados",
+    "headers": {
+      "id": "ID do Túnel",
+      "name": "Nome",
+      "created": "Data de Criação",
+      "connections": "Conexões"
+    },
+    "errors": {
+      "tunnel_invalid": "O nome do túnel deve conter apenas letras (a-z, A-Z)",
+      "port_invalid": "A porta deve ser um número válido entre 1 e 65535",
+      "no_selection": "Selecione um túnel na lista para excluir",
+      "delete_confirm_title": "Confirmar Exclusão",
+      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?"
+    }
+  },
+  "client_tab": {
+    "domain": "Domínio do Túnel:",
+    "port": "Porta de Escuta Local:",
+    "domain_placeholder": "ex: zhishifenzi.dpdns.org",
+    "port_placeholder": "ex: 25566 (1-65535)",
+    "btn_connect": "Conectar Cliente",
+    "btn_disconnect": "Desconectar",
+    "status_connected": "Conectado",
+    "status_disconnected": "Desconectado",
+    "errors": {
+      "domain_invalid": "Insira um domínio ou nome de host válido",
+      "port_invalid": "A porta local deve ser um número válido entre 1 e 65535"
+    }
+  },
+  "misc_tab": {
+    "btn_login": "Login de Autenticação",
+    "btn_check_version": "Verificar Versão",
+    "btn_update": "Atualizar Cloudflared",
+    "btn_download": "Página de Download",
+    "btn_install": "Instalar cloudflared",
+    "btn_install_desc": "Detectar SO e CPU e baixar para a pasta do app",
+    "btn_open_config_dir": "Abrir Pasta de Configuração Local",
+    "btn_open_config_dir_desc": "Ver pasta ~/.cloudflared no Explorador de Arquivos",
+    "config_dir_warning": "Aviso: Nunca mostre ou compartilhe o arquivo cert.pem e arquivos .json do túnel com terceiros para evitar vazamento de privacidade!"
+  },
+  "console": {
+    "title": "Logs do Console em Tempo Real",
+    "filter_all": "Todos os logs",
+    "btn_clear": "Limpar",
+    "btn_copy": "Copiar Tudo",
+    "copy_logs_success": "Logs copiados para a área de transferência!",
+    "empty": "Nenhum log no momento..."
+  },
+  "exit_modal": {
+    "title": "Sair do CFTunnel",
+    "message": "Tem certeza de que deseja sair? Todos os túneis de servidor e cliente em execução serão interrompidos.",
+    "btn_confirm": "Confirmar Saída",
+    "btn_cancel": "Cancelar"
+  }
+}

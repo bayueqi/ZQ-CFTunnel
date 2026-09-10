@@ -1,0 +1,77 @@
+{
+  "title": "CFTunnel",
+  "header": "CFTunnel",
+  "lang_button": "简体中文",
+  "tabs": {
+    "server": "服务端",
+    "client": "客户端",
+    "misc": "杂项"
+  },
+  "server_tab": {
+    "tunnel_name": "隧道名字:",
+    "port": "本地端口:",
+    "tunnel_name_placeholder": "例如: mc (仅限纯英文字母)",
+    "port_placeholder": "例如: 25565 (1-65535)",
+    "btn_create": "创建隧道",
+    "btn_start": "启动隧道",
+    "btn_stop": "停止隧道",
+    "btn_refresh": "刷新隧道列表",
+    "btn_delete": "删除隧道",
+    "btn_clear_log": "清空日志",
+    "status_running": "运行中",
+    "status_stopped": "已停止",
+    "list_title": "已配置隧道列表",
+    "headers": {
+      "id": "隧道 ID",
+      "name": "隧道名称",
+      "created": "创建时间",
+      "connections": "连接状态"
+    },
+    "errors": {
+      "tunnel_invalid": "隧道名不能为空且只能包含纯字母 (a-z, A-Z)，不可含数字、空格或特殊字符",
+      "port_invalid": "端口号必须为 1-65535 的纯数字",
+      "no_selection": "请先在列表中选中要删除的隧道",
+      "delete_confirm_title": "确认删除隧道",
+      "delete_confirm_msg": "确定要删除隧道 \"{name}\" 吗？此操作无法撤销。"
+    }
+  },
+  "client_tab": {
+    "domain": "隧道域名:",
+    "port": "本地监听端口:",
+    "domain_placeholder": "例如: zhishifenzi.dpdns.org",
+    "port_placeholder": "例如: 25566 (1-65535)",
+    "btn_connect": "连接客户端",
+    "btn_disconnect": "断开连接",
+    "status_connected": "已连接",
+    "status_disconnected": "未连接",
+    "errors": {
+      "domain_invalid": "请输入有效的隧道域名或主机名格式 (不可包含空格或非法符号)",
+      "port_invalid": "本地监听端口必须为 1-65535 的纯数字"
+    }
+  },
+  "misc_tab": {
+    "btn_login": "Cloudflared 授权登录",
+    "btn_check_version": "检查 cloudflared 版本",
+    "btn_update": "在线更新 cloudflared",
+    "btn_download": "前往官方下载页面",
+    "btn_install": "安装 cloudflared",
+    "btn_install_desc": "自动检测操作系统和 CPU 架构并下载到应用目录",
+    "btn_open_config_dir": "打开本地配置文件目录",
+    "btn_open_config_dir_desc": "在文件资源管理器中查看 ~/.cloudflared 配置文件目录",
+    "config_dir_warning": "提示：请不要将 cert.pem 证书文件和 .json 隧道配置文件展示或分享给任何人，以免造成隐私泄露和隧道被盗用！"
+  },
+  "console": {
+    "title": "控制台实时日志输出",
+    "filter_all": "全部日志",
+    "btn_clear": "清空日志",
+    "btn_copy": "复制日志",
+    "copy_logs_success": "所有日志已复制到剪贴板！",
+    "empty": "暂无运行日志..."
+  },
+  "exit_modal": {
+    "title": "退出 CFTunnel",
+    "message": "确定要真正退出程序吗？如果当前有正在运行的服务端或客户端隧道，退出后将立即中断连接。",
+    "btn_confirm": "确认退出",
+    "btn_cancel": "取消"
+  }
+}

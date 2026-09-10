@@ -1,0 +1,77 @@
+{
+  "title": "CFTunnel",
+  "header": "CFTunnel",
+  "lang_button": "日本語",
+  "tabs": {
+    "server": "サーバー",
+    "client": "クライアント",
+    "misc": "その他"
+  },
+  "server_tab": {
+    "tunnel_name": "トンネル名:",
+    "port": "ポート番号:",
+    "tunnel_name_placeholder": "例: mc (英字のみ)",
+    "port_placeholder": "例: 25565 (1-65535)",
+    "btn_create": "トンネル作成",
+    "btn_start": "トンネル開始",
+    "btn_stop": "トンネル停止",
+    "btn_refresh": "リスト更新",
+    "btn_delete": "トンネル削除",
+    "btn_clear_log": "ログ消去",
+    "status_running": "稼働中",
+    "status_stopped": "停止中",
+    "list_title": "トンネル一覧",
+    "headers": {
+      "id": "トンネル ID",
+      "name": "名前",
+      "created": "作成日",
+      "connections": "接続状態"
+    },
+    "errors": {
+      "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",
+      "port_invalid": "ポート番号は 1〜65535 の数字である必要があります",
+      "no_selection": "削除するトンネルを一覧から選択してください",
+      "delete_confirm_title": "削除の確認",
+      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？"
+    }
+  },
+  "client_tab": {
+    "domain": "トンネルドメイン:",
+    "port": "ローカルリッスンポート:",
+    "domain_placeholder": "例: zhishifenzi.dpdns.org",
+    "port_placeholder": "例: 25566 (1-65535)",
+    "btn_connect": "接続",
+    "btn_disconnect": "切断",
+    "status_connected": "接続済み",
+    "status_disconnected": "未接続",
+    "errors": {
+      "domain_invalid": "有効なドメイン名を入力してください",
+      "port_invalid": "ポート番号は 1〜65535 の数字である必要があります"
+    }
+  },
+  "misc_tab": {
+    "btn_login": "Cloudflared ログイン認証",
+    "btn_check_version": "バージョン確認",
+    "btn_update": "Cloudflared アップデート",
+    "btn_download": "ダウンロードページを開く",
+    "btn_install": "cloudflared をインストール",
+    "btn_install_desc": "OSとCPUアーキテクチャを自動検出してアプリフォルダにダウンロード",
+    "btn_open_config_dir": "ローカル設定フォルダを開く",
+    "btn_open_config_dir_desc": "エクスプローラーで ~/.cloudflared フォルダを表示",
+    "config_dir_warning": "警告：プライバシー漏洩やトンネルの不正使用を防ぐため、cert.pem 証明書や .json トンネル設定ファイルを他人に公開・共有しないでください！"
+  },
+  "console": {
+    "title": "コンソールログ出力",
+    "filter_all": "すべてのログ",
+    "btn_clear": "ログ消去",
+    "btn_copy": "ログをコピー",
+    "copy_logs_success": "すべてのログをクリップボードにコピーしました！",
+    "empty": "ログはまだありません..."
+  },
+  "exit_modal": {
+    "title": "CFTunnel を終了",
+    "message": "本当にアプリケーションを終了しますか？実行中のサーバーまたはクライアントのトンネル接続はすべて切断されます。",
+    "btn_confirm": "終了する",
+    "btn_cancel": "キャンセル"
+  }
+}

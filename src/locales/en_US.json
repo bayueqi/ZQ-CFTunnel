@@ -1,0 +1,77 @@
+{
+  "title": "CFTunnel",
+  "header": "CFTunnel",
+  "lang_button": "English",
+  "tabs": {
+    "server": "Server",
+    "client": "Client",
+    "misc": "Misc"
+  },
+  "server_tab": {
+    "tunnel_name": "Tunnel Name:",
+    "port": "Local Port:",
+    "tunnel_name_placeholder": "e.g. mc (letters only)",
+    "port_placeholder": "e.g. 25565 (1-65535)",
+    "btn_create": "Create Tunnel",
+    "btn_start": "Start Tunnel",
+    "btn_stop": "Stop Tunnel",
+    "btn_refresh": "Refresh List",
+    "btn_delete": "Delete Tunnel",
+    "btn_clear_log": "Clear Logs",
+    "status_running": "Running",
+    "status_stopped": "Stopped",
+    "list_title": "Configured Tunnels",
+    "headers": {
+      "id": "Tunnel ID",
+      "name": "Name",
+      "created": "Created At",
+      "connections": "Connections"
+    },
+    "errors": {
+      "tunnel_invalid": "Tunnel name must contain only letters (a-z, A-Z)",
+      "port_invalid": "Port must be a valid number between 1 and 65535",
+      "no_selection": "Please select a tunnel from the list to delete",
+      "delete_confirm_title": "Confirm Deletion",
+      "delete_confirm_msg": "Are you sure you want to delete tunnel \"{name}\"? This action cannot be undone."
+    }
+  },
+  "client_tab": {
+    "domain": "Tunnel Domain:",
+    "port": "Local Listen Port:",
+    "domain_placeholder": "e.g. zhishifenzi.dpdns.org",
+    "port_placeholder": "e.g. 25566 (1-65535)",
+    "btn_connect": "Connect Client",
+    "btn_disconnect": "Disconnect",
+    "status_connected": "Connected",
+    "status_disconnected": "Disconnected",
+    "errors": {
+      "domain_invalid": "Please enter a valid domain/hostname",
+      "port_invalid": "Local port must be a valid number between 1 and 65535"
+    }
+  },
+  "misc_tab": {
+    "btn_login": "Cloudflared Auth Login",
+    "btn_check_version": "Check Version",
+    "btn_update": "Update Cloudflared",
+    "btn_download": "Download Cloudflared",
+    "btn_install": "Install cloudflared",
+    "btn_install_desc": "Auto-detect OS & CPU Arch and download to app directory",
+    "btn_open_config_dir": "Open Local Config Directory",
+    "btn_open_config_dir_desc": "View ~/.cloudflared config directory in File Explorer",
+    "config_dir_warning": "Notice: Never expose or share cert.pem certificate or .json tunnel files with anyone to prevent credential theft!"
+  },
+  "console": {
+    "title": "Console Live Logs",
+    "filter_all": "All Logs",
+    "btn_clear": "Clear",
+    "btn_copy": "Copy All",
+    "copy_logs_success": "Logs copied to clipboard!",
+    "empty": "No logs yet..."
+  },
+  "exit_modal": {
+    "title": "Exit CFTunnel",
+    "message": "Are you sure you want to exit? Any active server or client tunnel connections will be terminated.",
+    "btn_confirm": "Exit Application",
+    "btn_cancel": "Cancel"
+  }
+}
