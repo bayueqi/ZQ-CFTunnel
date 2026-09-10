@@ -679,7 +679,7 @@ const serverConfig = ref({
 });
 
 const clientConfig = ref({
-  domain: localStorage.getItem('client_domain') || 'zhishifenzi.dpdns.org',
+  domain: localStorage.getItem('client_domain') || '',
   port: localStorage.getItem('client_port') || '25566',
 });
 

@@ -5,7 +5,7 @@
   "tabs": {
     "server": "伺服端",
     "client": "客戶端",
-    "misc": "雜項"
+    "misc": "cloudflared"
   },
   "server_tab": {
     "tunnel_name": "隧道名稱:",
@@ -38,7 +38,7 @@
   "client_tab": {
     "domain": "隧道域名:",
     "port": "本地監聽端口:",
-    "domain_placeholder": "例如: zhishifenzi.dpdns.org",
+    "domain_placeholder": "例如: example.com",
     "port_placeholder": "例如: 25566 (1-65535)",
     "btn_connect": "連接客戶端",
     "btn_disconnect": "中斷連線",

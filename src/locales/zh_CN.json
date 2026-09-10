@@ -38,7 +38,7 @@
   "client_tab": {
     "domain": "隧道域名:",
     "port": "本地监听端口:",
-    "domain_placeholder": "例如: zhishifenzi.dpdns.org",
+    "domain_placeholder": "例如: example.com",
     "port_placeholder": "例如: 25566 (1-65535)",
     "btn_connect": "连接客户端",
     "btn_disconnect": "断开连接",

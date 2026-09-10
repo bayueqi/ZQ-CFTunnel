@@ -38,7 +38,7 @@
   "client_tab": {
     "domain": "トンネルドメイン:",
     "port": "ローカルリッスンポート:",
-    "domain_placeholder": "例: zhishifenzi.dpdns.org",
+    "domain_placeholder": "例: example.com",
     "port_placeholder": "例: 25566 (1-65535)",
     "btn_connect": "接続",
     "btn_disconnect": "切断",

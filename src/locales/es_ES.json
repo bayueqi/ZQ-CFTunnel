@@ -5,7 +5,7 @@
   "tabs": {
     "server": "Servidor",
     "client": "Cliente",
-    "misc": "Varios"
+    "misc": "cloudflared"
   },
   "server_tab": {
     "tunnel_name": "Nombre del Túnel:",
@@ -38,7 +38,7 @@
   "client_tab": {
     "domain": "Dominio del Túnel:",
     "port": "Puerto de Escucha Local:",
-    "domain_placeholder": "ej: zhishifenzi.dpdns.org",
+    "domain_placeholder": "ej: example.com",
     "port_placeholder": "ej: 25566 (1-65535)",
     "btn_connect": "Conectar Cliente",
     "btn_disconnect": "Desconectar",

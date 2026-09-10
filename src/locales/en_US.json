@@ -38,7 +38,7 @@
   "client_tab": {
     "domain": "Tunnel Domain:",
     "port": "Local Listen Port:",
-    "domain_placeholder": "e.g. zhishifenzi.dpdns.org",
+    "domain_placeholder": "e.g. example.com",
     "port_placeholder": "e.g. 25566 (1-65535)",
     "btn_connect": "Connect Client",
     "btn_disconnect": "Disconnect",
