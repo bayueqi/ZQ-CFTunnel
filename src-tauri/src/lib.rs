@@ -27,6 +27,7 @@ pub struct TunnelInfo {
     pub name: String,
     pub created: String,
     pub connections: String,
+    pub tunnel_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -76,51 +77,59 @@ fn create_base_command() -> Command {
 #[tauri::command]
 fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
     let mut cmd = create_base_command();
-    cmd.args(["tunnel", "list"])
+    cmd.args(["tunnel", "list", "--output", "json"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
     let output = cmd.output().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
-            "未找到 cloudflared 可执行文件。请先在「杂项」Tab 点击「安装 cloudflared」或将其放置在应用根目录下。".to_string()
+            "未找到 cloudflared 可执行文件。请先在「cloudflared」Tab 点击「安装 cloudflared」或将其放置在应用根目录下。".to_string()
         } else {
             format!("执行 cloudflared 失败: {}", e)
         }
     })?;
 
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // 如果 stdout 为空，可能是没有隧道或出错
+    if stdout_str.trim().is_empty() {
+        if !stderr_str.trim().is_empty() {
+            return Err(stderr_str);
+        }
+        return Ok(Vec::new());
+    }
+
+    // 解析 JSON 数组
+    #[derive(Deserialize)]
+    struct RawTunnel {
+        id: String,
+        name: String,
+        created_at: String,
+        connections: Vec<serde_json::Value>,
+    }
+
+    let raw_list: Vec<RawTunnel> = serde_json::from_str(&stdout_str)
+        .map_err(|e| format!("解析隧道列表失败: {}", e))?;
+
     let mut list = Vec::new();
-
-    for line in stdout_str.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty()
-            || trimmed.starts_with("You can obtain")
-            || trimmed.starts_with("ID ")
-            || trimmed.starts_with("----")
-        {
-            continue;
-        }
-
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        if parts.len() >= 4 {
-            let id = parts[0].to_string();
-            let name = parts[1].to_string();
-            let created = parts[2].to_string();
-            let connections = parts[3..].join(" ");
-            list.push(TunnelInfo {
-                id,
-                name,
-                created,
-                connections,
-            });
-        } else if parts.len() == 3 {
-            list.push(TunnelInfo {
-                id: parts[0].to_string(),
-                name: parts[1].to_string(),
-                created: parts[2].to_string(),
-                connections: String::new(),
-            });
-        }
+    for t in raw_list {
+        let connections_str = if t.connections.is_empty() {
+            String::new()
+        } else {
+            t.connections.iter()
+                .filter_map(|c| c.get("colo_name").and_then(|v| v.as_str()).map(|s| format!("1x{}", s)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let tunnel_type = if t.connections.is_empty() { "local" } else { "remote" };
+        list.push(TunnelInfo {
+            id: t.id,
+            name: t.name,
+            created: t.created_at,
+            connections: connections_str,
+            tunnel_type,
+        });
     }
 
     Ok(list)
@@ -878,6 +887,198 @@ fn open_cloudflared_config_dir(app: AppHandle) -> Result<String, String> {
     Ok(dir_str)
 }
 
+#[tauri::command]
+fn install_remote_tunnel(app: AppHandle, token: String) -> Result<String, String> {
+    let token_trimmed = token.trim();
+    if token_trimmed.is_empty() {
+        return Err("Token 不能为空".to_string());
+    }
+
+    let _ = app.emit(
+        "log-message",
+        LogPayload {
+            message: "[INFO] 正在安装远程隧道服务...".to_string(),
+            level: "info".to_string(),
+            source: "server".to_string(),
+        },
+    );
+
+    let mut cmd = create_base_command();
+    cmd.args(["service", "install", token_trimmed])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = cmd.output().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "未找到 cloudflared 可执行程序，请先点击「安装 cloudflared」".to_string()
+        } else {
+            format!("执行安装服务失败: {}", e)
+        }
+    })?;
+
+    let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        let _ = app.emit(
+            "log-message",
+            LogPayload {
+                message: "[SUCCESS] 远程隧道服务安装成功，已注册为系统服务".to_string(),
+                level: "success".to_string(),
+                source: "server".to_string(),
+            },
+        );
+        Ok(if !out_str.trim().is_empty() { out_str } else { "远程隧道服务安装成功".to_string() })
+    } else {
+        let err_msg = if !err_str.trim().is_empty() { err_str } else { out_str };
+        let _ = app.emit(
+            "log-message",
+            LogPayload {
+                message: format!("[ERROR] 远程隧道服务安装失败: {}", err_msg),
+                level: "error".to_string(),
+                source: "server".to_string(),
+            },
+        );
+        Err(err_msg)
+    }
+}
+
+#[tauri::command]
+fn uninstall_remote_tunnel(app: AppHandle) -> Result<String, String> {
+    let _ = app.emit(
+        "log-message",
+        LogPayload {
+            message: "[INFO] 正在卸载远程隧道服务...".to_string(),
+            level: "info".to_string(),
+            source: "server".to_string(),
+        },
+    );
+
+    let mut cmd = create_base_command();
+    cmd.args(["service", "uninstall"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = cmd.output().map_err(|e| format!("执行卸载服务失败: {}", e))?;
+    let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        let _ = app.emit(
+            "log-message",
+            LogPayload {
+                message: "[INFO] 远程隧道服务已卸载".to_string(),
+                level: "warn".to_string(),
+                source: "server".to_string(),
+            },
+        );
+        Ok("远程隧道服务已卸载".to_string())
+    } else {
+        Err(if !err_str.trim().is_empty() { err_str } else { out_str })
+    }
+}
+
+#[tauri::command]
+fn start_remote_tunnel(app: AppHandle) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("net");
+        cmd.args(["start", "Cloudflared"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let output = cmd.output().map_err(|e| format!("启动服务失败: {}", e))?;
+        let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+        let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if output.status.success() {
+            let _ = app.emit(
+                "log-message",
+                LogPayload {
+                    message: "[SUCCESS] 远程隧道服务已启动".to_string(),
+                    level: "success".to_string(),
+                    source: "server".to_string(),
+                },
+            );
+            Ok("远程隧道服务已启动".to_string())
+        } else {
+            let err_msg = if !err_str.trim().is_empty() { err_str } else { out_str };
+            let _ = app.emit(
+                "log-message",
+                LogPayload {
+                    message: format!("[ERROR] 启动服务失败: {}", err_msg),
+                    level: "error".to_string(),
+                    source: "server".to_string(),
+                },
+            );
+            Err(err_msg)
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        Err("此功能仅在 Windows 上可用".to_string())
+    }
+}
+
+#[tauri::command]
+fn stop_remote_tunnel(app: AppHandle) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("net");
+        cmd.args(["stop", "Cloudflared"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let output = cmd.output().map_err(|e| format!("停止服务失败: {}", e))?;
+        let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+        let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if output.status.success() {
+            let _ = app.emit(
+                "log-message",
+                LogPayload {
+                    message: "[WARN] 远程隧道服务已停止".to_string(),
+                    level: "warn".to_string(),
+                    source: "server".to_string(),
+                },
+            );
+            Ok("远程隧道服务已停止".to_string())
+        } else {
+            Err(if !err_str.trim().is_empty() { err_str } else { out_str })
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        Err("此功能仅在 Windows 上可用".to_string())
+    }
+}
+
+#[tauri::command]
+fn is_remote_tunnel_running() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("sc");
+        cmd.args(["query", "Cloudflared"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        if let Ok(output) = cmd.output() {
+            let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+            return out_str.contains("RUNNING");
+        }
+        false
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -968,7 +1169,12 @@ pub fn run() {
             minimize_window,
             toggle_maximize_window,
             close_window,
-            is_window_maximized
+            is_window_maximized,
+            install_remote_tunnel,
+            uninstall_remote_tunnel,
+            start_remote_tunnel,
+            stop_remote_tunnel,
+            is_remote_tunnel_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

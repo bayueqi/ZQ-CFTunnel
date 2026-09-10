@@ -3,6 +3,7 @@ export interface TunnelInfo {
   name: string;
   created: string;
   connections: string;
+  tunnel_type: string;
 }
 
 export interface LogEntry {
@@ -38,11 +39,24 @@ export interface LangPack {
     status_running: string;
     status_stopped: string;
     list_title: string;
+    mode_local: string;
+    mode_remote: string;
+    remote_token: string;
+    remote_token_placeholder: string;
+    btn_install_service: string;
+    btn_uninstall_service: string;
+    btn_start_service: string;
+    btn_stop_service: string;
+    status_service_running: string;
+    status_service_stopped: string;
+    tunnel_type_local: string;
+    tunnel_type_remote: string;
     headers: {
       id: string;
       name: string;
       created: string;
       connections: string;
+      type: string;
     };
     errors: {
       tunnel_invalid: string;
@@ -50,6 +64,7 @@ export interface LangPack {
       no_selection: string;
       delete_confirm_title: string;
       delete_confirm_msg: string;
+      token_invalid: string;
     };
   };
   client_tab: {

@@ -21,18 +21,32 @@
     "status_running": "Em Execução",
     "status_stopped": "Parado",
     "list_title": "Túneis Configurados",
+    "mode_local": "Túnel Local",
+    "mode_remote": "Túnel Remoto",
+    "remote_token": "Token do Túnel:",
+    "remote_token_placeholder": "Cole o Token do painel do Cloudflare",
+    "btn_install_service": "Instalar Serviço",
+    "btn_uninstall_service": "Desinstalar Serviço",
+    "btn_start_service": "Iniciar Serviço",
+    "btn_stop_service": "Parar Serviço",
+    "status_service_running": "Serviço em Execução",
+    "status_service_stopped": "Serviço Parado",
+    "tunnel_type_local": "Local",
+    "tunnel_type_remote": "Remoto",
     "headers": {
       "id": "ID do Túnel",
       "name": "Nome",
       "created": "Data de Criação",
-      "connections": "Conexões"
+      "connections": "Conexões",
+      "type": "Tipo"
     },
     "errors": {
       "tunnel_invalid": "O nome do túnel deve conter apenas letras (a-z, A-Z)",
       "port_invalid": "A porta deve ser um número válido entre 1 e 65535",
       "no_selection": "Selecione um túnel na lista para excluir",
       "delete_confirm_title": "Confirmar Exclusão",
-      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?"
+      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?",
+      "token_invalid": "O Token não pode estar vazio"
     }
   },
   "client_tab": {

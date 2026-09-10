@@ -21,18 +21,32 @@
     "status_running": "运行中",
     "status_stopped": "已停止",
     "list_title": "已配置隧道列表",
+    "mode_local": "本地隧道",
+    "mode_remote": "远程隧道",
+    "remote_token": "隧道 Token:",
+    "remote_token_placeholder": "粘贴从 Cloudflare 面板获取的 Token",
+    "btn_install_service": "安装服务",
+    "btn_uninstall_service": "卸载服务",
+    "btn_start_service": "启动服务",
+    "btn_stop_service": "停止服务",
+    "status_service_running": "服务运行中",
+    "status_service_stopped": "服务已停止",
+    "tunnel_type_local": "本地",
+    "tunnel_type_remote": "远程",
     "headers": {
       "id": "隧道 ID",
       "name": "隧道名称",
       "created": "创建时间",
-      "connections": "连接状态"
+      "connections": "连接状态",
+      "type": "类型"
     },
     "errors": {
       "tunnel_invalid": "隧道名不能为空且只能包含纯字母 (a-z, A-Z)，不可含数字、空格或特殊字符",
       "port_invalid": "端口号必须为 1-65535 的纯数字",
       "no_selection": "请先在列表中选中要删除的隧道",
       "delete_confirm_title": "确认删除隧道",
-      "delete_confirm_msg": "确定要删除隧道 \"{name}\" 吗？此操作无法撤销。"
+      "delete_confirm_msg": "确定要删除隧道 \"{name}\" 吗？此操作无法撤销。",
+      "token_invalid": "Token 不能为空"
     }
   },
   "client_tab": {

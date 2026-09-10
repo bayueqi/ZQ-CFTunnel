@@ -21,18 +21,32 @@
     "status_running": "稼働中",
     "status_stopped": "停止中",
     "list_title": "トンネル一覧",
+    "mode_local": "ローカルトンネル",
+    "mode_remote": "リモートトンネル",
+    "remote_token": "トンネル Token:",
+    "remote_token_placeholder": "Cloudflare ダッシュボードから取得した Token を貼り付け",
+    "btn_install_service": "サービス登録",
+    "btn_uninstall_service": "サービス削除",
+    "btn_start_service": "サービス開始",
+    "btn_stop_service": "サービス停止",
+    "status_service_running": "サービス稼働中",
+    "status_service_stopped": "サービス停止中",
+    "tunnel_type_local": "ローカル",
+    "tunnel_type_remote": "リモート",
     "headers": {
       "id": "トンネル ID",
       "name": "名前",
       "created": "作成日",
-      "connections": "接続状態"
+      "connections": "接続状態",
+      "type": "タイプ"
     },
     "errors": {
       "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",
       "port_invalid": "ポート番号は 1〜65535 の数字である必要があります",
       "no_selection": "削除するトンネルを一覧から選択してください",
       "delete_confirm_title": "削除の確認",
-      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？"
+      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？",
+      "token_invalid": "Token は空にできません"
     }
   },
   "client_tab": {
