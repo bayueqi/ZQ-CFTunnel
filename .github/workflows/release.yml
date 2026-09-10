@@ -82,7 +82,7 @@ jobs:
       - name: 安装 Linux 交叉编译工具 (Cross / QEMU)
         if: matrix.platform == 'ubuntu-22.04' && matrix.use-cross
         run: |
-          sudo apt-get install -y gcc-multilib gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
           cargo install cross --git https://github.com/cross-rs/cross
 
       - name: 安装前端依赖
