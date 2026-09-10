@@ -39,11 +39,11 @@ jobs:
             target: 'x86_64-unknown-linux-gnu'
             args: '--target x86_64-unknown-linux-gnu'
 
-          # Linux i686 (32 位)
+          # Linux i686 (32 位) - 使用 gcc-multilib 本地交叉编译
           - platform: 'ubuntu-22.04'
             target: 'i686-unknown-linux-gnu'
             args: '--target i686-unknown-linux-gnu'
-            use-cross: true
+            cross-mode: 'multilib'
 
           # Linux aarch64 (ARM 64 位，如树莓派 4/5、RK3588)
           - platform: 'ubuntu-22.04'
@@ -79,7 +79,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: 安装 Linux 交叉编译工具 (Cross / QEMU)
+      - name: 安装 Linux i686 32 位交叉编译依赖 (gcc-multilib)
+        if: matrix.cross-mode == 'multilib'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib libwebkit2gtk-4.1-dev:i386 libglib2.0-dev:i386 libgtk-3-dev:i386 libssl-dev:i386 libayatana-appindicator3-dev:i386 librsvg2-dev:i386 libxdo-dev:i386
+
+      - name: 安装 Linux ARM 交叉编译工具 (Cross)
         if: matrix.platform == 'ubuntu-22.04' && matrix.use-cross
         run: |
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
@@ -96,6 +103,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.cross-mode == 'multilib' && '1' || '' }}
+          PKG_CONFIG_PATH: ${{ matrix.cross-mode == 'multilib' && '/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig' || '' }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'CFTunnel ${{ github.ref_name }}'
