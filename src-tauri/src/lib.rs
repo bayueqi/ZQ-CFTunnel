@@ -128,7 +128,7 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
             name: t.name,
             created: t.created_at,
             connections: connections_str,
-            tunnel_type,
+            tunnel_type: tunnel_type.to_string(),
         });
     }
 
