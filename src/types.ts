@@ -39,16 +39,6 @@ export interface LangPack {
     status_running: string;
     status_stopped: string;
     list_title: string;
-    mode_local: string;
-    mode_remote: string;
-    remote_token: string;
-    remote_token_placeholder: string;
-    btn_install_service: string;
-    btn_uninstall_service: string;
-    btn_start_service: string;
-    btn_stop_service: string;
-    status_service_running: string;
-    status_service_stopped: string;
     tunnel_type_local: string;
     tunnel_type_remote: string;
     headers: {
@@ -64,7 +54,6 @@ export interface LangPack {
       no_selection: string;
       delete_confirm_title: string;
       delete_confirm_msg: string;
-      token_invalid: string;
     };
   };
   client_tab: {
@@ -91,6 +80,19 @@ export interface LangPack {
     btn_check_version: string;
     btn_update: string;
     btn_download: string;
+    remote_section: string;
+    remote_token: string;
+    remote_token_placeholder: string;
+    remote_token_hint: string;
+    btn_install_service: string;
+    btn_uninstall_service: string;
+    btn_start_service: string;
+    btn_stop_service: string;
+    status_service_running: string;
+    status_service_stopped: string;
+    errors: {
+      token_invalid: string;
+    };
   };
   exit_modal: {
     title: string;

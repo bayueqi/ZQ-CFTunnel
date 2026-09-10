@@ -5,7 +5,7 @@
   "tabs": {
     "server": "伺服端",
     "client": "客戶端",
-    "misc": "cloudflared"
+    "misc": "設定"
   },
   "server_tab": {
     "tunnel_name": "隧道名稱:",
@@ -21,16 +21,6 @@
     "status_running": "執行中",
     "status_stopped": "已停止",
     "list_title": "已配置隧道列表",
-    "mode_local": "本地隧道",
-    "mode_remote": "遠端隧道",
-    "remote_token": "隧道 Token:",
-    "remote_token_placeholder": "貼上從 Cloudflare 面板取得的 Token",
-    "btn_install_service": "安裝服務",
-    "btn_uninstall_service": "解除服務",
-    "btn_start_service": "啟動服務",
-    "btn_stop_service": "停止服務",
-    "status_service_running": "服務執行中",
-    "status_service_stopped": "服務已停止",
     "tunnel_type_local": "本地",
     "tunnel_type_remote": "遠端",
     "headers": {
@@ -45,8 +35,7 @@
       "port_invalid": "端口號必須為 1-65535 的純數字",
       "no_selection": "請先在列表中選中要刪除的隧道",
       "delete_confirm_title": "確認刪除隧道",
-      "delete_confirm_msg": "確定要刪除隧道 \"{name}\" 嗎？此操作無法復原。",
-      "token_invalid": "Token 不能為空"
+      "delete_confirm_msg": "確定要刪除隧道 \"{name}\" 嗎？此操作無法復原。"
     }
   },
   "client_tab": {
@@ -72,7 +61,20 @@
     "btn_install_desc": "自動偵測作業系統與 CPU 架構並下載至應用目錄",
     "btn_open_config_dir": "開啟本機設定檔目錄",
     "btn_open_config_dir_desc": "在檔案總管中查看 ~/.cloudflared 設定檔目錄",
-    "config_dir_warning": "提示：請不要將 cert.pem 憑證檔案和 .json 隧道設定檔展示或分享給任何人，以免造成隱私外洩和隧道被盜用！"
+    "config_dir_warning": "提示：請不要將 cert.pem 憑證檔案和 .json 隧道設定檔展示或分享給任何人，以免造成隱私外洩和隧道被盜用！",
+    "remote_section": "遠端隧道服務管理",
+    "remote_token": "隧道 Token:",
+    "remote_token_placeholder": "貼上從 Cloudflare 面板取得的 Token (eyJ... 開頭)",
+    "remote_token_hint": "只需貼上 Token 本身，無需包含 cloudflared 命令",
+    "btn_install_service": "安裝服務",
+    "btn_uninstall_service": "解除服務",
+    "btn_start_service": "啟動服務",
+    "btn_stop_service": "停止服務",
+    "status_service_running": "服務執行中",
+    "status_service_stopped": "服務已停止",
+    "errors": {
+      "token_invalid": "Token 不能為空"
+    }
   },
   "console": {
     "title": "控制台即時日誌輸出",

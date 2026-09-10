@@ -150,24 +150,8 @@
     <main class="fluent-body">
       <!-- 1. 服务端 Tab -->
       <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
-        <!-- 模式切换 -->
-        <div class="mode-switcher">
-          <button
-            :class="['mode-btn', { active: serverMode === 'local' }]"
-            @click="serverMode = 'local'"
-          >
-            {{ t.server_tab.mode_local }}
-          </button>
-          <button
-            :class="['mode-btn', { active: serverMode === 'remote' }]"
-            @click="serverMode = 'remote'"
-          >
-            {{ t.server_tab.mode_remote }}
-          </button>
-        </div>
-
-        <!-- 本地隧道模式 -->
-        <div v-if="serverMode === 'local'" class="fluent-card form-card">
+        <!-- 输入表单卡片 -->
+        <div class="fluent-card form-card">
           <div class="form-grid">
             <!-- 隧道名字 -->
             <div class="fluent-form-group">
@@ -241,63 +225,6 @@
             <div class="status-pill" :class="serverRunning ? 'online' : 'offline'">
               <span class="pill-dot"></span>
               {{ serverRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
-            </div>
-          </div>
-        </div>
-
-        <!-- 远程隧道模式 -->
-        <div v-else class="fluent-card form-card">
-          <div class="form-grid">
-            <!-- Token 输入 -->
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.server_tab.remote_token }}
-                <span class="required">*</span>
-              </label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="remoteToken"
-                  :placeholder="t.server_tab.remote_token_placeholder"
-                  class="fluent-input"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- 远程服务操作按钮 -->
-          <div class="actions-row center-actions">
-            <button class="fluent-btn primary" @click="handleInstallService" :disabled="!remoteToken.trim()">
-              <span class="btn-icon">📦</span>
-              {{ t.server_tab.btn_install_service }}
-            </button>
-
-            <button class="fluent-btn danger-outline" @click="handleUninstallService">
-              <span class="btn-icon">🗑️</span>
-              {{ t.server_tab.btn_uninstall_service }}
-            </button>
-
-            <button
-              v-if="!remoteServiceRunning"
-              class="fluent-btn primary"
-              @click="handleStartRemoteTunnel"
-            >
-              <span class="btn-icon">▶</span>
-              {{ t.server_tab.btn_start_service }}
-            </button>
-
-            <button
-              v-else
-              class="fluent-btn danger"
-              @click="handleStopRemoteTunnel"
-            >
-              <span class="btn-icon">⏹</span>
-              {{ t.server_tab.btn_stop_service }}
-            </button>
-
-            <div class="status-pill" :class="remoteServiceRunning ? 'online' : 'offline'">
-              <span class="pill-dot"></span>
-              {{ remoteServiceRunning ? t.server_tab.status_service_running : t.server_tab.status_service_stopped }}
             </div>
           </div>
         </div>
@@ -514,6 +441,63 @@
           <div class="config-warning-banner">
             <span class="warning-icon">⚠️</span>
             <span class="warning-text">{{ t.misc_tab.config_dir_warning || '提示：请不要将 cert.pem 证书文件和 .json 隧道配置文件展示或分享给任何人，以免造成隐私泄露和隧道被盗用！' }}</span>
+          </div>
+        </div>
+
+        <!-- 远程隧道服务管理卡片 -->
+        <div class="fluent-card form-card remote-tunnel-card">
+          <h3 class="card-title">{{ t.misc_tab.remote_section }}</h3>
+          <div class="form-grid">
+            <div class="fluent-form-group">
+              <label class="form-label">
+                {{ t.misc_tab.remote_token }}
+                <span class="required">*</span>
+              </label>
+              <div class="input-container">
+                <input
+                  type="text"
+                  v-model="remoteToken"
+                  :placeholder="t.misc_tab.remote_token_placeholder"
+                  class="fluent-input"
+                />
+              </div>
+              <div class="hint-text">{{ t.misc_tab.remote_token_hint }}</div>
+            </div>
+          </div>
+
+          <div class="actions-row center-actions">
+            <button class="fluent-btn primary" @click="handleInstallService" :disabled="!remoteToken.trim()">
+              <span class="btn-icon">📦</span>
+              {{ t.misc_tab.btn_install_service }}
+            </button>
+
+            <button class="fluent-btn danger-outline" @click="handleUninstallService">
+              <span class="btn-icon">🗑️</span>
+              {{ t.misc_tab.btn_uninstall_service }}
+            </button>
+
+            <button
+              v-if="!remoteServiceRunning"
+              class="fluent-btn primary"
+              @click="handleStartRemoteTunnel"
+            >
+              <span class="btn-icon">▶</span>
+              {{ t.misc_tab.btn_start_service }}
+            </button>
+
+            <button
+              v-else
+              class="fluent-btn danger"
+              @click="handleStopRemoteTunnel"
+            >
+              <span class="btn-icon">⏹</span>
+              {{ t.misc_tab.btn_stop_service }}
+            </button>
+
+            <div class="status-pill" :class="remoteServiceRunning ? 'online' : 'offline'">
+              <span class="pill-dot"></span>
+              {{ remoteServiceRunning ? t.misc_tab.status_service_running : t.misc_tab.status_service_stopped }}
+            </div>
           </div>
         </div>
 
@@ -777,8 +761,7 @@ const isRefreshingTunnels = ref(false);
 const isCreatingTunnel = ref(false);
 const isDownloadingCloudflared = ref(false);
 
-// 远程隧道模式
-const serverMode = ref<'local' | 'remote'>('local');
+// 远程隧道服务
 const remoteToken = ref(localStorage.getItem('remote_token') || '');
 const remoteServiceRunning = ref(false);
 
@@ -1035,18 +1018,18 @@ const handleStopServer = async () => {
 const handleInstallService = async () => {
   const token = remoteToken.value.trim();
   if (!token) {
-    appendLog(`[ERROR] ${t.value.server_tab.errors.token_invalid}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.errors.token_invalid}`, 'error', 'misc');
     return;
   }
   localStorage.setItem('remote_token', token);
   soundManager.playSuccess();
   try {
     const res = await invoke<string>('install_remote_tunnel', { token });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(t.value.server_tab.btn_install_service + ' OK');
+    appendLog(`[SUCCESS] ${res}`, 'success', 'misc');
+    showToast(t.value.misc_tab.btn_install_service + ' OK');
     await checkRemoteServiceStatus();
   } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.server_tab.btn_install_service}: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.btn_install_service}: ${err}`, 'error', 'misc');
   }
 };
 
@@ -1055,11 +1038,11 @@ const handleUninstallService = async () => {
   soundManager.playClick();
   try {
     const res = await invoke<string>('uninstall_remote_tunnel');
-    appendLog(`[INFO] ${res}`, 'warn', 'server');
-    showToast(t.value.server_tab.btn_uninstall_service + ' OK');
+    appendLog(`[INFO] ${res}`, 'warn', 'misc');
+    showToast(t.value.misc_tab.btn_uninstall_service + ' OK');
     remoteServiceRunning.value = false;
   } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.server_tab.btn_uninstall_service}: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.btn_uninstall_service}: ${err}`, 'error', 'misc');
   }
 };
 
@@ -1069,10 +1052,11 @@ const handleStartRemoteTunnel = async () => {
   try {
     const res = await invoke<string>('start_remote_tunnel');
     remoteServiceRunning.value = true;
-    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(t.value.server_tab.btn_start_service + ' OK');
+    appendLog(`[SUCCESS] ${res}`, 'success', 'misc');
+    showToast(t.value.misc_tab.btn_start_service + ' OK');
   } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.server_tab.btn_start_service}: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.btn_start_service}: ${err}`, 'error', 'misc');
+    remoteServiceRunning.value = await invoke<boolean>('is_remote_tunnel_running');
   }
 };
 
@@ -1082,10 +1066,11 @@ const handleStopRemoteTunnel = async () => {
   try {
     const res = await invoke<string>('stop_remote_tunnel');
     remoteServiceRunning.value = false;
-    appendLog(`[INFO] ${res}`, 'warn', 'server');
-    showToast(t.value.server_tab.btn_stop_service + ' OK');
+    appendLog(`[INFO] ${res}`, 'warn', 'misc');
+    showToast(t.value.misc_tab.btn_stop_service + ' OK');
   } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.server_tab.btn_stop_service}: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.btn_stop_service}: ${err}`, 'error', 'misc');
+    remoteServiceRunning.value = await invoke<boolean>('is_remote_tunnel_running');
   }
 };
 
@@ -2121,34 +2106,21 @@ onUnmounted(() => {
   color: var(--success-color);
 }
 
-.mode-switcher {
-  display: flex;
-  gap: 0;
+.remote-tunnel-card {
+  margin-top: 12px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
   margin-bottom: 12px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  width: fit-content;
+  color: var(--text-primary);
 }
 
-.mode-btn {
-  padding: 8px 24px;
-  border: none;
-  background-color: var(--bg-card-solid);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.mode-btn:hover {
-  background-color: var(--bg-hover);
-}
-
-.mode-btn.active {
-  background-color: var(--accent-color);
-  color: var(--accent-text);
+.hint-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
 }
 
 .table-actions {

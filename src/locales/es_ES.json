@@ -5,7 +5,7 @@
   "tabs": {
     "server": "Servidor",
     "client": "Cliente",
-    "misc": "cloudflared"
+    "misc": "Config"
   },
   "server_tab": {
     "tunnel_name": "Nombre del Túnel:",
@@ -21,16 +21,6 @@
     "status_running": "En ejecución",
     "status_stopped": "Detenido",
     "list_title": "Túneles Configurados",
-    "mode_local": "Túnel Local",
-    "mode_remote": "Túnel Remoto",
-    "remote_token": "Token del Túnel:",
-    "remote_token_placeholder": "Pegue el Token del panel de Cloudflare",
-    "btn_install_service": "Instalar Servicio",
-    "btn_uninstall_service": "Desinstalar Servicio",
-    "btn_start_service": "Iniciar Servicio",
-    "btn_stop_service": "Detener Servicio",
-    "status_service_running": "Servicio en Ejecución",
-    "status_service_stopped": "Servicio Detenido",
     "tunnel_type_local": "Local",
     "tunnel_type_remote": "Remoto",
     "headers": {
@@ -45,8 +35,7 @@
       "port_invalid": "El puerto debe ser un número válido entre 1 y 65535",
       "no_selection": "Seleccione un túnel de la lista para eliminarlo",
       "delete_confirm_title": "Confirmar Eliminación",
-      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?",
-      "token_invalid": "El Token no puede estar vacío"
+      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?"
     }
   },
   "client_tab": {
@@ -72,7 +61,20 @@
     "btn_install_desc": "Detectar SO y CPU y descargar en la carpeta de la app",
     "btn_open_config_dir": "Abrir Carpeta de Configuración Local",
     "btn_open_config_dir_desc": "Ver carpeta ~/.cloudflared en el explorador de archivos",
-    "config_dir_warning": "Aviso: ¡No muestre ni comparta el archivo cert.pem ni los archivos .json del túnel con nadie para evitar fugas de privacidad!"
+    "config_dir_warning": "Aviso: ¡No muestre ni comparta el archivo cert.pem ni los archivos .json del túnel con nadie para evitar fugas de privacidad!",
+    "remote_section": "Gestión de Servicio de Túnel Remoto",
+    "remote_token": "Token del Túnel:",
+    "remote_token_placeholder": "Pegue el Token del panel de Cloudflare (empieza con eyJ...)",
+    "remote_token_hint": "Solo pegue el Token, no necesita incluir el comando cloudflared",
+    "btn_install_service": "Instalar Servicio",
+    "btn_uninstall_service": "Desinstalar Servicio",
+    "btn_start_service": "Iniciar Servicio",
+    "btn_stop_service": "Detener Servicio",
+    "status_service_running": "Servicio en Ejecución",
+    "status_service_stopped": "Servicio Detenido",
+    "errors": {
+      "token_invalid": "El Token no puede estar vacío"
+    }
   },
   "console": {
     "title": "Registros de la Consola en Vivo",
