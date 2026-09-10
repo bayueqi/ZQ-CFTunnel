@@ -39,11 +39,11 @@ jobs:
             target: 'x86_64-unknown-linux-gnu'
             args: '--target x86_64-unknown-linux-gnu'
 
-          # Linux i686 (32 位) - 使用 gcc-multilib 本地交叉编译
+          # Linux i686 (32 位)
           - platform: 'ubuntu-22.04'
             target: 'i686-unknown-linux-gnu'
             args: '--target i686-unknown-linux-gnu'
-            cross-mode: 'multilib'
+            use-cross: true
 
           # Linux aarch64 (ARM 64 位，如树莓派 4/5、RK3588)
           - platform: 'ubuntu-22.04'
@@ -79,14 +79,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: 安装 Linux i686 32 位交叉编译依赖 (gcc-multilib)
-        if: matrix.cross-mode == 'multilib'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y gcc-multilib libwebkit2gtk-4.1-dev:i386 libglib2.0-dev:i386 libgtk-3-dev:i386 libssl-dev:i386 libayatana-appindicator3-dev:i386 librsvg2-dev:i386 libxdo-dev:i386
-
-      - name: 安装 Linux ARM 交叉编译工具 (Cross)
+      - name: 安装 Linux 交叉编译工具 (Cross / QEMU)
         if: matrix.platform == 'ubuntu-22.04' && matrix.use-cross
         run: |
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
@@ -103,8 +96,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.cross-mode == 'multilib' && '1' || '' }}
-          PKG_CONFIG_PATH: ${{ matrix.cross-mode == 'multilib' && '/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig' || '' }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'CFTunnel ${{ github.ref_name }}'
@@ -122,44 +113,4 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          useCross: ${{ matrix.use-cross || false }}    runs-on: ${{ matrix.platform }}
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Node.js 环境
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: 安装前端依赖
-        run: npm ci
-
-      - name: 清理任何预存二进制 (确保不将 cloudflared 预打包进安装包)
-        run: |
-          node -e "const fs = require('fs'); ['binaries', 'src-tauri/binaries'].forEach(d => { if (fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true }); });"
-
-      - name: 构建 Tauri 应用程序
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: ${{ matrix.args }}
-
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: cftunnel-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
-          if-no-files-found: warn
+          useCross: ${{ matrix.use-cross || false }}
