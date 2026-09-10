@@ -21,14 +21,11 @@
     "status_running": "稼働中",
     "status_stopped": "停止中",
     "list_title": "トンネル一覧",
-    "tunnel_type_local": "ローカル",
-    "tunnel_type_remote": "リモート",
     "headers": {
       "id": "トンネル ID",
       "name": "名前",
       "created": "作成日",
-      "connections": "接続状態",
-      "type": "タイプ"
+      "connections": "接続状態"
     },
     "errors": {
       "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",

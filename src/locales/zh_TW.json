@@ -21,14 +21,11 @@
     "status_running": "執行中",
     "status_stopped": "已停止",
     "list_title": "已配置隧道列表",
-    "tunnel_type_local": "本地",
-    "tunnel_type_remote": "遠端",
     "headers": {
       "id": "隧道 ID",
       "name": "隧道名稱",
       "created": "建立時間",
-      "connections": "連線狀態",
-      "type": "類型"
+      "connections": "連線狀態"
     },
     "errors": {
       "tunnel_invalid": "隧道名稱不能為空且只能包含純英文字母 (a-z, A-Z)",

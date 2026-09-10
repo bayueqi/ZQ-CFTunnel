@@ -31,7 +31,18 @@
           </span>
         </button>
 
-        <!-- 2. 语言选择器 -->
+        <!-- 2. GitHub 仓库链接按钮 (指向 bayueqi/ZQ-CFTunnel) -->
+        <button
+          class="fluent-icon-btn github-btn"
+          @click="openUrl('https://github.com/bayueqi/ZQ-CFTunnel')"
+          title="前往 GitHub 仓库 (bayueqi/ZQ-CFTunnel)"
+        >
+          <svg class="github-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+        </button>
+
+        <!-- 3. 语言选择器 -->
         <div class="fluent-dropdown-wrapper" ref="langDropdownRef">
           <button
             class="fluent-dropdown-btn"
@@ -61,7 +72,7 @@
           </transition>
         </div>
 
-        <!-- 3. 主题切换按钮 -->
+        <!-- 4. 主题切换按钮 -->
         <button
           class="fluent-icon-btn theme-btn"
           @click="toggleTheme"
@@ -72,7 +83,7 @@
           </span>
         </button>
 
-        <!-- 4. 最小化按钮 (统一 28x28 尺寸，通过后端原生命令可靠最小化) -->
+        <!-- 5. 最小化按钮 (统一 28x28 尺寸，通过后端原生命令可靠最小化) -->
         <button
           class="fluent-icon-btn win-ctrl-btn minimize-btn"
           @click.stop="handleMinimize"
@@ -83,7 +94,7 @@
           </svg>
         </button>
 
-        <!-- 5. 最大化 / 还原按钮 (统一 28x28 尺寸，通过后端原生命令可靠缩放) -->
+        <!-- 6. 最大化 / 还原按钮 (统一 28x28 尺寸，通过后端原生命令可靠缩放) -->
         <button
           class="fluent-icon-btn win-ctrl-btn maximize-btn"
           @click.stop="handleToggleMaximize"
@@ -97,7 +108,7 @@
           </svg>
         </button>
 
-        <!-- 6. 关闭按钮 (统一 28x28 尺寸，通过后端原生命令优雅隐藏到系统托盘) -->
+        <!-- 7. 关闭按钮 (统一 28x28 尺寸，通过后端原生命令优雅隐藏到系统托盘) -->
         <button
           class="fluent-icon-btn win-ctrl-btn close-btn"
           @click.stop="handleCloseWindow"
@@ -245,7 +256,6 @@
                   <th class="col-name">{{ t.server_tab.headers.name }}</th>
                   <th class="col-created">{{ t.server_tab.headers.created }}</th>
                   <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
-                  <th class="col-type">{{ t.server_tab.headers.type }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -260,16 +270,9 @@
                   <td class="col-name font-bold">{{ tunnel.name }}</td>
                   <td class="col-created mono">{{ tunnel.created }}</td>
                   <td class="col-connections">{{ tunnel.connections || '-' }}</td>
-                  <td class="col-type">
-                    <span
-                      :class="['type-badge', tunnel.tunnel_type === 'remote' ? 'type-remote' : 'type-local']"
-                    >
-                      {{ tunnel.tunnel_type === 'remote' ? t.server_tab.tunnel_type_remote : t.server_tab.tunnel_type_local }}
-                    </span>
-                  </td>
                 </tr>
                 <tr v-if="tunnelList.length === 0">
-                  <td colspan="5" class="empty-table">
+                  <td colspan="4" class="empty-table">
                     {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道，请先创建或刷新' }}
                   </td>
                 </tr>
@@ -291,11 +294,6 @@
             >
               <span class="btn-icon">🗑️</span>
               {{ t.server_tab.btn_delete }}
-            </button>
-
-            <button class="fluent-btn" @click="clearLogs">
-              <span class="btn-icon">🧹</span>
-              {{ t.server_tab.btn_clear_log }}
             </button>
           </div>
         </div>
@@ -1560,6 +1558,20 @@ onUnmounted(() => {
   100% { transform: scale(1); }
 }
 
+/* GitHub 仓库链接按钮 */
+.github-btn {
+  font-size: 14px;
+}
+
+.github-icon {
+  display: block;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.github-btn:hover .github-icon {
+  transform: scale(1.12);
+}
+
 /* 自定义 Win11 优雅平滑语言下拉菜单 (高度统一为 28px, 居中对齐) */
 .fluent-dropdown-wrapper {
   position: relative;
@@ -2080,30 +2092,6 @@ onUnmounted(() => {
   text-align: center;
   padding: 24px;
   color: var(--text-disabled);
-}
-
-.col-type {
-  white-space: nowrap;
-  text-align: center;
-  padding: 8px 10px;
-}
-
-.type-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.type-local {
-  background-color: rgba(0, 95, 184, 0.12);
-  color: var(--accent-color);
-}
-
-.type-remote {
-  background-color: rgba(16, 124, 16, 0.12);
-  color: var(--success-color);
 }
 
 .remote-tunnel-card {

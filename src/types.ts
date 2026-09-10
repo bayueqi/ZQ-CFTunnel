@@ -3,7 +3,6 @@ export interface TunnelInfo {
   name: string;
   created: string;
   connections: string;
-  tunnel_type: string;
 }
 
 export interface LogEntry {
@@ -39,14 +38,11 @@ export interface LangPack {
     status_running: string;
     status_stopped: string;
     list_title: string;
-    tunnel_type_local: string;
-    tunnel_type_remote: string;
     headers: {
       id: string;
       name: string;
       created: string;
       connections: string;
-      type: string;
     };
     errors: {
       tunnel_invalid: string;

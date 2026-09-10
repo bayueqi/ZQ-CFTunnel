@@ -21,14 +21,11 @@
     "status_running": "En ejecución",
     "status_stopped": "Detenido",
     "list_title": "Túneles Configurados",
-    "tunnel_type_local": "Local",
-    "tunnel_type_remote": "Remoto",
     "headers": {
       "id": "ID del Túnel",
       "name": "Nombre",
       "created": "Fecha de Creación",
-      "connections": "Conexiones",
-      "type": "Tipo"
+      "connections": "Conexiones"
     },
     "errors": {
       "tunnel_invalid": "El nombre del túnel solo debe contener letras (a-z, A-Z)",

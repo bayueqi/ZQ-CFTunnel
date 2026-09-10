@@ -21,14 +21,11 @@
     "status_running": "Running",
     "status_stopped": "Stopped",
     "list_title": "Configured Tunnels",
-    "tunnel_type_local": "Local",
-    "tunnel_type_remote": "Remote",
     "headers": {
       "id": "Tunnel ID",
       "name": "Name",
       "created": "Created At",
-      "connections": "Connections",
-      "type": "Type"
+      "connections": "Connections"
     },
     "errors": {
       "tunnel_invalid": "Tunnel name must contain only letters (a-z, A-Z)",

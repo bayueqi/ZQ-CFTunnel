@@ -27,7 +27,6 @@ pub struct TunnelInfo {
     pub name: String,
     pub created: String,
     pub connections: String,
-    pub tunnel_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -122,13 +121,11 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let tunnel_type = if t.connections.is_empty() { "local" } else { "remote" };
         list.push(TunnelInfo {
             id: t.id,
             name: t.name,
             created: t.created_at,
             connections: connections_str,
-            tunnel_type: tunnel_type.to_string(),
         });
     }
 
