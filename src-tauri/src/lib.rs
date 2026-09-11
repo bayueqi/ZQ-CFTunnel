@@ -179,6 +179,34 @@ fn delete_tunnel(name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn route_dns_tunnel(name: String, hostname: String) -> Result<String, String> {
+    let trimmed_name = name.trim();
+    let trimmed_hostname = hostname.trim();
+
+    if trimmed_name.is_empty() || !trimmed_name.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Err("隧道名不能为空且只能包含纯字母 (a-z, A-Z)".to_string());
+    }
+    if trimmed_hostname.is_empty() || trimmed_hostname.chars().any(|c| c.is_whitespace()) {
+        return Err("域名不能为空且不能包含空格".to_string());
+    }
+
+    let mut cmd = create_base_command();
+    cmd.args(["tunnel", "route", "dns", trimmed_name, trimmed_hostname])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = cmd.output().map_err(|e| format!("执行命令失败: {}", e))?;
+    let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(if out_str.trim().is_empty() { err_str } else { out_str })
+    } else {
+        Err(if !err_str.trim().is_empty() { err_str } else { out_str })
+    }
+}
+
+#[tauri::command]
 fn start_server_tunnel(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1235,6 +1263,7 @@ pub fn run() {
             list_tunnels,
             create_tunnel,
             delete_tunnel,
+            route_dns_tunnel,
             start_server_tunnel,
             stop_server_tunnel,
             start_client_tunnel,

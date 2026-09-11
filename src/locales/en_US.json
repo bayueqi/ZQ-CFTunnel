@@ -21,6 +21,11 @@
     "status_running": "Running",
     "status_stopped": "Stopped",
     "list_title": "Configured Tunnels",
+    "dns_section": "DNS Route Binding (route dns)",
+    "dns_tunnel_name": "Tunnel Name:",
+    "dns_domain": "Domain:",
+    "dns_domain_placeholder": "e.g. mc.example.com",
+    "btn_route_dns": "Bind DNS Route",
     "headers": {
       "id": "Tunnel ID",
       "name": "Name",
@@ -32,7 +37,8 @@
       "port_invalid": "Port must be a valid number between 1 and 65535",
       "no_selection": "Please select a tunnel from the list to delete",
       "delete_confirm_title": "Confirm Deletion",
-      "delete_confirm_msg": "Are you sure you want to delete tunnel \"{name}\"? This action cannot be undone."
+      "delete_confirm_msg": "Are you sure you want to delete tunnel \"{name}\"? This action cannot be undone.",
+      "dns_domain_invalid": "Please enter a valid domain (e.g. mc.example.com)"
     }
   },
   "client_tab": {

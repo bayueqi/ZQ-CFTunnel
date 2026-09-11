@@ -21,6 +21,11 @@
     "status_running": "執行中",
     "status_stopped": "已停止",
     "list_title": "已配置隧道列表",
+    "dns_section": "DNS 路由綁定 (route dns)",
+    "dns_tunnel_name": "隧道名稱:",
+    "dns_domain": "域名:",
+    "dns_domain_placeholder": "例如: mc.example.com",
+    "btn_route_dns": "綁定 DNS 路由",
     "headers": {
       "id": "隧道 ID",
       "name": "隧道名稱",
@@ -32,7 +37,8 @@
       "port_invalid": "端口號必須為 1-65535 的純數字",
       "no_selection": "請先在列表中選中要刪除的隧道",
       "delete_confirm_title": "確認刪除隧道",
-      "delete_confirm_msg": "確定要刪除隧道 \"{name}\" 嗎？此操作無法復原。"
+      "delete_confirm_msg": "確定要刪除隧道 \"{name}\" 嗎？此操作無法復原。",
+      "dns_domain_invalid": "請輸入有效的域名格式 (例如: mc.example.com)"
     }
   },
   "client_tab": {

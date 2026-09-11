@@ -38,6 +38,11 @@ export interface LangPack {
     status_running: string;
     status_stopped: string;
     list_title: string;
+    dns_section: string;
+    dns_tunnel_name: string;
+    dns_domain: string;
+    dns_domain_placeholder: string;
+    btn_route_dns: string;
     headers: {
       id: string;
       name: string;
@@ -50,6 +55,7 @@ export interface LangPack {
       no_selection: string;
       delete_confirm_title: string;
       delete_confirm_msg: string;
+      dns_domain_invalid: string;
     };
   };
   client_tab: {

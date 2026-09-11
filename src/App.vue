@@ -238,6 +238,65 @@
               {{ serverRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
             </div>
           </div>
+
+          <!-- DNS 路由绑定区域 -->
+          <div class="dns-route-section">
+            <h4 class="dns-route-title">🌐 {{ t.server_tab.dns_section }}</h4>
+            <div class="form-grid">
+              <!-- 隧道名字 -->
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.dns_tunnel_name }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="dnsRoute.name"
+                    :placeholder="t.server_tab.tunnel_name_placeholder"
+                    :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
+                    @input="onDnsRouteNameInput"
+                  />
+                </div>
+                <div v-if="dnsRouteNameHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.tunnel_invalid }}
+                </div>
+              </div>
+
+              <!-- 域名 -->
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.dns_domain }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="dnsRoute.domain"
+                    :placeholder="t.server_tab.dns_domain_placeholder"
+                    :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
+                    @input="onDnsRouteDomainInput"
+                  />
+                </div>
+                <div v-if="dnsRouteDomainHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.dns_domain_invalid }}
+                </div>
+              </div>
+            </div>
+
+            <div class="actions-row center-actions">
+              <button
+                class="fluent-btn primary"
+                @click="handleRouteDns"
+                :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
+              >
+                <span class="btn-icon">🔗</span>
+                {{ t.server_tab.btn_route_dns }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 隧道列表数据卡片 (内部拥有专属上下滑动条) -->
@@ -746,11 +805,19 @@ const clientConfig = ref({
   port: localStorage.getItem('client_port') || '25566',
 });
 
+// DNS 路由绑定表单 (cloudflared tunnel route dns)
+const dnsRoute = ref({
+  name: localStorage.getItem('dns_route_name') || serverConfig.value.name || '',
+  domain: localStorage.getItem('dns_route_domain') || '',
+});
+
 // 输入错误校验状态
 const serverNameHasError = ref(false);
 const serverPortHasError = ref(false);
 const clientDomainHasError = ref(false);
 const clientPortHasError = ref(false);
+const dnsRouteNameHasError = ref(false);
+const dnsRouteDomainHasError = ref(false);
 
 // 运行状态
 const serverRunning = ref(false);
@@ -839,6 +906,18 @@ const onClientPortInput = () => {
   const val = clientConfig.value.port;
   clientPortHasError.value = val.length > 0 && !isPortValid(val);
   localStorage.setItem('client_port', val);
+};
+
+const onDnsRouteNameInput = () => {
+  const val = dnsRoute.value.name;
+  dnsRouteNameHasError.value = val.length > 0 && !isTunnelNameValid(val);
+  localStorage.setItem('dns_route_name', val);
+};
+
+const onDnsRouteDomainInput = () => {
+  const val = dnsRoute.value.domain;
+  dnsRouteDomainHasError.value = val.length > 0 && !isDomainValid(val);
+  localStorage.setItem('dns_route_domain', val);
 };
 
 // 切换主题 (带 360° 旋转动效)
@@ -1009,6 +1088,32 @@ const handleStopServer = async () => {
     showToast(`服务端隧道已停止`);
   } catch (err: any) {
     appendLog(`[ERROR] 停止服务端失败: ${err}`, 'error', 'server');
+  }
+};
+
+// 绑定 DNS 路由 (cloudflared tunnel route dns <name> <hostname>)
+const handleRouteDns = async () => {
+  const name = dnsRoute.value.name.trim();
+  const domain = dnsRoute.value.domain.trim();
+
+  if (!isTunnelNameValid(name)) {
+    dnsRouteNameHasError.value = true;
+    appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
+    return;
+  }
+  if (!isDomainValid(domain)) {
+    dnsRouteDomainHasError.value = true;
+    appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
+    return;
+  }
+
+  soundManager.playSuccess();
+  try {
+    const res = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
+    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+    showToast(`DNS 路由绑定成功: ${domain} → ${name}`);
+  } catch (err: any) {
+    appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'server');
   }
 };
 
@@ -1817,6 +1922,20 @@ onUnmounted(() => {
 
 .form-card {
   flex-shrink: 0;
+}
+
+/* DNS 路由绑定分区 */
+.dns-route-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.dns-route-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .card-header {
