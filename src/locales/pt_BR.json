@@ -21,11 +21,6 @@
     "status_running": "Em Execução",
     "status_stopped": "Parado",
     "list_title": "Túneis Configurados",
-    "dns_section": "Vinculação de Rota DNS (route dns)",
-    "dns_tunnel_name": "Nome do Túnel:",
-    "dns_domain": "Domínio:",
-    "dns_domain_placeholder": "ex: mc.example.com",
-    "btn_route_dns": "Vincular Rota DNS",
     "headers": {
       "id": "ID do Túnel",
       "name": "Nome",
@@ -37,8 +32,7 @@
       "port_invalid": "A porta deve ser um número válido entre 1 e 65535",
       "no_selection": "Selecione um túnel na lista para excluir",
       "delete_confirm_title": "Confirmar Exclusão",
-      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?",
-      "dns_domain_invalid": "Insira um domínio válido (ex: mc.example.com)"
+      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?"
     }
   },
   "client_tab": {
@@ -75,8 +69,16 @@
     "btn_stop_service": "Parar Serviço",
     "status_service_running": "Serviço em Execução",
     "status_service_stopped": "Serviço Parado",
+    "dns_section": "Vinculação de Rota DNS (route dns)",
+    "dns_tunnel_name": "Nome do Túnel:",
+    "dns_tunnel_name_placeholder": "ex: mc (apenas letras)",
+    "dns_domain": "Domínio:",
+    "dns_domain_placeholder": "ex: mc.example.com",
+    "btn_route_dns": "Vincular Rota DNS",
     "errors": {
-      "token_invalid": "O Token não pode estar vazio"
+      "token_invalid": "O Token não pode estar vazio",
+      "tunnel_invalid": "O nome do túnel deve conter apenas letras (a-z, A-Z)",
+      "dns_domain_invalid": "Insira um domínio válido (ex: mc.example.com)"
     }
   },
   "console": {

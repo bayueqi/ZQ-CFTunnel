@@ -238,65 +238,6 @@
               {{ serverRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
             </div>
           </div>
-
-          <!-- DNS 路由绑定区域 -->
-          <div class="dns-route-section">
-            <h4 class="dns-route-title">🌐 {{ t.server_tab.dns_section }}</h4>
-            <div class="form-grid">
-              <!-- 隧道名字 -->
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.dns_tunnel_name }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="dnsRoute.name"
-                    :placeholder="t.server_tab.tunnel_name_placeholder"
-                    :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
-                    @input="onDnsRouteNameInput"
-                  />
-                </div>
-                <div v-if="dnsRouteNameHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.tunnel_invalid }}
-                </div>
-              </div>
-
-              <!-- 域名 -->
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.dns_domain }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="dnsRoute.domain"
-                    :placeholder="t.server_tab.dns_domain_placeholder"
-                    :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
-                    @input="onDnsRouteDomainInput"
-                  />
-                </div>
-                <div v-if="dnsRouteDomainHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.dns_domain_invalid }}
-                </div>
-              </div>
-            </div>
-
-            <div class="actions-row center-actions">
-              <button
-                class="fluent-btn primary"
-                @click="handleRouteDns"
-                :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
-              >
-                <span class="btn-icon">🔗</span>
-                {{ t.server_tab.btn_route_dns }}
-              </button>
-            </div>
-          </div>
         </div>
 
         <!-- 隧道列表数据卡片 (内部拥有专属上下滑动条) -->
@@ -555,6 +496,65 @@
               <span class="pill-dot"></span>
               {{ remoteServiceRunning ? t.misc_tab.status_service_running : t.misc_tab.status_service_stopped }}
             </div>
+          </div>
+        </div>
+
+        <!-- DNS 路由绑定卡片 -->
+        <div class="fluent-card form-card dns-route-card">
+          <h3 class="card-title dns-route-title">🌐 {{ t.misc_tab.dns_section }}</h3>
+          <div class="form-grid">
+            <!-- 隧道名字 -->
+            <div class="fluent-form-group">
+              <label class="form-label">
+                {{ t.misc_tab.dns_tunnel_name }}
+                <span class="required">*</span>
+              </label>
+              <div class="input-container">
+                <input
+                  type="text"
+                  v-model="dnsRoute.name"
+                  :placeholder="t.misc_tab.dns_tunnel_name_placeholder"
+                  :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
+                  @input="onDnsRouteNameInput"
+                />
+              </div>
+              <div v-if="dnsRouteNameHasError" class="error-tip">
+                <span class="error-icon">⚠️</span>
+                {{ t.misc_tab.errors.tunnel_invalid }}
+              </div>
+            </div>
+
+            <!-- 域名 -->
+            <div class="fluent-form-group">
+              <label class="form-label">
+                {{ t.misc_tab.dns_domain }}
+                <span class="required">*</span>
+              </label>
+              <div class="input-container">
+                <input
+                  type="text"
+                  v-model="dnsRoute.domain"
+                  :placeholder="t.misc_tab.dns_domain_placeholder"
+                  :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
+                  @input="onDnsRouteDomainInput"
+                />
+              </div>
+              <div v-if="dnsRouteDomainHasError" class="error-tip">
+                <span class="error-icon">⚠️</span>
+                {{ t.misc_tab.errors.dns_domain_invalid }}
+              </div>
+            </div>
+          </div>
+
+          <div class="actions-row center-actions">
+            <button
+              class="fluent-btn primary"
+              @click="handleRouteDns"
+              :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
+            >
+              <span class="btn-icon">🔗</span>
+              {{ t.misc_tab.btn_route_dns }}
+            </button>
           </div>
         </div>
 
@@ -1098,22 +1098,22 @@ const handleRouteDns = async () => {
 
   if (!isTunnelNameValid(name)) {
     dnsRouteNameHasError.value = true;
-    appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.errors.tunnel_invalid}`, 'error', 'misc');
     return;
   }
   if (!isDomainValid(domain)) {
     dnsRouteDomainHasError.value = true;
-    appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.misc_tab.errors.dns_domain_invalid}`, 'error', 'misc');
     return;
   }
 
   soundManager.playSuccess();
   try {
     const res = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+    appendLog(`[SUCCESS] ${res}`, 'success', 'misc');
     showToast(`DNS 路由绑定成功: ${domain} → ${name}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'misc');
   }
 };
 
@@ -1924,18 +1924,16 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* DNS 路由绑定分区 */
-.dns-route-section {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border-strong);
+/* DNS 路由绑定卡片 (位于配置页) */
+.dns-route-card {
+  flex-shrink: 0;
 }
 
 .dns-route-title {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .card-header {

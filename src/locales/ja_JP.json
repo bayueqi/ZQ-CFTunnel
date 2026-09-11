@@ -21,11 +21,6 @@
     "status_running": "稼働中",
     "status_stopped": "停止中",
     "list_title": "トンネル一覧",
-    "dns_section": "DNS ルートバインド (route dns)",
-    "dns_tunnel_name": "トンネル名:",
-    "dns_domain": "ドメイン:",
-    "dns_domain_placeholder": "例: mc.example.com",
-    "btn_route_dns": "DNS ルートをバインド",
     "headers": {
       "id": "トンネル ID",
       "name": "名前",
@@ -37,8 +32,7 @@
       "port_invalid": "ポート番号は 1〜65535 の数字である必要があります",
       "no_selection": "削除するトンネルを一覧から選択してください",
       "delete_confirm_title": "削除の確認",
-      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？",
-      "dns_domain_invalid": "有効なドメインを入力してください (例: mc.example.com)"
+      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？"
     }
   },
   "client_tab": {
@@ -75,8 +69,16 @@
     "btn_stop_service": "サービス停止",
     "status_service_running": "サービス稼働中",
     "status_service_stopped": "サービス停止中",
+    "dns_section": "DNS ルートバインド (route dns)",
+    "dns_tunnel_name": "トンネル名:",
+    "dns_tunnel_name_placeholder": "例: mc (英字のみ)",
+    "dns_domain": "ドメイン:",
+    "dns_domain_placeholder": "例: mc.example.com",
+    "btn_route_dns": "DNS ルートをバインド",
     "errors": {
-      "token_invalid": "Token は空にできません"
+      "token_invalid": "Token は空にできません",
+      "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",
+      "dns_domain_invalid": "有効なドメインを入力してください (例: mc.example.com)"
     }
   },
   "console": {

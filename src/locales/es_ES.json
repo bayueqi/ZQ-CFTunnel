@@ -21,11 +21,6 @@
     "status_running": "En ejecución",
     "status_stopped": "Detenido",
     "list_title": "Túneles Configurados",
-    "dns_section": "Vinculación de Ruta DNS (route dns)",
-    "dns_tunnel_name": "Nombre del Túnel:",
-    "dns_domain": "Dominio:",
-    "dns_domain_placeholder": "ej: mc.example.com",
-    "btn_route_dns": "Vincular Ruta DNS",
     "headers": {
       "id": "ID del Túnel",
       "name": "Nombre",
@@ -37,8 +32,7 @@
       "port_invalid": "El puerto debe ser un número válido entre 1 y 65535",
       "no_selection": "Seleccione un túnel de la lista para eliminarlo",
       "delete_confirm_title": "Confirmar Eliminación",
-      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?",
-      "dns_domain_invalid": "Ingrese un dominio válido (ej: mc.example.com)"
+      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?"
     }
   },
   "client_tab": {
@@ -75,8 +69,16 @@
     "btn_stop_service": "Detener Servicio",
     "status_service_running": "Servicio en Ejecución",
     "status_service_stopped": "Servicio Detenido",
+    "dns_section": "Vinculación de Ruta DNS (route dns)",
+    "dns_tunnel_name": "Nombre del Túnel:",
+    "dns_tunnel_name_placeholder": "ej: mc (solo letras)",
+    "dns_domain": "Dominio:",
+    "dns_domain_placeholder": "ej: mc.example.com",
+    "btn_route_dns": "Vincular Ruta DNS",
     "errors": {
-      "token_invalid": "El Token no puede estar vacío"
+      "token_invalid": "El Token no puede estar vacío",
+      "tunnel_invalid": "El nombre del túnel solo debe contener letras (a-z, A-Z)",
+      "dns_domain_invalid": "Ingrese un dominio válido (ej: mc.example.com)"
     }
   },
   "console": {
