@@ -27,3 +27,6 @@ dist-ssr
 binaries/
 src-tauri/binaries/
 src-tauri/target/
+
+# WorkBuddy local data
+.workbuddy/
