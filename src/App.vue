@@ -279,7 +279,7 @@
 
           <!-- DNS 路由绑定卡片 -->
           <div class="fluent-card form-card dns-route-card">
-            <h3 class="card-title dns-route-title">🌐 {{ t.server_tab.dns_section }}</h3>
+            <h3 class="card-title dns-route-title">{{ t.server_tab.dns_section }}</h3>
             <div class="form-grid">
               <div class="fluent-form-group">
                 <label class="form-label">
@@ -399,7 +399,7 @@
         <div v-show="serverMode === 'remote'" class="server-sub-view">
           <!-- Token 输入 + 启动/停止 -->
           <div class="fluent-card form-card">
-            <h3 class="card-title">🔑 {{ t.server_tab.remote_token_label }}</h3>
+            <h3 class="card-title">{{ t.server_tab.remote_token_label }}</h3>
             <div class="form-grid">
               <div class="fluent-form-group">
                 <div class="input-container">
@@ -410,7 +410,6 @@
                     class="fluent-input"
                   />
                 </div>
-                <div class="field-hint">{{ t.server_tab.remote_token_hint }}</div>
               </div>
             </div>
 
@@ -445,7 +444,6 @@
           <div class="fluent-card table-card">
             <div class="card-header">
               <h3 class="card-title">{{ t.server_tab.remote_list_title }}</h3>
-              <span class="card-subtitle">（远程隧道请在 Cloudflare 后台管理）</span>
             </div>
 
             <div class="fluent-table-wrapper">
@@ -491,7 +489,7 @@
 
           <!-- 云端 ingress 配置卡片 -->
           <div class="fluent-card form-card remote-config-card">
-            <h3 class="card-title">☁️ {{ t.server_tab.remote_config_title }}</h3>
+            <h3 class="card-title">{{ t.server_tab.remote_config_title }}</h3>
             <div class="remote-config-body">
               <pre v-if="remoteConfigText">{{ remoteConfigText }}</pre>
               <div v-else class="remote-config-empty">{{ t.server_tab.remote_config_empty }}</div>
@@ -660,7 +658,6 @@
 
       <div class="console-header">
         <div class="console-title-area">
-          <span class="console-icon">💻</span>
           <span class="console-title">{{ t.console.title }}</span>
           <span class="log-count">({{ logs.length }})</span>
         </div>
