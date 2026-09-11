@@ -212,6 +212,7 @@ fn start_server_tunnel(
     state: State<'_, AppState>,
     name: String,
     port: String,
+    protocol: String,
 ) -> Result<String, String> {
     let name_trimmed = name.trim();
     let port_trimmed = port.trim();
@@ -223,13 +224,18 @@ fn start_server_tunnel(
         return Err("端口号必须为 1-65535 的纯数字".to_string());
     }
 
+    let protocol_trimmed = protocol.trim();
+    if protocol_trimmed != "http" && protocol_trimmed != "tcp" {
+        return Err("协议必须为 http 或 tcp".to_string());
+    }
+
     let mut proc_guard = state.server_process.lock().map_err(|e| e.to_string())?;
     if let Some(ref mut child) = *proc_guard {
         let _ = child.kill();
         *proc_guard = None;
     }
 
-    let url_arg = format!("tcp://127.0.0.1:{}", port_trimmed);
+    let url_arg = format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed);
     let mut cmd = create_base_command();
     cmd.args(["tunnel", "--name", name_trimmed, "--url", &url_arg])
         .stdout(Stdio::piped())
@@ -289,7 +295,10 @@ fn start_server_tunnel(
 
     *proc_guard = Some(child);
 
-    let start_msg = format!("已启动服务端隧道 [{}] 本地转发端口 [{}]", name_trimmed, port_trimmed);
+    let start_msg = format!(
+        "已启动服务端隧道 [{}] 本地转发 [{}://127.0.0.1:{}]",
+        name_trimmed, protocol_trimmed, port_trimmed
+    );
     let _ = app.emit(
         "log-message",
         LogPayload {

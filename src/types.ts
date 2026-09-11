@@ -29,6 +29,10 @@ export interface LangPack {
     port: string;
     tunnel_name_placeholder: string;
     port_placeholder: string;
+    protocol_label: string;
+    protocol_http: string;
+    protocol_tcp: string;
+    protocol_hint: string;
     btn_create: string;
     btn_start: string;
     btn_stop: string;

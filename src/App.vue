@@ -205,6 +205,23 @@
                 {{ t.server_tab.errors.port_invalid }}
               </div>
             </div>
+
+            <!-- 协议选择 -->
+            <div class="fluent-form-group">
+              <label class="form-label">
+                {{ t.server_tab.protocol_label }}
+              </label>
+              <div class="input-container">
+                <select
+                  v-model="serverConfig.protocol"
+                  class="fluent-input fluent-select"
+                >
+                  <option value="http">{{ t.server_tab.protocol_http }}</option>
+                  <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                </select>
+              </div>
+              <div class="field-hint">{{ t.server_tab.protocol_hint }}</div>
+            </div>
           </div>
 
           <!-- 服务端主要操作按钮 (严格水平居中) -->
@@ -798,6 +815,7 @@ const updateTabSlider = () => {
 const serverConfig = ref({
   name: localStorage.getItem('server_tunnel_name') || 'mc',
   port: localStorage.getItem('server_port') || '25565',
+  protocol: localStorage.getItem('server_protocol') || 'http',
 });
 
 const clientConfig = ref({
@@ -1055,6 +1073,7 @@ const handleCreateTunnel = async () => {
 const handleStartServer = async () => {
   const name = serverConfig.value.name.trim();
   const port = serverConfig.value.port.trim();
+  const protocol = serverConfig.value.protocol;
 
   if (!isTunnelNameValid(name)) {
     serverNameHasError.value = true;
@@ -1069,10 +1088,13 @@ const handleStartServer = async () => {
 
   soundManager.playSuccess();
   try {
-    const res = await invoke<string>('start_server_tunnel', { name, port });
+    const res = await invoke<string>('start_server_tunnel', { name, port, protocol });
+    localStorage.setItem('server_tunnel_name', name);
+    localStorage.setItem('server_port', port);
+    localStorage.setItem('server_protocol', protocol);
     serverRunning.value = true;
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(`隧道 [${name}] 已启动 (端口: ${port})`);
+    showToast(`隧道 [${name}] 已启动 (${protocol}://127.0.0.1:${port})`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
   }
@@ -2009,6 +2031,30 @@ onUnmounted(() => {
   background-color: var(--error-bg) !important;
   box-shadow: 0 0 0 1px var(--error-border) !important;
   color: var(--error-text) !important;
+}
+
+/* 下拉选择框 */
+.fluent-select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.fluent-select option {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+}
+
+/* 字段提示文字 */
+.field-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
 }
 
 .error-tip {
