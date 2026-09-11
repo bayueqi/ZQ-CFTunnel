@@ -1960,7 +1960,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 12px;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .animated-view {
@@ -1970,12 +1971,6 @@ onUnmounted(() => {
 @keyframes tabViewFade {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* 仅在杂项 Tab 启用平滑垂直滚动 */
-.misc-view {
-  overflow-y: auto !important;
-  padding-right: 4px;
 }
 
 /* 卡片容器 */
