@@ -24,10 +24,31 @@
     "btn_clear_log": "清空日志",
     "status_running": "运行中",
     "status_stopped": "已停止",
-    "list_title": "已配置隧道列表",
+    "mode_local": "本地隧道",
+    "mode_remote": "远程隧道",
+    "local_list_title": "已配置本地隧道列表",
+    "remote_list_title": "已配置远程隧道列表",
+    "type_local": "本地",
+    "type_remote": "远程",
+    "dns_section": "DNS 路由绑定 (route dns)",
+    "dns_tunnel_name": "隧道名字:",
+    "dns_tunnel_name_placeholder": "例如: mc (仅限纯英文字母)",
+    "dns_domain": "域名:",
+    "dns_domain_placeholder": "例如: mc.example.com",
+    "btn_route_dns": "绑定 DNS 路由",
+    "remote_token_label": "远程隧道 Token:",
+    "remote_token_placeholder": "粘贴 cloudflared.exe service install eyJ... 或直接粘贴 Token",
+    "remote_token_hint": "自动提取 Token，用 tunnel run --token 临时启动（无需装系统服务）",
+    "btn_start_remote": "启动远程隧道",
+    "btn_stop_remote": "停止远程隧道",
+    "status_remote_running": "远程运行中",
+    "status_remote_stopped": "远程已停止",
+    "remote_config_title": "云端 ingress 配置",
+    "remote_config_empty": "启动远程隧道后自动获取云端配置",
     "headers": {
       "id": "隧道 ID",
       "name": "隧道名称",
+      "type": "类型",
       "created": "创建时间",
       "connections": "连接状态"
     },
@@ -36,7 +57,8 @@
       "port_invalid": "端口号必须为 1-65535 的纯数字",
       "no_selection": "请先在列表中选中要删除的隧道",
       "delete_confirm_title": "确认删除隧道",
-      "delete_confirm_msg": "确定要删除隧道 \"{name}\" 吗？此操作无法撤销。"
+      "delete_confirm_msg": "确定要删除隧道 \"{name}\" 吗？此操作无法撤销。",
+      "dns_domain_invalid": "请输入有效的域名格式 (例如: mc.example.com)"
     }
   },
   "client_tab": {
@@ -54,36 +76,15 @@
     }
   },
   "misc_tab": {
-    "btn_login": "Cloudflared 授权登录",
-    "btn_check_version": "检查 cloudflared 版本",
-    "btn_update": "在线更新 cloudflared",
-    "btn_download": "前往官方下载页面",
     "btn_install": "安装 cloudflared",
     "btn_install_desc": "自动检测操作系统和 CPU 架构并下载到应用目录",
     "btn_open_config_dir": "打开本地配置文件目录",
     "btn_open_config_dir_desc": "在文件资源管理器中查看 ~/.cloudflared 配置文件目录",
     "config_dir_warning": "提示：请不要将 cert.pem 证书文件和 .json 隧道配置文件展示或分享给任何人，以免造成隐私泄露和隧道被盗用！",
-    "remote_section": "远程隧道服务管理",
-    "remote_token": "隧道 Token:",
-    "remote_token_placeholder": "粘贴从 Cloudflare 面板复制的安装命令或 Token",
-    "remote_token_hint": "可直接粘贴完整命令如 cloudflared.exe service install eyJ... 也可只粘贴 Token",
-    "btn_install_service": "安装服务",
-    "btn_uninstall_service": "卸载服务",
-    "btn_start_service": "启动服务",
-    "btn_stop_service": "停止服务",
-    "status_service_running": "服务运行中",
-    "status_service_stopped": "服务已停止",
-    "dns_section": "DNS 路由绑定 (route dns)",
-    "dns_tunnel_name": "隧道名字:",
-    "dns_tunnel_name_placeholder": "例如: mc (仅限纯英文字母)",
-    "dns_domain": "域名:",
-    "dns_domain_placeholder": "例如: mc.example.com",
-    "btn_route_dns": "绑定 DNS 路由",
-    "errors": {
-      "token_invalid": "Token 不能为空",
-      "tunnel_invalid": "隧道名不能为空且只能包含纯字母 (a-z, A-Z)，不可含数字、空格或特殊字符",
-      "dns_domain_invalid": "请输入有效的域名格式 (例如: mc.example.com)"
-    }
+    "btn_login": "Cloudflared 授权登录",
+    "btn_check_version": "检查 cloudflared 版本",
+    "btn_update": "在线更新 cloudflared",
+    "btn_download": "前往官方下载页面"
   },
   "console": {
     "title": "控制台实时日志输出",
@@ -95,7 +96,7 @@
   },
   "exit_modal": {
     "title": "退出 CFTunnel",
-    "message": "确定要真正退出程序吗？如果当前有正在运行的服务端或客户端隧道，退出后将立即中断连接。",
+    "message": "确定要真正退出程序吗？如果当前有正在运行的服务端、客户端或远程隧道，退出后将立即中断连接。",
     "btn_confirm": "确认退出",
     "btn_cancel": "取消"
   }

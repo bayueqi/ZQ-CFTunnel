@@ -161,157 +161,341 @@
     <main class="fluent-body">
       <!-- 1. 服务端 Tab -->
       <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
-        <!-- 输入表单卡片 -->
-        <div class="fluent-card form-card">
-          <div class="form-grid">
-            <!-- 隧道名字 -->
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.server_tab.tunnel_name }}
-                <span class="required">*</span>
-              </label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="serverConfig.name"
-                  :placeholder="t.server_tab.tunnel_name_placeholder"
-                  :class="['fluent-input', { 'input-error': serverNameHasError }]"
-                  @input="onServerNameInput"
-                />
+        <!-- 本地 / 远程 切换 -->
+        <div class="mode-switch-bar">
+          <button
+            :class="['mode-switch-btn', { active: serverMode === 'local' }]"
+            @click="switchServerMode('local')"
+          >
+            <span class="mode-dot local"></span>
+            {{ t.server_tab.mode_local }}
+          </button>
+          <button
+            :class="['mode-switch-btn', { active: serverMode === 'remote' }]"
+            @click="switchServerMode('remote')"
+          >
+            <span class="mode-dot remote"></span>
+            {{ t.server_tab.mode_remote }}
+          </button>
+        </div>
+
+        <!-- ============ 本地隧道视图 ============ -->
+        <div v-show="serverMode === 'local'" class="server-sub-view">
+          <!-- 输入表单卡片 -->
+          <div class="fluent-card form-card">
+            <div class="form-grid">
+              <!-- 隧道名字 -->
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.tunnel_name }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="serverConfig.name"
+                    :placeholder="t.server_tab.tunnel_name_placeholder"
+                    :class="['fluent-input', { 'input-error': serverNameHasError }]"
+                    @input="onServerNameInput"
+                  />
+                </div>
+                <div v-if="serverNameHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.tunnel_invalid }}
+                </div>
               </div>
-              <div v-if="serverNameHasError" class="error-tip">
-                <span class="error-icon">⚠️</span>
-                {{ t.server_tab.errors.tunnel_invalid }}
+
+              <!-- 端口号 -->
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.port }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="serverConfig.port"
+                    :placeholder="t.server_tab.port_placeholder"
+                    :class="['fluent-input', { 'input-error': serverPortHasError }]"
+                    @input="onServerPortInput"
+                  />
+                </div>
+                <div v-if="serverPortHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.port_invalid }}
+                </div>
+              </div>
+
+              <!-- 协议选择 -->
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.protocol_label }}
+                </label>
+                <div class="input-container">
+                  <select
+                    v-model="serverConfig.protocol"
+                    class="fluent-input fluent-select"
+                  >
+                    <option value="http">{{ t.server_tab.protocol_http }}</option>
+                    <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                  </select>
+                </div>
+                <div class="field-hint">{{ t.server_tab.protocol_hint }}</div>
               </div>
             </div>
 
-            <!-- 端口号 -->
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.server_tab.port }}
-                <span class="required">*</span>
-              </label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="serverConfig.port"
-                  :placeholder="t.server_tab.port_placeholder"
-                  :class="['fluent-input', { 'input-error': serverPortHasError }]"
-                  @input="onServerPortInput"
-                />
-              </div>
-              <div v-if="serverPortHasError" class="error-tip">
-                <span class="error-icon">⚠️</span>
-                {{ t.server_tab.errors.port_invalid }}
-              </div>
-            </div>
+            <!-- 本地隧道主要操作按钮 -->
+            <div class="actions-row center-actions">
+              <button class="fluent-btn" @click="handleCreateTunnel" :disabled="isCreatingTunnel">
+                <span class="btn-icon">➕</span>
+                {{ t.server_tab.btn_create }}
+              </button>
 
-            <!-- 协议选择 -->
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.server_tab.protocol_label }}
-              </label>
-              <div class="input-container">
-                <select
-                  v-model="serverConfig.protocol"
-                  class="fluent-input fluent-select"
-                >
-                  <option value="http">{{ t.server_tab.protocol_http }}</option>
-                  <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
-                </select>
+              <button
+                v-if="!serverRunning"
+                class="fluent-btn primary"
+                @click="handleStartServer"
+                :disabled="serverNameHasError || serverPortHasError || !serverConfig.name || !serverConfig.port"
+              >
+                <span class="btn-icon">▶</span>
+                {{ t.server_tab.btn_start }}
+              </button>
+
+              <button
+                v-else
+                class="fluent-btn danger"
+                @click="handleStopServer"
+              >
+                <span class="btn-icon">⏹</span>
+                {{ t.server_tab.btn_stop }}
+              </button>
+
+              <div class="status-pill" :class="serverRunning ? 'online' : 'offline'">
+                <span class="pill-dot"></span>
+                {{ serverRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
               </div>
-              <div class="field-hint">{{ t.server_tab.protocol_hint }}</div>
             </div>
           </div>
 
-          <!-- 服务端主要操作按钮 (严格水平居中) -->
-          <div class="actions-row center-actions">
-            <button class="fluent-btn" @click="handleCreateTunnel" :disabled="isCreatingTunnel">
-              <span class="btn-icon">➕</span>
-              {{ t.server_tab.btn_create }}
-            </button>
+          <!-- DNS 路由绑定卡片 -->
+          <div class="fluent-card form-card dns-route-card">
+            <h3 class="card-title dns-route-title">🌐 {{ t.server_tab.dns_section }}</h3>
+            <div class="form-grid">
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.dns_tunnel_name }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="dnsRoute.name"
+                    :placeholder="t.server_tab.dns_tunnel_name_placeholder"
+                    :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
+                    @input="onDnsRouteNameInput"
+                  />
+                </div>
+                <div v-if="dnsRouteNameHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.tunnel_invalid }}
+                </div>
+              </div>
 
-            <button
-              v-if="!serverRunning"
-              class="fluent-btn primary"
-              @click="handleStartServer"
-              :disabled="serverNameHasError || serverPortHasError || !serverConfig.name || !serverConfig.port"
-            >
-              <span class="btn-icon">▶</span>
-              {{ t.server_tab.btn_start }}
-            </button>
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.dns_domain }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="dnsRoute.domain"
+                    :placeholder="t.server_tab.dns_domain_placeholder"
+                    :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
+                    @input="onDnsRouteDomainInput"
+                  />
+                </div>
+                <div v-if="dnsRouteDomainHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.dns_domain_invalid }}
+                </div>
+              </div>
+            </div>
 
-            <button
-              v-else
-              class="fluent-btn danger"
-              @click="handleStopServer"
-            >
-              <span class="btn-icon">⏹</span>
-              {{ t.server_tab.btn_stop }}
-            </button>
+            <div class="actions-row center-actions">
+              <button
+                class="fluent-btn primary"
+                @click="handleRouteDns"
+                :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
+              >
+                <span class="btn-icon">🔗</span>
+                {{ t.server_tab.btn_route_dns }}
+              </button>
+            </div>
+          </div>
 
-            <div class="status-pill" :class="serverRunning ? 'online' : 'offline'">
-              <span class="pill-dot"></span>
-              {{ serverRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
+          <!-- 本地隧道列表卡片 -->
+          <div class="fluent-card table-card">
+            <div class="card-header">
+              <h3 class="card-title">{{ t.server_tab.local_list_title }}</h3>
+              <span class="card-subtitle">（双击行可快速填入隧道名字）</span>
+            </div>
+
+            <div class="fluent-table-wrapper">
+              <table class="fluent-table">
+                <thead>
+                  <tr>
+                    <th class="col-id">{{ t.server_tab.headers.id }}</th>
+                    <th class="col-name">{{ t.server_tab.headers.name }}</th>
+                    <th class="col-type">{{ t.server_tab.headers.type }}</th>
+                    <th class="col-created">{{ t.server_tab.headers.created }}</th>
+                    <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="tunnel in localTunnelList"
+                    :key="tunnel.id"
+                    :class="{ selected: selectedTunnel?.id === tunnel.id }"
+                    @click="selectTunnel(tunnel)"
+                    @dblclick="onTunnelDoubleClick(tunnel)"
+                  >
+                    <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
+                    <td class="col-name font-bold">{{ tunnel.name }}</td>
+                    <td class="col-type">
+                      <span class="type-badge type-local">{{ t.server_tab.type_local }}</span>
+                    </td>
+                    <td class="col-created mono">{{ tunnel.created }}</td>
+                    <td class="col-connections">{{ tunnel.connections || '-' }}</td>
+                  </tr>
+                  <tr v-if="localTunnelList.length === 0">
+                    <td colspan="5" class="empty-table">
+                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现本地隧道' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="actions-row table-actions">
+              <button class="fluent-btn" @click="handleRefreshTunnels" :disabled="isRefreshingTunnels">
+                <span class="btn-icon">🔄</span>
+                {{ t.server_tab.btn_refresh }}
+              </button>
+
+              <button
+                class="fluent-btn danger-outline"
+                @click="promptDeleteTunnel"
+                :disabled="!selectedTunnel"
+              >
+                <span class="btn-icon">🗑️</span>
+                {{ t.server_tab.btn_delete }}
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- 隧道列表数据卡片 (内部拥有专属上下滑动条) -->
-        <div class="fluent-card table-card">
-          <div class="card-header">
-            <h3 class="card-title">{{ t.server_tab.list_title }}</h3>
-            <span class="card-subtitle">（双击行可快速填入隧道名字）</span>
+        <!-- ============ 远程隧道视图 ============ -->
+        <div v-show="serverMode === 'remote'" class="server-sub-view">
+          <!-- Token 输入 + 启动/停止 -->
+          <div class="fluent-card form-card">
+            <h3 class="card-title">🔑 {{ t.server_tab.remote_token_label }}</h3>
+            <div class="form-grid">
+              <div class="fluent-form-group">
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="remoteToken"
+                    :placeholder="t.server_tab.remote_token_placeholder"
+                    class="fluent-input"
+                  />
+                </div>
+                <div class="field-hint">{{ t.server_tab.remote_token_hint }}</div>
+              </div>
+            </div>
+
+            <div class="actions-row center-actions">
+              <button
+                v-if="!remoteRunning"
+                class="fluent-btn primary"
+                @click="handleStartRemoteTunnel"
+                :disabled="!remoteToken.trim()"
+              >
+                <span class="btn-icon">▶</span>
+                {{ t.server_tab.btn_start_remote }}
+              </button>
+
+              <button
+                v-else
+                class="fluent-btn danger"
+                @click="handleStopRemoteTunnel"
+              >
+                <span class="btn-icon">⏹</span>
+                {{ t.server_tab.btn_stop_remote }}
+              </button>
+
+              <div class="status-pill" :class="remoteRunning ? 'online' : 'offline'">
+                <span class="pill-dot"></span>
+                {{ remoteRunning ? t.server_tab.status_remote_running : t.server_tab.status_remote_stopped }}
+              </div>
+            </div>
           </div>
 
-          <!-- 内部独立滚动区域 -->
-          <div class="fluent-table-wrapper">
-            <table class="fluent-table">
-              <thead>
-                <tr>
-                  <th class="col-id">{{ t.server_tab.headers.id }}</th>
-                  <th class="col-name">{{ t.server_tab.headers.name }}</th>
-                  <th class="col-created">{{ t.server_tab.headers.created }}</th>
-                  <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="tunnel in tunnelList"
-                  :key="tunnel.id"
-                  :class="{ selected: selectedTunnel?.id === tunnel.id }"
-                  @click="selectTunnel(tunnel)"
-                  @dblclick="onTunnelDoubleClick(tunnel)"
-                >
-                  <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
-                  <td class="col-name font-bold">{{ tunnel.name }}</td>
-                  <td class="col-created mono">{{ tunnel.created }}</td>
-                  <td class="col-connections">{{ tunnel.connections || '-' }}</td>
-                </tr>
-                <tr v-if="tunnelList.length === 0">
-                  <td colspan="4" class="empty-table">
-                    {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道，请先创建或刷新' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- 远程隧道列表卡片 -->
+          <div class="fluent-card table-card">
+            <div class="card-header">
+              <h3 class="card-title">{{ t.server_tab.remote_list_title }}</h3>
+              <span class="card-subtitle">（远程隧道请在 Cloudflare 后台管理）</span>
+            </div>
+
+            <div class="fluent-table-wrapper">
+              <table class="fluent-table">
+                <thead>
+                  <tr>
+                    <th class="col-id">{{ t.server_tab.headers.id }}</th>
+                    <th class="col-name">{{ t.server_tab.headers.name }}</th>
+                    <th class="col-type">{{ t.server_tab.headers.type }}</th>
+                    <th class="col-created">{{ t.server_tab.headers.created }}</th>
+                    <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="tunnel in remoteTunnelList"
+                    :key="tunnel.id"
+                  >
+                    <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
+                    <td class="col-name font-bold">{{ tunnel.name }}</td>
+                    <td class="col-type">
+                      <span class="type-badge type-remote">{{ t.server_tab.type_remote }}</span>
+                    </td>
+                    <td class="col-created mono">{{ tunnel.created }}</td>
+                    <td class="col-connections">{{ tunnel.connections || '-' }}</td>
+                  </tr>
+                  <tr v-if="remoteTunnelList.length === 0">
+                    <td colspan="5" class="empty-table">
+                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现远程隧道' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="actions-row table-actions">
+              <button class="fluent-btn" @click="handleRefreshTunnels" :disabled="isRefreshingTunnels">
+                <span class="btn-icon">🔄</span>
+                {{ t.server_tab.btn_refresh }}
+              </button>
+            </div>
           </div>
 
-          <!-- 表格底部工具栏 -->
-          <div class="actions-row table-actions">
-            <button class="fluent-btn" @click="handleRefreshTunnels" :disabled="isRefreshingTunnels">
-              <span class="btn-icon">🔄</span>
-              {{ t.server_tab.btn_refresh }}
-            </button>
-
-            <button
-              class="fluent-btn danger-outline"
-              @click="promptDeleteTunnel"
-              :disabled="!selectedTunnel"
-            >
-              <span class="btn-icon">🗑️</span>
-              {{ t.server_tab.btn_delete }}
-            </button>
+          <!-- 云端 ingress 配置卡片 -->
+          <div class="fluent-card form-card remote-config-card">
+            <h3 class="card-title">☁️ {{ t.server_tab.remote_config_title }}</h3>
+            <div class="remote-config-body">
+              <pre v-if="remoteConfigText">{{ remoteConfigText }}</pre>
+              <div v-else class="remote-config-empty">{{ t.server_tab.remote_config_empty }}</div>
+            </div>
           </div>
         </div>
       </section>
@@ -456,122 +640,6 @@
           <div class="config-warning-banner">
             <span class="warning-icon">⚠️</span>
             <span class="warning-text">{{ t.misc_tab.config_dir_warning || '提示：请不要将 cert.pem 证书文件和 .json 隧道配置文件展示或分享给任何人，以免造成隐私泄露和隧道被盗用！' }}</span>
-          </div>
-        </div>
-
-        <!-- 远程隧道服务管理卡片 -->
-        <div class="fluent-card form-card remote-tunnel-card">
-          <h3 class="card-title">{{ t.misc_tab.remote_section }}</h3>
-          <div class="form-grid">
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.misc_tab.remote_token }}
-                <span class="required">*</span>
-              </label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="remoteToken"
-                  :placeholder="t.misc_tab.remote_token_placeholder"
-                  class="fluent-input"
-                />
-              </div>
-              <div class="hint-text">{{ t.misc_tab.remote_token_hint }}</div>
-            </div>
-          </div>
-
-          <div class="actions-row center-actions">
-            <button class="fluent-btn primary" @click="handleInstallService" :disabled="!remoteToken.trim()">
-              <span class="btn-icon">📦</span>
-              {{ t.misc_tab.btn_install_service }}
-            </button>
-
-            <button class="fluent-btn danger-outline" @click="handleUninstallService">
-              <span class="btn-icon">🗑️</span>
-              {{ t.misc_tab.btn_uninstall_service }}
-            </button>
-
-            <button
-              v-if="!remoteServiceRunning"
-              class="fluent-btn primary"
-              @click="handleStartRemoteTunnel"
-            >
-              <span class="btn-icon">▶</span>
-              {{ t.misc_tab.btn_start_service }}
-            </button>
-
-            <button
-              v-else
-              class="fluent-btn danger"
-              @click="handleStopRemoteTunnel"
-            >
-              <span class="btn-icon">⏹</span>
-              {{ t.misc_tab.btn_stop_service }}
-            </button>
-
-            <div class="status-pill" :class="remoteServiceRunning ? 'online' : 'offline'">
-              <span class="pill-dot"></span>
-              {{ remoteServiceRunning ? t.misc_tab.status_service_running : t.misc_tab.status_service_stopped }}
-            </div>
-          </div>
-        </div>
-
-        <!-- DNS 路由绑定卡片 -->
-        <div class="fluent-card form-card dns-route-card">
-          <h3 class="card-title dns-route-title">🌐 {{ t.misc_tab.dns_section }}</h3>
-          <div class="form-grid">
-            <!-- 隧道名字 -->
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.misc_tab.dns_tunnel_name }}
-                <span class="required">*</span>
-              </label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="dnsRoute.name"
-                  :placeholder="t.misc_tab.dns_tunnel_name_placeholder"
-                  :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
-                  @input="onDnsRouteNameInput"
-                />
-              </div>
-              <div v-if="dnsRouteNameHasError" class="error-tip">
-                <span class="error-icon">⚠️</span>
-                {{ t.misc_tab.errors.tunnel_invalid }}
-              </div>
-            </div>
-
-            <!-- 域名 -->
-            <div class="fluent-form-group">
-              <label class="form-label">
-                {{ t.misc_tab.dns_domain }}
-                <span class="required">*</span>
-              </label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="dnsRoute.domain"
-                  :placeholder="t.misc_tab.dns_domain_placeholder"
-                  :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
-                  @input="onDnsRouteDomainInput"
-                />
-              </div>
-              <div v-if="dnsRouteDomainHasError" class="error-tip">
-                <span class="error-icon">⚠️</span>
-                {{ t.misc_tab.errors.dns_domain_invalid }}
-              </div>
-            </div>
-          </div>
-
-          <div class="actions-row center-actions">
-            <button
-              class="fluent-btn primary"
-              @click="handleRouteDns"
-              :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
-            >
-              <span class="btn-icon">🔗</span>
-              {{ t.misc_tab.btn_route_dns }}
-            </button>
           </div>
         </div>
 
@@ -844,13 +912,25 @@ const isRefreshingTunnels = ref(false);
 const isCreatingTunnel = ref(false);
 const isDownloadingCloudflared = ref(false);
 
-// 远程隧道服务
+// 服务端模式：本地 / 远程 切换
+const serverMode = ref<'local' | 'remote'>(localStorage.getItem('server_mode') === 'remote' ? 'remote' : 'local');
+
+const switchServerMode = (mode: 'local' | 'remote') => {
+  serverMode.value = mode;
+  localStorage.setItem('server_mode', mode);
+};
+
+// 远程隧道
 const remoteToken = ref(localStorage.getItem('remote_token') || '');
-const remoteServiceRunning = ref(false);
+const remoteRunning = ref(false);
+const remoteConfigText = ref('');
 
 // 隧道列表与选中项
 const tunnelList = ref<TunnelInfo[]>([]);
 const selectedTunnel = ref<TunnelInfo | null>(null);
+
+const localTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'local'));
+const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'remote'));
 
 // 控制台高度与拖拽调整逻辑
 const consoleHeight = ref(Number(localStorage.getItem('console_height')) || 170);
@@ -1120,91 +1200,55 @@ const handleRouteDns = async () => {
 
   if (!isTunnelNameValid(name)) {
     dnsRouteNameHasError.value = true;
-    appendLog(`[ERROR] ${t.value.misc_tab.errors.tunnel_invalid}`, 'error', 'misc');
+    appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
     return;
   }
   if (!isDomainValid(domain)) {
     dnsRouteDomainHasError.value = true;
-    appendLog(`[ERROR] ${t.value.misc_tab.errors.dns_domain_invalid}`, 'error', 'misc');
+    appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
     return;
   }
 
   soundManager.playSuccess();
   try {
     const res = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'misc');
+    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
     showToast(`DNS 路由绑定成功: ${domain} → ${name}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'server');
   }
 };
 
-// 安装远程隧道服务
-const handleInstallService = async () => {
+// 启动远程隧道 (tunnel run --token，临时运行)
+const handleStartRemoteTunnel = async () => {
   const token = remoteToken.value.trim();
   if (!token) {
-    appendLog(`[ERROR] ${t.value.misc_tab.errors.token_invalid}`, 'error', 'misc');
+    appendLog(`[ERROR] 请先粘贴远程隧道 Token`, 'error', 'remote');
     return;
   }
   localStorage.setItem('remote_token', token);
+  remoteConfigText.value = '';
   soundManager.playSuccess();
   try {
-    const res = await invoke<string>('install_remote_tunnel', { token });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'misc');
-    showToast(t.value.misc_tab.btn_install_service + ' OK');
-    await checkRemoteServiceStatus();
+    const res = await invoke<string>('start_remote_tunnel', { token });
+    remoteRunning.value = true;
+    appendLog(`[SUCCESS] ${res}`, 'success', 'remote');
+    showToast('远程隧道已启动');
   } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.misc_tab.btn_install_service}: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] 启动远程隧道失败: ${err}`, 'error', 'remote');
   }
 };
 
-// 卸载远程隧道服务
-const handleUninstallService = async () => {
-  soundManager.playClick();
-  try {
-    const res = await invoke<string>('uninstall_remote_tunnel');
-    appendLog(`[INFO] ${res}`, 'warn', 'misc');
-    showToast(t.value.misc_tab.btn_uninstall_service + ' OK');
-    remoteServiceRunning.value = false;
-  } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.misc_tab.btn_uninstall_service}: ${err}`, 'error', 'misc');
-  }
-};
-
-// 启动远程隧道服务
-const handleStartRemoteTunnel = async () => {
-  soundManager.playSuccess();
-  try {
-    const res = await invoke<string>('start_remote_tunnel');
-    remoteServiceRunning.value = true;
-    appendLog(`[SUCCESS] ${res}`, 'success', 'misc');
-    showToast(t.value.misc_tab.btn_start_service + ' OK');
-  } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.misc_tab.btn_start_service}: ${err}`, 'error', 'misc');
-    remoteServiceRunning.value = await invoke<boolean>('is_remote_tunnel_running');
-  }
-};
-
-// 停止远程隧道服务
+// 停止远程隧道
 const handleStopRemoteTunnel = async () => {
   soundManager.playClick();
   try {
     const res = await invoke<string>('stop_remote_tunnel');
-    remoteServiceRunning.value = false;
-    appendLog(`[INFO] ${res}`, 'warn', 'misc');
-    showToast(t.value.misc_tab.btn_stop_service + ' OK');
+    remoteRunning.value = false;
+    appendLog(`[INFO] ${res}`, 'warn', 'remote');
+    showToast('远程隧道已停止');
   } catch (err: any) {
-    appendLog(`[ERROR] ${t.value.misc_tab.btn_stop_service}: ${err}`, 'error', 'misc');
-    remoteServiceRunning.value = await invoke<boolean>('is_remote_tunnel_running');
-  }
-};
-
-// 检查远程隧道服务状态
-const checkRemoteServiceStatus = async () => {
-  try {
-    remoteServiceRunning.value = await invoke<boolean>('is_remote_tunnel_running');
-  } catch {
-    remoteServiceRunning.value = false;
+    appendLog(`[ERROR] 停止远程隧道失败: ${err}`, 'error', 'remote');
   }
 };
 
@@ -1398,6 +1442,11 @@ onMounted(async () => {
     await listen('show-exit-confirm', () => {
       showExitConfirmModal.value = true;
     });
+
+    // 监听远程隧道云端 ingress 配置更新
+    await listen<string>('remote-config-update', (event) => {
+      remoteConfigText.value = event.payload;
+    });
   } catch (e) {
     console.error('Listen event error:', e);
   }
@@ -1406,8 +1455,8 @@ onMounted(async () => {
   try {
     serverRunning.value = await invoke<boolean>('is_server_running');
     clientRunning.value = await invoke<boolean>('is_client_running');
+    remoteRunning.value = await invoke<boolean>('is_remote_running');
     await handleRefreshTunnels();
-    await checkRemoteServiceStatus();
   } catch {}
 });
 
@@ -1946,7 +1995,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* DNS 路由绑定卡片 (位于配置页) */
+/* DNS 路由绑定卡片 (位于服务端本地视图) */
 .dns-route-card {
   flex-shrink: 0;
 }
@@ -1956,6 +2005,109 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* 本地/远程切换栏 */
+.mode-switch-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.mode-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-switch-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.mode-switch-btn.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--accent-text);
+}
+
+.mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.mode-dot.local {
+  background-color: #639922;
+}
+
+.mode-dot.remote {
+  background-color: #534AB7;
+}
+
+/* 子视图容器 */
+.server-sub-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 隧道类型徽章 */
+.type-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.type-local {
+  background-color: #EAF3DE;
+  color: #3B6D11;
+}
+
+.type-remote {
+  background-color: #EEEDFE;
+  color: #534AB7;
+}
+
+/* 云端 ingress 配置展示 */
+.remote-config-card {
+  flex-shrink: 0;
+}
+
+.remote-config-body {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.remote-config-body pre {
+  margin: 0;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.7;
+}
+
+.remote-config-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .card-header {

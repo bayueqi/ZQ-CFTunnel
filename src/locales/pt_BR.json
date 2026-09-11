@@ -24,10 +24,31 @@
     "btn_clear_log": "Limpar Logs",
     "status_running": "Em Execução",
     "status_stopped": "Parado",
-    "list_title": "Túneis Configurados",
+    "mode_local": "Túneis Locais",
+    "mode_remote": "Túneis Remotos",
+    "local_list_title": "Túneis Locais Configurados",
+    "remote_list_title": "Túneis Remotos Configurados",
+    "type_local": "Local",
+    "type_remote": "Remoto",
+    "dns_section": "Vinculação de Rota DNS (route dns)",
+    "dns_tunnel_name": "Nome do Túnel:",
+    "dns_tunnel_name_placeholder": "ex: mc (apenas letras)",
+    "dns_domain": "Domínio:",
+    "dns_domain_placeholder": "ex: mc.example.com",
+    "btn_route_dns": "Vincular Rota DNS",
+    "remote_token_label": "Token do Túnel Remoto:",
+    "remote_token_placeholder": "Cole cloudflared.exe service install eyJ... ou apenas o Token",
+    "remote_token_hint": "Extrai o Token automaticamente e inicia via tunnel run --token (sem serviço do sistema)",
+    "btn_start_remote": "Iniciar Túnel Remoto",
+    "btn_stop_remote": "Parar Túnel Remoto",
+    "status_remote_running": "Remoto em Execução",
+    "status_remote_stopped": "Remoto Parado",
+    "remote_config_title": "Config ingress na nuvem",
+    "remote_config_empty": "Inicie o túnel remoto para obter a configuração na nuvem",
     "headers": {
       "id": "ID do Túnel",
       "name": "Nome",
+      "type": "Tipo",
       "created": "Data de Criação",
       "connections": "Conexões"
     },
@@ -36,7 +57,8 @@
       "port_invalid": "A porta deve ser um número válido entre 1 e 65535",
       "no_selection": "Selecione um túnel na lista para excluir",
       "delete_confirm_title": "Confirmar Exclusão",
-      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?"
+      "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?",
+      "dns_domain_invalid": "Insira um domínio válido (ex: mc.example.com)"
     }
   },
   "client_tab": {
@@ -54,36 +76,15 @@
     }
   },
   "misc_tab": {
-    "btn_login": "Login de Autenticação",
-    "btn_check_version": "Verificar Versão",
-    "btn_update": "Atualizar Cloudflared",
-    "btn_download": "Página de Download",
     "btn_install": "Instalar cloudflared",
     "btn_install_desc": "Detectar SO e CPU e baixar para a pasta do app",
     "btn_open_config_dir": "Abrir Pasta de Configuração Local",
     "btn_open_config_dir_desc": "Ver pasta ~/.cloudflared no Explorador de Arquivos",
     "config_dir_warning": "Aviso: Nunca mostre ou compartilhe o arquivo cert.pem e arquivos .json do túnel com terceiros para evitar vazamento de privacidade!",
-    "remote_section": "Gestão de Serviço de Túnel Remoto",
-    "remote_token": "Token do Túnel:",
-    "remote_token_placeholder": "Cole o comando de instalação ou Token do painel do Cloudflare",
-    "remote_token_hint": "Pode colar o comando completo como cloudflared.exe service install eyJ... ou apenas o Token",
-    "btn_install_service": "Instalar Serviço",
-    "btn_uninstall_service": "Desinstalar Serviço",
-    "btn_start_service": "Iniciar Serviço",
-    "btn_stop_service": "Parar Serviço",
-    "status_service_running": "Serviço em Execução",
-    "status_service_stopped": "Serviço Parado",
-    "dns_section": "Vinculação de Rota DNS (route dns)",
-    "dns_tunnel_name": "Nome do Túnel:",
-    "dns_tunnel_name_placeholder": "ex: mc (apenas letras)",
-    "dns_domain": "Domínio:",
-    "dns_domain_placeholder": "ex: mc.example.com",
-    "btn_route_dns": "Vincular Rota DNS",
-    "errors": {
-      "token_invalid": "O Token não pode estar vazio",
-      "tunnel_invalid": "O nome do túnel deve conter apenas letras (a-z, A-Z)",
-      "dns_domain_invalid": "Insira um domínio válido (ex: mc.example.com)"
-    }
+    "btn_login": "Login de Autenticação",
+    "btn_check_version": "Verificar Versão",
+    "btn_update": "Atualizar Cloudflared",
+    "btn_download": "Página de Download"
   },
   "console": {
     "title": "Logs do Console em Tempo Real",
@@ -95,7 +96,7 @@
   },
   "exit_modal": {
     "title": "Sair do CFTunnel",
-    "message": "Tem certeza de que deseja sair? Todos os túneis de servidor e cliente em execução serão interrompidos.",
+    "message": "Tem certeza de que deseja sair? Todos os túneis de servidor, cliente ou remoto em execução serão interrompidos.",
     "btn_confirm": "Confirmar Saída",
     "btn_cancel": "Cancelar"
   }

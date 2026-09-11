@@ -24,10 +24,31 @@
     "btn_clear_log": "ログ消去",
     "status_running": "稼働中",
     "status_stopped": "停止中",
-    "list_title": "トンネル一覧",
+    "mode_local": "ローカルトンネル",
+    "mode_remote": "リモートトンネル",
+    "local_list_title": "ローカルトンネル一覧",
+    "remote_list_title": "リモートトンネル一覧",
+    "type_local": "ローカル",
+    "type_remote": "リモート",
+    "dns_section": "DNS ルートバインド (route dns)",
+    "dns_tunnel_name": "トンネル名:",
+    "dns_tunnel_name_placeholder": "例: mc (英字のみ)",
+    "dns_domain": "ドメイン:",
+    "dns_domain_placeholder": "例: mc.example.com",
+    "btn_route_dns": "DNS ルートをバインド",
+    "remote_token_label": "リモートトンネル Token:",
+    "remote_token_placeholder": "cloudflared.exe service install eyJ... または Token を貼り付け",
+    "remote_token_hint": "Token を自動抽出し、tunnel run --token で一時起動（システムサービス不要）",
+    "btn_start_remote": "リモートトンネル開始",
+    "btn_stop_remote": "リモートトンネル停止",
+    "status_remote_running": "リモート稼働中",
+    "status_remote_stopped": "リモート停止中",
+    "remote_config_title": "クラウド ingress 設定",
+    "remote_config_empty": "リモートトンネル起動後にクラウド設定を取得します",
     "headers": {
       "id": "トンネル ID",
       "name": "名前",
+      "type": "種別",
       "created": "作成日",
       "connections": "接続状態"
     },
@@ -36,7 +57,8 @@
       "port_invalid": "ポート番号は 1〜65535 の数字である必要があります",
       "no_selection": "削除するトンネルを一覧から選択してください",
       "delete_confirm_title": "削除の確認",
-      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？"
+      "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？",
+      "dns_domain_invalid": "有効なドメインを入力してください (例: mc.example.com)"
     }
   },
   "client_tab": {
@@ -54,36 +76,15 @@
     }
   },
   "misc_tab": {
-    "btn_login": "Cloudflared ログイン認証",
-    "btn_check_version": "バージョン確認",
-    "btn_update": "Cloudflared アップデート",
-    "btn_download": "ダウンロードページを開く",
     "btn_install": "cloudflared をインストール",
     "btn_install_desc": "OSとCPUアーキテクチャを自動検出してアプリフォルダにダウンロード",
     "btn_open_config_dir": "ローカル設定フォルダを開く",
     "btn_open_config_dir_desc": "エクスプローラーで ~/.cloudflared フォルダを表示",
     "config_dir_warning": "警告：プライバシー漏洩やトンネルの不正使用を防ぐため、cert.pem 証明書や .json トンネル設定ファイルを他人に公開・共有しないでください！",
-    "remote_section": "リモートトンネルサービス管理",
-    "remote_token": "トンネル Token:",
-    "remote_token_placeholder": "Cloudflare ダッシュボードからコピーしたインストールコマンドまたは Token を貼り付け",
-    "remote_token_hint": "cloudflared.exe service install eyJ... のような完全なコマンドでも Token 単体でも OK",
-    "btn_install_service": "サービス登録",
-    "btn_uninstall_service": "サービス削除",
-    "btn_start_service": "サービス開始",
-    "btn_stop_service": "サービス停止",
-    "status_service_running": "サービス稼働中",
-    "status_service_stopped": "サービス停止中",
-    "dns_section": "DNS ルートバインド (route dns)",
-    "dns_tunnel_name": "トンネル名:",
-    "dns_tunnel_name_placeholder": "例: mc (英字のみ)",
-    "dns_domain": "ドメイン:",
-    "dns_domain_placeholder": "例: mc.example.com",
-    "btn_route_dns": "DNS ルートをバインド",
-    "errors": {
-      "token_invalid": "Token は空にできません",
-      "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",
-      "dns_domain_invalid": "有効なドメインを入力してください (例: mc.example.com)"
-    }
+    "btn_login": "Cloudflared ログイン認証",
+    "btn_check_version": "バージョン確認",
+    "btn_update": "Cloudflared アップデート",
+    "btn_download": "ダウンロードページを開く"
   },
   "console": {
     "title": "コンソールログ出力",
@@ -95,7 +96,7 @@
   },
   "exit_modal": {
     "title": "CFTunnel を終了",
-    "message": "本当にアプリケーションを終了しますか？実行中のサーバーまたはクライアントのトンネル接続はすべて切断されます。",
+    "message": "本当にアプリケーションを終了しますか？実行中のサーバー、クライアントまたはリモートトンネル接続はすべて切断されます。",
     "btn_confirm": "終了する",
     "btn_cancel": "キャンセル"
   }

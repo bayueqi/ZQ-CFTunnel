@@ -24,10 +24,31 @@
     "btn_clear_log": "Clear Logs",
     "status_running": "Running",
     "status_stopped": "Stopped",
-    "list_title": "Configured Tunnels",
+    "mode_local": "Local Tunnels",
+    "mode_remote": "Remote Tunnels",
+    "local_list_title": "Configured Local Tunnels",
+    "remote_list_title": "Configured Remote Tunnels",
+    "type_local": "Local",
+    "type_remote": "Remote",
+    "dns_section": "DNS Route Binding (route dns)",
+    "dns_tunnel_name": "Tunnel Name:",
+    "dns_tunnel_name_placeholder": "e.g. mc (letters only)",
+    "dns_domain": "Domain:",
+    "dns_domain_placeholder": "e.g. mc.example.com",
+    "btn_route_dns": "Bind DNS Route",
+    "remote_token_label": "Remote Tunnel Token:",
+    "remote_token_placeholder": "Paste cloudflared.exe service install eyJ... or just the Token",
+    "remote_token_hint": "Auto-extract Token, start temporarily via tunnel run --token (no system service)",
+    "btn_start_remote": "Start Remote Tunnel",
+    "btn_stop_remote": "Stop Remote Tunnel",
+    "status_remote_running": "Remote Running",
+    "status_remote_stopped": "Remote Stopped",
+    "remote_config_title": "Cloud ingress config",
+    "remote_config_empty": "Start the remote tunnel to fetch cloud config",
     "headers": {
       "id": "Tunnel ID",
       "name": "Name",
+      "type": "Type",
       "created": "Created At",
       "connections": "Connections"
     },
@@ -36,7 +57,8 @@
       "port_invalid": "Port must be a valid number between 1 and 65535",
       "no_selection": "Please select a tunnel from the list to delete",
       "delete_confirm_title": "Confirm Deletion",
-      "delete_confirm_msg": "Are you sure you want to delete tunnel \"{name}\"? This action cannot be undone."
+      "delete_confirm_msg": "Are you sure you want to delete tunnel \"{name}\"? This action cannot be undone.",
+      "dns_domain_invalid": "Please enter a valid domain (e.g. mc.example.com)"
     }
   },
   "client_tab": {
@@ -54,36 +76,15 @@
     }
   },
   "misc_tab": {
-    "btn_login": "Cloudflared Auth Login",
-    "btn_check_version": "Check Version",
-    "btn_update": "Update Cloudflared",
-    "btn_download": "Download Cloudflared",
     "btn_install": "Install cloudflared",
     "btn_install_desc": "Auto-detect OS & CPU Arch and download to app directory",
     "btn_open_config_dir": "Open Local Config Directory",
     "btn_open_config_dir_desc": "View ~/.cloudflared config directory in File Explorer",
     "config_dir_warning": "Notice: Never expose or share cert.pem certificate or .json tunnel files with anyone to prevent credential theft!",
-    "remote_section": "Remote Tunnel Service Management",
-    "remote_token": "Tunnel Token:",
-    "remote_token_placeholder": "Paste the install command or Token from Cloudflare dashboard",
-    "remote_token_hint": "You can paste the full command like cloudflared.exe service install eyJ... or just the Token",
-    "btn_install_service": "Install Service",
-    "btn_uninstall_service": "Uninstall Service",
-    "btn_start_service": "Start Service",
-    "btn_stop_service": "Stop Service",
-    "status_service_running": "Service Running",
-    "status_service_stopped": "Service Stopped",
-    "dns_section": "DNS Route Binding (route dns)",
-    "dns_tunnel_name": "Tunnel Name:",
-    "dns_tunnel_name_placeholder": "e.g. mc (letters only)",
-    "dns_domain": "Domain:",
-    "dns_domain_placeholder": "e.g. mc.example.com",
-    "btn_route_dns": "Bind DNS Route",
-    "errors": {
-      "token_invalid": "Token cannot be empty",
-      "tunnel_invalid": "Tunnel name must contain only letters (a-z, A-Z)",
-      "dns_domain_invalid": "Please enter a valid domain (e.g. mc.example.com)"
-    }
+    "btn_login": "Cloudflared Auth Login",
+    "btn_check_version": "Check Version",
+    "btn_update": "Update Cloudflared",
+    "btn_download": "Download Cloudflared"
   },
   "console": {
     "title": "Console Live Logs",
@@ -95,7 +96,7 @@
   },
   "exit_modal": {
     "title": "Exit CFTunnel",
-    "message": "Are you sure you want to exit? Any active server or client tunnel connections will be terminated.",
+    "message": "Are you sure you want to exit? Any active server, client or remote tunnel connections will be terminated.",
     "btn_confirm": "Exit Application",
     "btn_cancel": "Cancel"
   }

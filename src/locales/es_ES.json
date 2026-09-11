@@ -24,10 +24,31 @@
     "btn_clear_log": "Limpiar Registros",
     "status_running": "En ejecución",
     "status_stopped": "Detenido",
-    "list_title": "Túneles Configurados",
+    "mode_local": "Túneles Locales",
+    "mode_remote": "Túneles Remotos",
+    "local_list_title": "Túneles Locales Configurados",
+    "remote_list_title": "Túneles Remotos Configurados",
+    "type_local": "Local",
+    "type_remote": "Remoto",
+    "dns_section": "Vinculación de Ruta DNS (route dns)",
+    "dns_tunnel_name": "Nombre del Túnel:",
+    "dns_tunnel_name_placeholder": "ej: mc (solo letras)",
+    "dns_domain": "Dominio:",
+    "dns_domain_placeholder": "ej: mc.example.com",
+    "btn_route_dns": "Vincular Ruta DNS",
+    "remote_token_label": "Token del Túnel Remoto:",
+    "remote_token_placeholder": "Pegue cloudflared.exe service install eyJ... o solo el Token",
+    "remote_token_hint": "Auto-extrae el Token e inicia temporalmente con tunnel run --token (sin servicio del sistema)",
+    "btn_start_remote": "Iniciar Túnel Remoto",
+    "btn_stop_remote": "Detener Túnel Remoto",
+    "status_remote_running": "Remoto en Ejecución",
+    "status_remote_stopped": "Remoto Detenido",
+    "remote_config_title": "Config ingress en la nube",
+    "remote_config_empty": "Inicie el túnel remoto para obtener la configuración en la nube",
     "headers": {
       "id": "ID del Túnel",
       "name": "Nombre",
+      "type": "Tipo",
       "created": "Fecha de Creación",
       "connections": "Conexiones"
     },
@@ -36,7 +57,8 @@
       "port_invalid": "El puerto debe ser un número válido entre 1 y 65535",
       "no_selection": "Seleccione un túnel de la lista para eliminarlo",
       "delete_confirm_title": "Confirmar Eliminación",
-      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?"
+      "delete_confirm_msg": "¿Está seguro de que desea eliminar el túnel \"{name}\"?",
+      "dns_domain_invalid": "Ingrese un dominio válido (ej: mc.example.com)"
     }
   },
   "client_tab": {
@@ -54,36 +76,15 @@
     }
   },
   "misc_tab": {
-    "btn_login": "Iniciar Sesión Cloudflared",
-    "btn_check_version": "Verificar Versión",
-    "btn_update": "Actualizar Cloudflared",
-    "btn_download": "Página de Descarga",
     "btn_install": "Instalar cloudflared",
     "btn_install_desc": "Detectar SO y CPU y descargar en la carpeta de la app",
     "btn_open_config_dir": "Abrir Carpeta de Configuración Local",
     "btn_open_config_dir_desc": "Ver carpeta ~/.cloudflared en el explorador de archivos",
     "config_dir_warning": "Aviso: ¡No muestre ni comparta el archivo cert.pem ni los archivos .json del túnel con nadie para evitar fugas de privacidad!",
-    "remote_section": "Gestión de Servicio de Túnel Remoto",
-    "remote_token": "Token del Túnel:",
-    "remote_token_placeholder": "Pegue el comando de instalación o Token del panel de Cloudflare",
-    "remote_token_hint": "Puede pegar el comando completo como cloudflared.exe service install eyJ... o solo el Token",
-    "btn_install_service": "Instalar Servicio",
-    "btn_uninstall_service": "Desinstalar Servicio",
-    "btn_start_service": "Iniciar Servicio",
-    "btn_stop_service": "Detener Servicio",
-    "status_service_running": "Servicio en Ejecución",
-    "status_service_stopped": "Servicio Detenido",
-    "dns_section": "Vinculación de Ruta DNS (route dns)",
-    "dns_tunnel_name": "Nombre del Túnel:",
-    "dns_tunnel_name_placeholder": "ej: mc (solo letras)",
-    "dns_domain": "Dominio:",
-    "dns_domain_placeholder": "ej: mc.example.com",
-    "btn_route_dns": "Vincular Ruta DNS",
-    "errors": {
-      "token_invalid": "El Token no puede estar vacío",
-      "tunnel_invalid": "El nombre del túnel solo debe contener letras (a-z, A-Z)",
-      "dns_domain_invalid": "Ingrese un dominio válido (ej: mc.example.com)"
-    }
+    "btn_login": "Iniciar Sesión Cloudflared",
+    "btn_check_version": "Verificar Versión",
+    "btn_update": "Actualizar Cloudflared",
+    "btn_download": "Página de Descarga"
   },
   "console": {
     "title": "Registros de la Consola en Vivo",
@@ -95,7 +96,7 @@
   },
   "exit_modal": {
     "title": "Salir de CFTunnel",
-    "message": "¿Está seguro de que desea salir? Se interrumpirán todos los túneles activos de servidor y cliente.",
+    "message": "¿Está seguro de que desea salir? Se interrumpirán todos los túneles activos de servidor, cliente o remoto.",
     "btn_confirm": "Confirmar Salida",
     "btn_cancel": "Cancelar"
   }

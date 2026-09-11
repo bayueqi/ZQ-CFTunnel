@@ -3,6 +3,7 @@ export interface TunnelInfo {
   name: string;
   created: string;
   connections: string;
+  tunnel_type: 'local' | 'remote';
 }
 
 export interface LogEntry {
@@ -10,7 +11,7 @@ export interface LogEntry {
   timestamp: string;
   message: string;
   level: 'info' | 'warn' | 'error' | 'success';
-  source: 'server' | 'client' | 'misc' | 'system';
+  source: 'server' | 'client' | 'misc' | 'remote' | 'system';
 }
 
 export type LangKey = 'zh_CN' | 'zh_TW' | 'pt_BR' | 'es_ES' | 'en_US' | 'ja_JP';
@@ -41,10 +42,31 @@ export interface LangPack {
     btn_clear_log: string;
     status_running: string;
     status_stopped: string;
-    list_title: string;
+    mode_local: string;
+    mode_remote: string;
+    local_list_title: string;
+    remote_list_title: string;
+    type_local: string;
+    type_remote: string;
+    dns_section: string;
+    dns_tunnel_name: string;
+    dns_tunnel_name_placeholder: string;
+    dns_domain: string;
+    dns_domain_placeholder: string;
+    btn_route_dns: string;
+    remote_token_label: string;
+    remote_token_placeholder: string;
+    remote_token_hint: string;
+    btn_start_remote: string;
+    btn_stop_remote: string;
+    status_remote_running: string;
+    status_remote_stopped: string;
+    remote_config_title: string;
+    remote_config_empty: string;
     headers: {
       id: string;
       name: string;
+      type: string;
       created: string;
       connections: string;
     };
@@ -54,6 +76,7 @@ export interface LangPack {
       no_selection: string;
       delete_confirm_title: string;
       delete_confirm_msg: string;
+      dns_domain_invalid: string;
     };
   };
   client_tab: {
@@ -80,27 +103,6 @@ export interface LangPack {
     btn_check_version: string;
     btn_update: string;
     btn_download: string;
-    remote_section: string;
-    remote_token: string;
-    remote_token_placeholder: string;
-    remote_token_hint: string;
-    btn_install_service: string;
-    btn_uninstall_service: string;
-    btn_start_service: string;
-    btn_stop_service: string;
-    status_service_running: string;
-    status_service_stopped: string;
-    dns_section: string;
-    dns_tunnel_name: string;
-    dns_tunnel_name_placeholder: string;
-    dns_domain: string;
-    dns_domain_placeholder: string;
-    btn_route_dns: string;
-    errors: {
-      token_invalid: string;
-      tunnel_invalid: string;
-      dns_domain_invalid: string;
-    };
   };
   exit_modal: {
     title: string;

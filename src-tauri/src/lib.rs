@@ -19,6 +19,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 pub struct AppState {
     server_process: Arc<Mutex<Option<Child>>>,
     client_process: Arc<Mutex<Option<Child>>>,
+    remote_process: Arc<Mutex<Option<Child>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -27,6 +28,7 @@ pub struct TunnelInfo {
     pub name: String,
     pub created: String,
     pub connections: String,
+    pub tunnel_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -111,6 +113,12 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
     let raw_list: Vec<RawTunnel> = serde_json::from_str(&stdout_str)
         .map_err(|e| format!("解析隧道列表失败: {}", e))?;
 
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let cloudflared_dir = home.join(".cloudflared");
+
     let mut list = Vec::new();
     for t in raw_list {
         let connections_str = if t.connections.is_empty() {
@@ -121,11 +129,14 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
+        let cred_path = cloudflared_dir.join(format!("{}.json", t.id));
+        let tunnel_type = if cred_path.exists() { "local".to_string() } else { "remote".to_string() };
         list.push(TunnelInfo {
             id: t.id,
             name: t.name,
             created: t.created_at,
             connections: connections_str,
+            tunnel_type,
         });
     }
 
@@ -889,6 +900,11 @@ fn exit_app(app: AppHandle, state: State<'_, AppState>) {
             let _ = child.kill();
         }
     }
+    if let Ok(mut guard) = state.remote_process.lock() {
+        if let Some(mut child) = guard.take() {
+            let _ = child.kill();
+        }
+    }
     app.exit(0);
 }
 
@@ -921,282 +937,155 @@ fn open_cloudflared_config_dir(app: AppHandle) -> Result<String, String> {
     Ok(dir_str)
 }
 
-#[tauri::command]
-fn install_remote_tunnel(app: AppHandle, token: String) -> Result<String, String> {
-    let raw = token.trim();
-    if raw.is_empty() {
+/// 从用户输入中提取 Token（支持直接粘贴 token 或完整 install 命令）
+fn extract_token(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
         return Err("Token 不能为空".to_string());
     }
+    if trimmed.starts_with("eyJ") {
+        return Ok(trimmed.to_string());
+    }
+    trimmed
+        .split_whitespace()
+        .find(|s| s.starts_with("eyJ"))
+        .map(|s| s.to_string())
+        .ok_or_else(|| "无法从输入中提取有效 Token（应以 eyJ 开头）".to_string())
+}
 
-    // 支持用户直接粘贴完整命令，自动提取 Token
-    // 例如: cloudflared.exe service install eyJhIjoi...
-    // 或者: cloudflared service install eyJhIjoi...
-    let token_trimmed = if raw.contains("service") && raw.contains("install") {
-        raw.split_whitespace()
-            .filter(|s| s.starts_with("eyJ"))
-            .last()
-            .unwrap_or(raw)
+/// 从 cloudflared 日志行中解析云端 ingress 配置，返回格式化的规则文本
+fn extract_ingress_from_log(line: &str) -> Option<String> {
+    let marker = "Updated to new configuration config=\"";
+    let start = line.find(marker)? + marker.len();
+    let rest = &line[start..];
+    let end = rest.find("\" version=")?;
+    let escaped = &rest[..end];
+    let unescaped = escaped.replace("\\\"", "\"");
+    let parsed: serde_json::Value = serde_json::from_str(&unescaped).ok()?;
+    let ingress = parsed.get("ingress")?.as_array()?;
+    let mut lines = Vec::new();
+    for rule in ingress {
+        let hostname = rule.get("hostname").and_then(|v| v.as_str()).unwrap_or("(默认)");
+        let service = rule.get("service").and_then(|v| v.as_str()).unwrap_or("?");
+        lines.push(format!("{}  →  {}", hostname, service));
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    Some(lines.join("\n"))
+}
+
+#[tauri::command]
+fn start_remote_tunnel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<String, String> {
+    let token_trimmed = extract_token(&token)?;
+
+    let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
+    if let Some(ref mut child) = *proc_guard {
+        let _ = child.kill();
+        *proc_guard = None;
+    }
+
+    let mut cmd = create_base_command();
+    cmd.args(["tunnel", "run", "--token", &token_trimmed])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "未找到 cloudflared 程序，请先在「配置」页点击「安装 cloudflared」".to_string()
+        } else {
+            format!("启动远程隧道失败: {}", e)
+        }
+    })?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let app_clone1 = app.clone();
+    if let Some(out) = stdout {
+        thread::spawn(move || {
+            let reader = BufReader::new(out);
+            for line in reader.lines().flatten() {
+                let _ = app_clone1.emit(
+                    "log-message",
+                    LogPayload {
+                        message: line,
+                        level: "info".to_string(),
+                        source: "remote".to_string(),
+                    },
+                );
+            }
+        });
+    }
+
+    let app_clone2 = app.clone();
+    if let Some(err) = stderr {
+        thread::spawn(move || {
+            let reader = BufReader::new(err);
+            for line in reader.lines().flatten() {
+                let level = if line.contains("ERR") || line.contains("error") {
+                    "error"
+                } else if line.contains("WRN") || line.contains("warn") {
+                    "warn"
+                } else {
+                    "info"
+                };
+                if let Some(ingress_text) = extract_ingress_from_log(&line) {
+                    let _ = app_clone2.emit("remote-config-update", ingress_text);
+                }
+                let _ = app_clone2.emit(
+                    "log-message",
+                    LogPayload {
+                        message: line,
+                        level: level.to_string(),
+                        source: "remote".to_string(),
+                    },
+                );
+            }
+        });
+    }
+
+    *proc_guard = Some(child);
+
+    let start_msg = "已启动远程隧道（tunnel run --token）".to_string();
+    let _ = app.emit(
+        "log-message",
+        LogPayload {
+            message: format!("[INFO] {}", start_msg),
+            level: "success".to_string(),
+            source: "remote".to_string(),
+        },
+    );
+
+    Ok(start_msg)
+}
+
+#[tauri::command]
+fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
+    if let Some(mut child) = proc_guard.take() {
+        let _ = child.kill();
+        let _ = app.emit(
+            "log-message",
+            LogPayload {
+                message: "[INFO] 远程隧道已停止".to_string(),
+                level: "warn".to_string(),
+                source: "remote".to_string(),
+            },
+        );
+        Ok("远程隧道已停止".to_string())
     } else {
-        raw
-    };
-
-    let _ = app.emit(
-        "log-message",
-        LogPayload {
-            message: "[INFO] 正在安装远程隧道服务（需要管理员权限，请确认 UAC 弹窗）...".to_string(),
-            level: "info".to_string(),
-            source: "misc".to_string(),
-        },
-    );
-
-    #[cfg(target_os = "windows")]
-    {
-        let exe_path = get_cloudflared_executable();
-        let exe_str = exe_path.to_string_lossy().replace('\'', "''");
-
-        let ps_script = format!(
-            "Start-Process -FilePath '{}' -ArgumentList 'service','install','{}' -Verb RunAs -Wait -WindowStyle Hidden",
-            exe_str, token_trimmed
-        );
-
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", &ps_script])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        cmd.creation_flags(CREATE_NO_WINDOW);
-
-        let _ = cmd.output().map_err(|e| format!("执行安装服务失败: {}", e))?;
-
-        // 检查服务是否注册成功
-        let mut check_cmd = Command::new("sc");
-        check_cmd.args(["query", "Cloudflared"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        check_cmd.creation_flags(CREATE_NO_WINDOW);
-        let check_output = check_cmd.output().map_err(|e| format!("检查服务状态失败: {}", e))?;
-        let check_str = String::from_utf8_lossy(&check_output.stdout).to_string();
-
-        if check_str.contains("Cloudflared") {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[SUCCESS] 远程隧道服务安装成功，已注册为系统服务".to_string(),
-                    level: "success".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Ok("远程隧道服务安装成功".to_string())
-        } else {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[ERROR] 远程隧道服务安装失败，请检查 Token 是否正确".to_string(),
-                    level: "error".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Err("远程隧道服务安装失败，请检查 Token 是否正确".to_string())
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        Err("此功能仅在 Windows 上可用".to_string())
+        Ok("当前没有正在运行的远程隧道".to_string())
     }
 }
 
 #[tauri::command]
-fn uninstall_remote_tunnel(app: AppHandle) -> Result<String, String> {
-    let _ = app.emit(
-        "log-message",
-        LogPayload {
-            message: "[INFO] 正在卸载远程隧道服务（需要管理员权限）...".to_string(),
-            level: "info".to_string(),
-            source: "misc".to_string(),
-        },
-    );
-
-    #[cfg(target_os = "windows")]
-    {
-        let exe_path = get_cloudflared_executable();
-        let exe_str = exe_path.to_string_lossy().replace('\'', "''");
-
-        let ps_script = format!(
-            "Start-Process -FilePath '{}' -ArgumentList 'service','uninstall' -Verb RunAs -Wait -WindowStyle Hidden",
-            exe_str
-        );
-
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", &ps_script])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        cmd.creation_flags(CREATE_NO_WINDOW);
-
-        let _ = cmd.output().map_err(|e| format!("执行卸载服务失败: {}", e))?;
-
-        // 检查服务是否已删除
-        let mut check_cmd = Command::new("sc");
-        check_cmd.args(["query", "Cloudflared"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        check_cmd.creation_flags(CREATE_NO_WINDOW);
-        let check_output = check_cmd.output().map_err(|e| format!("检查服务状态失败: {}", e))?;
-        let check_str = String::from_utf8_lossy(&check_output.stdout).to_string();
-
-        if check_str.contains("Cloudflared") {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[WARN] 远程隧道服务可能未完全卸载".to_string(),
-                    level: "warn".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Ok("远程隧道服务可能未完全卸载".to_string())
-        } else {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[INFO] 远程隧道服务已卸载".to_string(),
-                    level: "warn".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Ok("远程隧道服务已卸载".to_string())
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        Err("此功能仅在 Windows 上可用".to_string())
-    }
-}
-
-#[tauri::command]
-fn start_remote_tunnel(app: AppHandle) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = app.emit(
-            "log-message",
-            LogPayload {
-                message: "[INFO] 正在启动远程隧道服务（需要管理员权限）...".to_string(),
-                level: "info".to_string(),
-                source: "misc".to_string(),
-            },
-        );
-
-        let ps_script = "Start-Process -FilePath 'net' -ArgumentList 'start','Cloudflared' -Verb RunAs -Wait -WindowStyle Hidden";
-
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", ps_script])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        cmd.creation_flags(CREATE_NO_WINDOW);
-
-        let _ = cmd.output().map_err(|e| format!("启动服务失败: {}", e))?;
-
-        // 检查服务状态
-        if is_remote_tunnel_running() {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[SUCCESS] 远程隧道服务已启动".to_string(),
-                    level: "success".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Ok("远程隧道服务已启动".to_string())
-        } else {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[ERROR] 启动服务失败，可能需要以管理员身份运行".to_string(),
-                    level: "error".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Err("启动服务失败，可能需要以管理员身份运行".to_string())
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        Err("此功能仅在 Windows 上可用".to_string())
-    }
-}
-
-#[tauri::command]
-fn stop_remote_tunnel(app: AppHandle) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = app.emit(
-            "log-message",
-            LogPayload {
-                message: "[INFO] 正在停止远程隧道服务（需要管理员权限）...".to_string(),
-                level: "info".to_string(),
-                source: "misc".to_string(),
-            },
-        );
-
-        let ps_script = "Start-Process -FilePath 'net' -ArgumentList 'stop','Cloudflared' -Verb RunAs -Wait -WindowStyle Hidden";
-
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", ps_script])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        cmd.creation_flags(CREATE_NO_WINDOW);
-
-        let _ = cmd.output().map_err(|e| format!("停止服务失败: {}", e))?;
-
-        if !is_remote_tunnel_running() {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[INFO] 远程隧道服务已停止".to_string(),
-                    level: "warn".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Ok("远程隧道服务已停止".to_string())
-        } else {
-            let _ = app.emit(
-                "log-message",
-                LogPayload {
-                    message: "[ERROR] 停止服务失败，可能需要以管理员身份运行".to_string(),
-                    level: "error".to_string(),
-                    source: "misc".to_string(),
-                },
-            );
-            Err("停止服务失败，可能需要以管理员身份运行".to_string())
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        Err("此功能仅在 Windows 上可用".to_string())
-    }
-}
-
-#[tauri::command]
-fn is_remote_tunnel_running() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let mut cmd = Command::new("sc");
-        cmd.args(["query", "Cloudflared"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        cmd.creation_flags(CREATE_NO_WINDOW);
-
-        if let Ok(output) = cmd.output() {
-            let out_str = String::from_utf8_lossy(&output.stdout).to_string();
-            return out_str.contains("RUNNING");
-        }
-        false
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        false
-    }
+fn is_remote_running(state: State<'_, AppState>) -> bool {
+    state.remote_process.lock().map(|g| g.is_some()).unwrap_or(false)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1291,11 +1180,9 @@ pub fn run() {
             toggle_maximize_window,
             close_window,
             is_window_maximized,
-            install_remote_tunnel,
-            uninstall_remote_tunnel,
             start_remote_tunnel,
             stop_remote_tunnel,
-            is_remote_tunnel_running
+            is_remote_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
