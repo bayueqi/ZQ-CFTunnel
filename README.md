@@ -1,4 +1,4 @@
-# CFTunnel (Windows 11 Fluent 重制版)
+# CFTunnel
 
 <div align="center">
 
@@ -10,20 +10,6 @@
 
 ---
 
-## 📖 项目起源与重制背景
-
-本项目是早期开源的 Python 版 cloudflared_GUI 的**全新跨平台现代重制版 (Full Remake)**。
-
-| 对比维度 | 👴 旧版 (Python 版本) | 🚀 现代重制版 (Tauri 2.0 + Rust) |
-| :--- | :--- | :--- |
-| **底层架构** | Python 3 + Tkinter / Qt 运行环境 | **Rust 底层核心 + Webkit 原生轻量渲染** |
-| **安装包体积** | 需打包庞大的 Python 解释器（50MB+） | **极度轻量化，安装包仅约 3 ~ 5 MB** |
-| **内存占用** | 运行时常驻内存 ~150MB+ | **极致低消耗，运行时仅约 25MB** |
-| **UI 视觉设计** | 传统经典简陋窗口 | **Windows 11 Fluent 亚克力无边框现代美学** |
-| **交互体验** | 仅支持单一语言与基础点击 | **Web Audio 纯合成音效、6国语言、动态终端、彩蛋** |
-| **跨平台支持** | Windows 专属或跨平台配置繁琐 | **全面覆盖 Windows / macOS / Linux 多架构** |
-
----
 
 ## ✨ 核心特性一览
 
