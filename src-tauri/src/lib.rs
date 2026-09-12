@@ -217,6 +217,48 @@ fn route_dns_tunnel(name: String, hostname: String) -> Result<String, String> {
     }
 }
 
+/// 检查指定名称的隧道是否已存在（通过 cloudflared tunnel list 查询）
+fn tunnel_exists(name: &str) -> Result<bool, String> {
+    let mut cmd = create_base_command();
+    cmd.args(["tunnel", "list", "--output", "json"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = cmd.output().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "未找到 cloudflared 可执行文件。请先在「cloudflared」Tab 点击「安装 cloudflared」或将其放置在应用根目录下。".to_string()
+        } else {
+            format!("执行 cloudflared 失败: {}", e)
+        }
+    })?;
+
+    let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        return Err(if !stderr_str.trim().is_empty() {
+            stderr_str
+        } else {
+            stdout_str
+        });
+    }
+
+    // stdout 为空说明账号下没有任何隧道
+    if stdout_str.trim().is_empty() {
+        return Ok(false);
+    }
+
+    #[derive(Deserialize)]
+    struct RawTunnelName {
+        name: String,
+    }
+
+    let raw_list: Vec<RawTunnelName> = serde_json::from_str(&stdout_str)
+        .map_err(|e| format!("解析隧道列表失败: {}", e))?;
+
+    Ok(raw_list.iter().any(|t| t.name == name))
+}
+
 #[tauri::command]
 fn start_server_tunnel(
     app: AppHandle,
@@ -238,6 +280,14 @@ fn start_server_tunnel(
     let protocol_trimmed = protocol.trim();
     if protocol_trimmed != "http" && protocol_trimmed != "tcp" {
         return Err("协议必须为 http 或 tcp".to_string());
+    }
+
+    // 启动前先确认隧道已存在，避免 cloudflared 旧版快捷语法自动创建隧道
+    if !tunnel_exists(name_trimmed)? {
+        return Err(format!(
+            "隧道 [{}] 不存在，请先点击「创建隧道」创建后再启动",
+            name_trimmed
+        ));
     }
 
     let mut proc_guard = state.server_process.lock().map_err(|e| e.to_string())?;
