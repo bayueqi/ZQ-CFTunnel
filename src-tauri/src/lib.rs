@@ -217,10 +217,13 @@ fn route_dns_tunnel(name: String, hostname: String) -> Result<String, String> {
     }
 }
 
-/// 检查指定名称的隧道是否已存在（通过 cloudflared tunnel list 查询）
+/// 检查指定名称的隧道是否已存在。
+///
+/// 通过 `cloudflared tunnel list` 的默认文本输出解析隧道名列表，
+/// 不依赖 `--output json`，以兼容所有 cloudflared 版本（旧版不支持 json 输出）。
 fn tunnel_exists(name: &str) -> Result<bool, String> {
     let mut cmd = create_base_command();
-    cmd.args(["tunnel", "list", "--output", "json"])
+    cmd.args(["tunnel", "list"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -235,6 +238,7 @@ fn tunnel_exists(name: &str) -> Result<bool, String> {
     let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
 
+    // 未登录或执行出错时（此时无法确定隧道是否存在），视为失败并提示
     if !output.status.success() {
         return Err(if !stderr_str.trim().is_empty() {
             stderr_str
@@ -243,20 +247,31 @@ fn tunnel_exists(name: &str) -> Result<bool, String> {
         });
     }
 
-    // stdout 为空说明账号下没有任何隧道
-    if stdout_str.trim().is_empty() {
-        return Ok(false);
+    // 逐行解析默认文本输出，隧道名位于第二列。
+    // 输出形如：
+    //   ID                                    NAME        CREATED              CONNECTIONS
+    //   <uuid>                                <name>      <ts>                 <...>
+    // 跳过表头行与空行，按空白切分取第 2 列作为隧道名。
+    let target = name.trim();
+    for line in stdout_str.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split_whitespace().collect();
+        if cols.len() < 2 {
+            continue;
+        }
+        // 跳过表头（NAME 所在行）
+        if cols[1].eq_ignore_ascii_case("NAME") {
+            continue;
+        }
+        if cols[1] == target {
+            return Ok(true);
+        }
     }
 
-    #[derive(Deserialize)]
-    struct RawTunnelName {
-        name: String,
-    }
-
-    let raw_list: Vec<RawTunnelName> = serde_json::from_str(&stdout_str)
-        .map_err(|e| format!("解析隧道列表失败: {}", e))?;
-
-    Ok(raw_list.iter().any(|t| t.name == name))
+    Ok(false)
 }
 
 #[tauri::command]
