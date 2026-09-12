@@ -277,63 +277,6 @@
             </div>
           </div>
 
-          <!-- DNS 路由绑定卡片 -->
-          <div class="fluent-card form-card dns-route-card">
-            <h3 class="card-title dns-route-title">{{ t.server_tab.dns_section }}</h3>
-            <div class="form-grid">
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.dns_tunnel_name }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="dnsRoute.name"
-                    :placeholder="t.server_tab.dns_tunnel_name_placeholder"
-                    :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
-                    @input="onDnsRouteNameInput"
-                  />
-                </div>
-                <div v-if="dnsRouteNameHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.tunnel_invalid }}
-                </div>
-              </div>
-
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.dns_domain }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="dnsRoute.domain"
-                    :placeholder="t.server_tab.dns_domain_placeholder"
-                    :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
-                    @input="onDnsRouteDomainInput"
-                  />
-                </div>
-                <div v-if="dnsRouteDomainHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.dns_domain_invalid }}
-                </div>
-              </div>
-            </div>
-
-            <div class="actions-row center-actions">
-              <button
-                class="fluent-btn primary"
-                @click="handleRouteDns"
-                :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
-              >
-                <span class="btn-icon">🔗</span>
-                {{ t.server_tab.btn_route_dns }}
-              </button>
-            </div>
-          </div>
-
           <!-- 本地隧道列表卡片 -->
           <div class="fluent-card table-card">
             <div class="card-header">
@@ -390,6 +333,63 @@
               >
                 <span class="btn-icon">🗑️</span>
                 {{ t.server_tab.btn_delete }}
+              </button>
+            </div>
+          </div>
+
+          <!-- DNS 路由绑定卡片 -->
+          <div class="fluent-card form-card dns-route-card">
+            <h3 class="card-title dns-route-title">{{ t.server_tab.dns_section }}</h3>
+            <div class="form-grid">
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.dns_tunnel_name }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="dnsRoute.name"
+                    :placeholder="t.server_tab.dns_tunnel_name_placeholder"
+                    :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
+                    @input="onDnsRouteNameInput"
+                  />
+                </div>
+                <div v-if="dnsRouteNameHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.tunnel_invalid }}
+                </div>
+              </div>
+
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.dns_domain }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="dnsRoute.domain"
+                    :placeholder="t.server_tab.dns_domain_placeholder"
+                    :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
+                    @input="onDnsRouteDomainInput"
+                  />
+                </div>
+                <div v-if="dnsRouteDomainHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.dns_domain_invalid }}
+                </div>
+              </div>
+            </div>
+
+            <div class="actions-row center-actions">
+              <button
+                class="fluent-btn primary"
+                @click="handleRouteDns"
+                :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
+              >
+                <span class="btn-icon">🔗</span>
+                {{ t.server_tab.btn_route_dns }}
               </button>
             </div>
           </div>
