@@ -237,10 +237,35 @@
                     class="fluent-input fluent-select"
                   >
                     <option value="http">{{ t.server_tab.protocol_http }}</option>
+                    <option value="https">{{ t.server_tab.protocol_https }}</option>
                     <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                    <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
+                    <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
+                    <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                    <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                    <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                    <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
                   </select>
                 </div>
                 <div class="field-hint">{{ t.server_tab.protocol_hint }}</div>
+              </div>
+            </div>
+
+            <!-- Unix 套接字路径（仅 unix / unix+tls 协议时显示） -->
+            <div class="form-grid" v-if="serverConfig.protocol === 'unix' || serverConfig.protocol === 'unix+tls'">
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.unix_socket_label }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="serverConfig.unixSocket"
+                    :placeholder="t.server_tab.unix_socket_placeholder"
+                    class="fluent-input"
+                  />
+                </div>
               </div>
             </div>
 
@@ -255,7 +280,7 @@
                 v-if="!serverRunning"
                 class="fluent-btn primary"
                 @click="handleStartServer"
-                :disabled="serverNameHasError || serverPortHasError || !serverConfig.name || !serverConfig.port"
+                :disabled="!canStartServer"
               >
                 <span class="btn-icon">▶</span>
                 {{ t.server_tab.btn_start }}
@@ -881,6 +906,7 @@ const serverConfig = ref({
   name: localStorage.getItem('server_tunnel_name') || 'mc',
   port: localStorage.getItem('server_port') || '25565',
   protocol: localStorage.getItem('server_protocol') || 'http',
+  unixSocket: localStorage.getItem('server_unix_socket') || '',
 });
 
 const clientConfig = ref({
@@ -901,6 +927,17 @@ const clientDomainHasError = ref(false);
 const clientPortHasError = ref(false);
 const dnsRouteNameHasError = ref(false);
 const dnsRouteDomainHasError = ref(false);
+
+// 判断服务端表单是否满足启动条件（hello_world 无需端口，unix 协议需要套接字路径）
+const canStartServer = computed(() => {
+  const p = serverConfig.value.protocol;
+  if (!serverConfig.value.name) return false;
+  if (p === 'hello_world') return !serverNameHasError.value;
+  if (p === 'unix' || p === 'unix+tls') {
+    return !serverNameHasError.value && !!serverConfig.value.unixSocket.trim();
+  }
+  return !serverNameHasError.value && !serverPortHasError.value && !!serverConfig.value.port;
+});
 
 // 运行状态
 const serverRunning = ref(false);
@@ -1151,27 +1188,38 @@ const handleStartServer = async () => {
   const name = serverConfig.value.name.trim();
   const port = serverConfig.value.port.trim();
   const protocol = serverConfig.value.protocol;
+  const unixSocket = serverConfig.value.unixSocket.trim();
 
   if (!isTunnelNameValid(name)) {
     serverNameHasError.value = true;
     appendLog(`[ERROR] 隧道名错误`, 'error', 'server');
     return;
   }
-  if (!isPortValid(port)) {
+  if (protocol !== 'hello_world' && !isPortValid(port)) {
     serverPortHasError.value = true;
     appendLog(`[ERROR] 本地端口错误`, 'error', 'server');
+    return;
+  }
+  if ((protocol === 'unix' || protocol === 'unix+tls') && !unixSocket) {
+    appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'server');
     return;
   }
 
   soundManager.playSuccess();
   try {
-    const res = await invoke<string>('start_server_tunnel', { name, port, protocol });
+    const res = await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
     localStorage.setItem('server_tunnel_name', name);
     localStorage.setItem('server_port', port);
     localStorage.setItem('server_protocol', protocol);
+    localStorage.setItem('server_unix_socket', unixSocket);
     serverRunning.value = true;
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(`隧道 [${name}] 已启动 (${protocol}://127.0.0.1:${port})`);
+    const desc = protocol === 'hello_world'
+      ? 'hello_world 内置测试服务器'
+      : protocol === 'unix' || protocol === 'unix+tls'
+        ? `${protocol}:${unixSocket}`
+        : `${protocol}://127.0.0.1:${port}`;
+    showToast(`隧道 [${name}] 已启动 (${desc})`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
   }

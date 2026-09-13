@@ -274,6 +274,17 @@ fn tunnel_exists(name: &str) -> Result<bool, String> {
     Ok(false)
 }
 
+/// 校验协议是否属于 cloudflared 官方支持的类型。
+///
+/// 支持的协议（service 前缀）：http、https、tcp、ssh、rdp、smb、unix、unix+tls，
+/// 以及特殊模式 hello_world（内置测试服务器）。
+fn is_supported_protocol(protocol: &str) -> bool {
+    matches!(
+        protocol,
+        "http" | "https" | "tcp" | "ssh" | "rdp" | "smb" | "unix" | "unix+tls" | "hello_world"
+    )
+}
+
 #[tauri::command]
 fn start_server_tunnel(
     app: AppHandle,
@@ -281,6 +292,7 @@ fn start_server_tunnel(
     name: String,
     port: String,
     protocol: String,
+    unix_socket: Option<String>,
 ) -> Result<String, String> {
     let name_trimmed = name.trim();
     let port_trimmed = port.trim();
@@ -288,13 +300,25 @@ fn start_server_tunnel(
     if name_trimmed.is_empty() || !name_trimmed.chars().all(|c| c.is_ascii_alphabetic()) {
         return Err("隧道名字必须为纯字母".to_string());
     }
-    if port_trimmed.is_empty() || port_trimmed.parse::<u16>().is_err() {
+
+    let protocol_trimmed = protocol.trim();
+    if !is_supported_protocol(protocol_trimmed) {
+        return Err(format!("不支持的协议类型: {}", protocol_trimmed));
+    }
+
+    // hello_world 为内置测试服务器，无需端口；其余协议都需要合法端口
+    if protocol_trimmed != "hello_world"
+        && (port_trimmed.is_empty() || port_trimmed.parse::<u16>().is_err())
+    {
         return Err("端口号必须为 1-65535 的纯数字".to_string());
     }
 
-    let protocol_trimmed = protocol.trim();
-    if protocol_trimmed != "http" && protocol_trimmed != "tcp" {
-        return Err("协议必须为 http 或 tcp".to_string());
+    // unix / unix+tls 协议需要提供套接字路径
+    let socket_trimmed = unix_socket.as_deref().map(|s| s.trim()).unwrap_or("");
+    if (protocol_trimmed == "unix" || protocol_trimmed == "unix+tls")
+        && socket_trimmed.is_empty()
+    {
+        return Err("unix / unix+tls 协议必须填写套接字路径".to_string());
     }
 
     // 启动前先确认隧道已存在，避免 cloudflared 旧版快捷语法自动创建隧道
@@ -311,11 +335,23 @@ fn start_server_tunnel(
         *proc_guard = None;
     }
 
-    let url_arg = format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed);
+    let url_arg = if protocol_trimmed == "hello_world" {
+        String::new()
+    } else if protocol_trimmed == "unix" {
+        format!("unix:{}", socket_trimmed)
+    } else if protocol_trimmed == "unix+tls" {
+        format!("unix+tls:{}", socket_trimmed)
+    } else {
+        format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed)
+    };
+
     let mut cmd = create_base_command();
-    cmd.args(["tunnel", "--name", name_trimmed, "--url", &url_arg])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    if protocol_trimmed == "hello_world" {
+        cmd.args(["tunnel", "--name", name_trimmed, "--hello-world"]);
+    } else {
+        cmd.args(["tunnel", "--name", name_trimmed, "--url", &url_arg]);
+    }
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
@@ -371,10 +407,19 @@ fn start_server_tunnel(
 
     *proc_guard = Some(child);
 
-    let start_msg = format!(
-        "已启动服务端隧道 [{}] 本地转发 [{}://127.0.0.1:{}]",
-        name_trimmed, protocol_trimmed, port_trimmed
-    );
+    let start_msg = if protocol_trimmed == "hello_world" {
+        format!("已启动服务端隧道 [{}]（hello_world 内置测试服务器）", name_trimmed)
+    } else if protocol_trimmed == "unix" || protocol_trimmed == "unix+tls" {
+        format!(
+            "已启动服务端隧道 [{}] 本地转发 [{}]",
+            name_trimmed, url_arg
+        )
+    } else {
+        format!(
+            "已启动服务端隧道 [{}] 本地转发 [{}://127.0.0.1:{}]",
+            name_trimmed, protocol_trimmed, port_trimmed
+        )
+    };
     let _ = app.emit(
         "log-message",
         LogPayload {

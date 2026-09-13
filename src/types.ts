@@ -32,8 +32,17 @@ export interface LangPack {
     port_placeholder: string;
     protocol_label: string;
     protocol_http: string;
+    protocol_https: string;
     protocol_tcp: string;
+    protocol_ssh: string;
+    protocol_rdp: string;
+    protocol_smb: string;
+    protocol_unix: string;
+    protocol_unix_tls: string;
+    protocol_hello_world: string;
     protocol_hint: string;
+    unix_socket_label: string;
+    unix_socket_placeholder: string;
     btn_create: string;
     btn_start: string;
     btn_stop: string;
