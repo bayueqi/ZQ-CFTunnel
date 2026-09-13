@@ -75,7 +75,6 @@ CFTunnel 里的隧道分两种，本质区别在于 **「隧道的配置写在�
 2. **一个托管在 Cloudflare 上的域名**：例如 `example.com`，且该域名的 DNS 由 Cloudflare 接管；
 3. **cloudflared 已安装并授权登录**：见下一节。
 
-> 仅用「Hello World」做临时测试时，无需账号和域名（会分配一个 `*.trycloudflare.com` 临时域名）；但要发布真实服务、绑定自己的域名，则三者缺一不可。
 
 ---
 
