@@ -247,7 +247,6 @@
                     <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
                   </select>
                 </div>
-                <div class="field-hint">{{ t.server_tab.protocol_hint }}</div>
               </div>
             </div>
 

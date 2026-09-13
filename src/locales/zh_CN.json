@@ -22,7 +22,6 @@
     "protocol_unix": "UNIX (Unix 套接字，仅 Linux/macOS)",
     "protocol_unix_tls": "UNIX+TLS (Unix 套接字 + TLS)",
     "protocol_hello_world": "Hello World (内置测试服务器)",
-    "protocol_hint": "选择与服务类型匹配的协议；SSH/RDP/SMB 本质是 TCP 流量，也可直接选 TCP。",
     "unix_socket_label": "Unix 套接字路径:",
     "unix_socket_placeholder": "例如: /tmp/myapp.sock",
     "btn_create": "创建隧道",

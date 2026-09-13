@@ -40,7 +40,6 @@ export interface LangPack {
     protocol_unix: string;
     protocol_unix_tls: string;
     protocol_hello_world: string;
-    protocol_hint: string;
     unix_socket_label: string;
     unix_socket_placeholder: string;
     btn_create: string;
