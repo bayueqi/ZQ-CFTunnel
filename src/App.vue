@@ -145,7 +145,6 @@
           >
             <span class="sidebar-icon">🖥️</span>
             <span class="sidebar-text">{{ t.tabs.server }}</span>
-            <span v-if="serverRunning" class="status-dot green"></span>
             <span class="sidebar-arrow">▸</span>
           </button>
 
@@ -215,7 +214,9 @@
         <!-- ============ 本地隧道视图 ============ -->
         <div v-show="serverMode === 'local'" class="server-sub-view">
           <!-- ============ 快速隧道（临时链接 / 临时域名） ============ -->
-          <div v-show="localSubMode === 'quick'" class="fluent-card form-card">
+          <div v-show="localSubMode === 'quick'" class="server-sub-view">
+          <!-- 输入表单卡片 -->
+          <div class="fluent-card form-card">
             <div class="form-grid">
               <div class="fluent-form-group">
                 <label class="form-label">
@@ -285,13 +286,18 @@
               </button>
               <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
-                {{ quickRunning ? `${t.server_tab.status_running} (${quickTunnels.length})` : t.server_tab.status_stopped }}
+                {{ quickRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
               </div>
             </div>
+          </div>
 
-            <!-- 运行中的快速隧道列表 -->
+          <!-- 运行中的快速隧道列表卡片 -->
+          <div class="fluent-card table-card">
+            <div class="card-header">
+              <h3 class="card-title">{{ t.server_tab.quick_list_title }}</h3>
+            </div>
+
             <div class="quick-list">
-              <div class="quick-list-title">{{ t.server_tab.quick_list_title }}</div>
               <div v-if="quickTunnels.length === 0" class="quick-list-empty">
                 {{ t.server_tab.quick_list_empty }}
               </div>
@@ -303,22 +309,25 @@
                   </span>
                 </div>
                 <div class="quick-item-url">
-                  <span v-if="qt.url" class="quick-url-value mono">{{ qt.url }}</span>
+                  <span
+                    v-if="qt.url"
+                    class="quick-url-value mono"
+                    :title="t.server_tab.click_to_copy"
+                    @click="copyQuickUrl(qt.url)"
+                  >{{ qt.url }}</span>
                   <span v-else class="quick-url-empty">{{ t.server_tab.quick_url_empty }}</span>
                 </div>
                 <div class="quick-item-actions">
-                  <button v-if="qt.url" class="fluent-btn small" @click="copyQuickUrl(qt.url)">📋 {{ t.server_tab.btn_copy }}</button>
                   <button v-if="qt.url" class="fluent-btn small primary" @click="openUrl(qt.url)">🌐 {{ t.server_tab.btn_open }}</button>
                   <button class="fluent-btn small danger" @click="handleStopQuick(qt.key)">⏹ {{ t.server_tab.quick_stop }}</button>
-                  <button class="fluent-btn small" @click="promptDeleteQuick(qt.key)">🗑 {{ t.server_tab.quick_delete }}</button>
                 </div>
               </div>
-              <div class="quick-url-hint">{{ t.server_tab.quick_url_hint }}</div>
             </div>
+          </div>
           </div>
 
           <!-- ============ 绑定域名（命名隧道） ============ -->
-          <div v-show="localSubMode === 'named'">
+          <div v-show="localSubMode === 'named'" class="server-sub-view">
           <!-- 输入表单卡片 -->
           <div class="fluent-card form-card">
             <div class="form-grid">
@@ -414,27 +423,26 @@
               </button>
 
               <button
-                v-if="!serverRunning"
                 class="fluent-btn primary"
                 @click="handleStartServer"
-                :disabled="!canStartServer"
+                :disabled="!canStartServer || currentServerNameRunning"
               >
                 <span class="btn-icon">▶</span>
                 {{ t.server_tab.btn_start }}
               </button>
 
               <button
-                v-if="serverRunning"
                 class="fluent-btn danger"
-                @click="handleStopServer"
+                @click="handleStopServer()"
+                :disabled="!currentServerNameRunning"
               >
                 <span class="btn-icon">⏹</span>
                 {{ t.server_tab.btn_stop }}
               </button>
 
-              <div class="status-pill" :class="serverRunning ? 'online' : 'offline'">
+              <div class="status-pill" :class="currentServerNameRunning ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
-                {{ serverRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
+                {{ currentServerNameRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
               </div>
             </div>
           </div>
@@ -456,6 +464,8 @@
                     <th class="col-created">{{ t.server_tab.headers.created }}</th>
                     <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
                     <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
+                    <th class="col-status">{{ t.server_tab.headers.status }}</th>
+                    <th class="col-actions">{{ t.server_tab.headers.actions }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -474,14 +484,36 @@
                     <td class="col-created mono">{{ tunnel.created }}</td>
                     <td class="col-hostname">
                       <template v-if="tunnel.hostnames && tunnel.hostnames.length">
-                        <span class="hostname-tag" v-for="h in tunnel.hostnames" :key="h">{{ h }}</span>
+                        <span
+                          class="hostname-tag"
+                          v-for="h in tunnel.hostnames"
+                          :key="h"
+                          :title="t.server_tab.click_to_copy"
+                          @click.stop="copyHostname(h)"
+                        >{{ h }}</span>
                       </template>
                       <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
                     </td>
                     <td class="col-connections">{{ tunnel.connections || '-' }}</td>
+                    <td class="col-status">
+                      <span class="tunnel-status" :class="{ online: isTunnelRunning(tunnel.name) }">
+                        <span class="status-dot" :class="isTunnelRunning(tunnel.name) ? 'green' : 'gray'"></span>
+                        {{ isTunnelRunning(tunnel.name) ? t.server_tab.status_running : t.server_tab.status_not_running }}
+                      </span>
+                    </td>
+                    <td class="col-actions">
+                      <button
+                        class="row-action-btn"
+                        :title="isTunnelRunning(tunnel.name) ? t.server_tab.btn_stop : t.server_tab.btn_start"
+                        @click.stop="isTunnelRunning(tunnel.name) ? handleStopServer(tunnel.name) : handleRowStart(tunnel)"
+                      >
+                        <span v-if="isTunnelRunning(tunnel.name)" class="icon-square"></span>
+                        <span v-else class="icon-triangle"></span>
+                      </button>
+                    </td>
                   </tr>
                   <tr v-if="localTunnelList.length === 0">
-                    <td colspan="6" class="empty-table">
+                    <td colspan="8" class="empty-table">
                       {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现本地隧道' }}
                     </td>
                   </tr>
@@ -490,7 +522,7 @@
             </div>
 
             <div class="actions-row table-actions">
-              <button class="fluent-btn" @click="handleRefreshTunnels" :disabled="isRefreshingTunnels">
+              <button class="fluent-btn" @click="handleRefreshTunnels('local')" :disabled="isRefreshingTunnels">
                 <span class="btn-icon">🔄</span>
                 {{ t.server_tab.btn_refresh }}
               </button>
@@ -641,7 +673,13 @@
                     <td class="col-created mono">{{ tunnel.created }}</td>
                     <td class="col-hostname">
                       <template v-if="tunnel.hostnames && tunnel.hostnames.length">
-                        <span class="hostname-tag" v-for="h in tunnel.hostnames" :key="h">{{ h }}</span>
+                        <span
+                          class="hostname-tag"
+                          v-for="h in tunnel.hostnames"
+                          :key="h"
+                          :title="t.server_tab.click_to_copy"
+                          @click.stop="copyHostname(h)"
+                        >{{ h }}</span>
                       </template>
                       <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
                     </td>
@@ -657,7 +695,7 @@
             </div>
 
             <div class="actions-row table-actions">
-              <button class="fluent-btn" @click="handleRefreshTunnels" :disabled="isRefreshingTunnels">
+              <button class="fluent-btn" @click="handleRefreshTunnels('remote')" :disabled="isRefreshingTunnels">
                 <span class="btn-icon">🔄</span>
                 {{ t.server_tab.btn_refresh }}
               </button>
@@ -883,22 +921,6 @@
       </div>
     </div>
 
-    <!-- 删除快速隧道确认弹窗 -->
-    <div v-if="showQuickDeleteModal" class="fluent-modal-overlay" @click.self="cancelDeleteQuick">
-      <div class="fluent-modal-dialog">
-        <div class="modal-header">
-          <h3 class="modal-title">⚠️ {{ t.server_tab.quick_delete_confirm_title }}</h3>
-        </div>
-        <div class="modal-body">
-          <p>{{ t.server_tab.quick_delete_confirm_msg }}</p>
-        </div>
-        <div class="modal-footer">
-          <button class="fluent-btn" @click="cancelDeleteQuick">{{ t.exit_modal.btn_cancel }}</button>
-          <button class="fluent-btn danger" @click="confirmDeleteQuick">{{ t.server_tab.quick_delete }}</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Win11 退出应用二次确认模态弹窗 -->
     <div v-if="showExitConfirmModal" class="fluent-modal-overlay" @click.self="showExitConfirmModal = false">
       <div class="fluent-modal-dialog">
@@ -1117,8 +1139,32 @@ const canStartServer = computed(() => {
   return !serverNameHasError.value && !serverPortHasError.value && !!serverConfig.value.port;
 });
 
-// 运行状态
-const serverRunning = ref(false);
+// 运行状态：命名隧道支持多开，后端 is_server_running 返回正在运行的隧道名列表（key = 隧道名）
+const serverRunningNames = ref<string[]>([]);
+// 某条命名隧道是否正在运行
+const isTunnelRunning = (name: string) => {
+  const n = name.trim();
+  return !!n && serverRunningNames.value.includes(n);
+};
+// 表单里当前这条隧道是否正在运行
+const currentServerNameRunning = computed(() => isTunnelRunning(serverConfig.value.name));
+// 本地标记某条隧道为运行中 / 已停止
+const markServerRunning = (name: string) => {
+  const n = name.trim();
+  if (!n || serverRunningNames.value.includes(n)) return;
+  serverRunningNames.value = [...serverRunningNames.value, n];
+};
+const markServerStopped = (name: string) => {
+  const n = name.trim();
+  serverRunningNames.value = serverRunningNames.value.filter(x => x !== n);
+};
+// 与后端对账运行状态（后端用 try_wait() 清理已退出的进程）
+const reconcileServerRunning = async () => {
+  try {
+    serverRunningNames.value = await invoke<string[]>('is_server_running');
+  } catch {}
+};
+
 const clientRunning = ref(false);
 const isRefreshingTunnels = ref(false);
 const isCreatingTunnel = ref(false);
@@ -1369,17 +1415,32 @@ const selectTunnel = (tunnel: TunnelInfo) => {
   selectedTunnel.value = tunnel;
 };
 
-// 双击隧道填充名字
+// 双击隧道：填充名字，有启动记录时一并恢复该隧道的协议/端口，顶部即可直接启停
 const onTunnelDoubleClick = (tunnel: TunnelInfo) => {
   selectedTunnel.value = tunnel;
   serverConfig.value.name = tunnel.name;
   onServerNameInput();
-  appendLog(`[INFO] 已选择并填充隧道 [${tunnel.name}] (ID: ${tunnel.id})`, 'info', 'server');
+
+  const saved = loadTunnelCfg(tunnel.name.trim());
+  if (saved) {
+    serverConfig.value.protocol = saved.protocol;
+    serverConfig.value.port = saved.port;
+    serverConfig.value.unixSocket = saved.unixSocket;
+    appendLog(
+      `[INFO] 已选择并填充隧道 [${tunnel.name}] (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`,
+      'info',
+      'server',
+    );
+  } else {
+    appendLog(`[INFO] 已选择并填充隧道 [${tunnel.name}] (ID: ${tunnel.id})`, 'info', 'server');
+  }
   showToast(`已选择隧道: ${tunnel.name}`);
 };
 
 // 刷新隧道列表
-const handleRefreshTunnels = async () => {
+// scope：由哪个列表的刷新按钮触发（local=固定域名列表 / remote=云端托管列表），
+//        只影响日志文案与统计口径（各列表只统计自己那一类隧道）；内部调用不传则统计全部。
+const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
   isRefreshingTunnels.value = true;
   try {
     const res = await invoke<TunnelInfo[]>('list_tunnels');
@@ -1394,9 +1455,19 @@ const handleRefreshTunnels = async () => {
       for (const t of res) t.hostnames = [];
     }
     tunnelList.value = res;
-    appendLog(`[INFO] 已刷新隧道列表，共获取到 ${res.length} 条隧道`, 'info', 'server');
+
+    // 一并与后端对账命名隧道的运行状态（多开后靠这里把已退出的进程同步掉）
+    await reconcileServerRunning();
+
+    // 按触发刷新的列表分别统计：固定域名 → 本地隧道，云端托管 → 远程隧道
+    const localCount = res.filter(x => x.tunnel_type === 'local').length;
+    const remoteCount = res.filter(x => x.tunnel_type === 'remote').length;
+    const scopeName = scope === 'local' ? '固定域名' : scope === 'remote' ? '云端托管' : '隧道';
+    const count = scope === 'local' ? localCount : scope === 'remote' ? remoteCount : res.length;
+    appendLog(`[INFO] 已刷新${scopeName}列表，共获取到 ${count} 条隧道`, 'info', 'server');
   } catch (err: any) {
-    appendLog(`[ERROR] 刷新隧道列表失败: ${err}`, 'error', 'server');
+    const scopeName = scope === 'local' ? '固定域名' : scope === 'remote' ? '云端托管' : '隧道';
+    appendLog(`[ERROR] 刷新${scopeName}列表失败: ${err}`, 'error', 'server');
   } finally {
     isRefreshingTunnels.value = false;
   }
@@ -1425,6 +1496,80 @@ const handleCreateTunnel = async () => {
   }
 };
 
+// 源站目标描述文案（日志 / 提示用）
+const describeServerTarget = (protocol: string, port: string, unixSocket: string) => {
+  if (protocol === 'hello_world') return 'hello_world 内置测试服务器';
+  if (protocol === 'unix' || protocol === 'unix+tls') return `${protocol}:${unixSocket}`;
+  return `${protocol}://127.0.0.1:${port}`;
+};
+
+// 隧道对象本身不含源站协议/端口（Cloudflare 侧只存隧道，ingress 在本地 config.yml），
+// 所以按隧道名记住「上次启动用的配置」，供列表行内启动按钮直接启动该条隧道
+const tunnelCfgKey = (name: string) => `server_cfg_${name}`;
+
+const loadTunnelCfg = (name: string): { protocol: string; port: string; unixSocket: string } | null => {
+  try {
+    const raw = localStorage.getItem(tunnelCfgKey(name));
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj.protocol !== 'string') return null;
+    return {
+      protocol: obj.protocol,
+      port: String(obj.port ?? ''),
+      unixSocket: String(obj.unixSocket ?? ''),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const saveTunnelCfg = (name: string) => {
+  try {
+    localStorage.setItem(
+      tunnelCfgKey(name),
+      JSON.stringify({
+        protocol: serverConfig.value.protocol,
+        port: serverConfig.value.port,
+        unixSocket: serverConfig.value.unixSocket,
+      }),
+    );
+  } catch {}
+};
+
+// 列表行内「启动」：按该隧道记住的配置启动；没有记录时只把名字填进表单，让用户确认协议/端口
+// （不用表单里别的隧道的端口硬启动，避免端口配错却毫无提示）
+const handleRowStart = async (tunnel: TunnelInfo) => {
+  const name = tunnel.name.trim();
+  const saved = loadTunnelCfg(name);
+
+  if (!saved) {
+    serverConfig.value.name = name;
+    onServerNameInput();
+    appendLog(`[WARN] 隧道 [${name}] 还没有启动记录，已填入表单，请确认协议/端口后点「${t.value.server_tab.btn_start}」`, 'warn', 'server');
+    showToast(`请确认 [${name}] 的协议/端口`);
+    return;
+  }
+
+  soundManager.playSuccess();
+  try {
+    const res = await invoke<string>('start_server_tunnel', {
+      name,
+      port: saved.port,
+      protocol: saved.protocol,
+      unixSocket: saved.unixSocket,
+    });
+    markServerRunning(name);
+    localStorage.setItem('server_tunnel_name', name);
+    localStorage.setItem('server_port', saved.port);
+    localStorage.setItem('server_protocol', saved.protocol);
+    localStorage.setItem('server_unix_socket', saved.unixSocket);
+    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+    showToast(`隧道 [${name}] 已启动 (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`);
+  } catch (err: any) {
+    appendLog(`[ERROR] 启动隧道 [${name}] 失败: ${err}`, 'error', 'server');
+  }
+};
+
 // 启动服务端隧道 (触发 playSuccess 音效)
 const handleStartServer = async () => {
   const name = serverConfig.value.name.trim();
@@ -1449,10 +1594,11 @@ const handleStartServer = async () => {
 
   soundManager.playSuccess();
   try {
-    // 若隧道正在运行，先停止当前名称的旧隧道，避免协议/端口冲突
-    if (serverRunning.value) {
+    // 仅当「当前这条」隧道在运行时才先停掉它（用于改配置重启），不影响其他并行运行的隧道
+    if (currentServerNameRunning.value) {
       try {
         await invoke<string>('stop_server_tunnel', { name });
+        markServerStopped(name);
       } catch {}
     }
 
@@ -1461,14 +1607,11 @@ const handleStartServer = async () => {
     localStorage.setItem('server_port', port);
     localStorage.setItem('server_protocol', protocol);
     localStorage.setItem('server_unix_socket', unixSocket);
-    serverRunning.value = true;
+    // 记住该隧道的源站配置（供列表行内启动按钮复用），并本地标记为运行中
+    saveTunnelCfg(name);
+    markServerRunning(name);
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    const desc = protocol === 'hello_world'
-      ? 'hello_world 内置测试服务器'
-      : protocol === 'unix' || protocol === 'unix+tls'
-        ? `${protocol}:${unixSocket}`
-        : `${protocol}://127.0.0.1:${port}`;
-    showToast(`隧道 [${name}] 已启动 (${desc})`);
+    showToast(`隧道 [${name}] 已启动 (${describeServerTarget(protocol, port, unixSocket)})`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
   }
@@ -1478,8 +1621,8 @@ const handleStartServer = async () => {
 watch(
   () => [serverConfig.value.protocol, serverConfig.value.port, serverConfig.value.unixSocket] as const,
   (newVal, oldVal) => {
-    // 隧道未运行时不处理
-    if (!serverRunning.value) return;
+    // 只有「表单里这条」隧道正在运行时才自动切换，避免多开时误动其他隧道
+    if (!currentServerNameRunning.value) return;
     // 值未实际变化时不处理
     if (newVal[0] === oldVal[0] && newVal[1] === oldVal[1] && newVal[2] === oldVal[2]) return;
 
@@ -1505,7 +1648,7 @@ watch(
         try {
           await invoke<string>('stop_server_tunnel', { name });
         } catch {}
-        serverRunning.value = false;
+        markServerStopped(name);
 
         if (!configValid) {
           appendLog(`[WARN] 新协议配置不完整，已停止旧隧道，请补全后重新启动`, 'warn', 'server');
@@ -1517,9 +1660,10 @@ watch(
         localStorage.setItem('server_port', port);
         localStorage.setItem('server_protocol', protocol);
         localStorage.setItem('server_unix_socket', unixSocket);
-        serverRunning.value = true;
+        saveTunnelCfg(name);
+        markServerRunning(name);
         appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-        showToast(`隧道 [${name}] 已切换 (${protocol}://127.0.0.1:${port})`);
+        showToast(`隧道 [${name}] 已切换 (${describeServerTarget(protocol, port, unixSocket)})`);
       } catch (err: any) {
         appendLog(`[ERROR] 切换协议失败: ${err}`, 'error', 'server');
       }
@@ -1528,15 +1672,21 @@ watch(
 );
 
 // 停止服务端隧道 (普通点击音效)
-const handleStopServer = async () => {
+// 省略 name 时停「表单里当前这条」；列表行内按钮会传入该行隧道名，多开时逐条停
+const handleStopServer = async (name?: string) => {
+  const target = (typeof name === 'string' ? name : serverConfig.value.name).trim();
+  if (!target) {
+    appendLog(`[ERROR] 未指定要停止的隧道名`, 'error', 'server');
+    return;
+  }
   soundManager.playClick();
   try {
-    const res = await invoke<string>('stop_server_tunnel');
-    serverRunning.value = false;
+    const res = await invoke<string>('stop_server_tunnel', { name: target });
+    markServerStopped(target);
     appendLog(`[INFO] ${res}`, 'warn', 'server');
-    showToast(`服务端隧道已停止`);
+    showToast(`隧道 [${target}] 已停止`);
   } catch (err: any) {
-    appendLog(`[ERROR] 停止服务端失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] 停止隧道 [${target}] 失败: ${err}`, 'error', 'server');
   }
 };
 
@@ -1674,41 +1824,23 @@ const handleStopQuick = async (key: string) => {
   }
 };
 
-// 删除指定快速隧道（等于停止 + 移除，弹确认）
-const pendingQuickDeleteKey = ref('');
-const showQuickDeleteModal = ref(false);
-
-const promptDeleteQuick = (key: string) => {
-  pendingQuickDeleteKey.value = key;
-  showQuickDeleteModal.value = true;
-};
-
-const cancelDeleteQuick = () => {
-  showQuickDeleteModal.value = false;
-  pendingQuickDeleteKey.value = '';
-};
-
-const confirmDeleteQuick = async () => {
-  const key = pendingQuickDeleteKey.value;
-  showQuickDeleteModal.value = false;
-  pendingQuickDeleteKey.value = '';
-  if (!key) return;
-  soundManager.playClick();
-  try {
-    await invoke<string>('stop_quick_tunnel', { key });
-  } catch {}
-  quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
-  appendLog(`[INFO] 快速隧道 [${key}] 已删除`, 'warn', 'quick');
-  showToast('快速隧道已删除');
-};
-
-// 复制快速隧道临时链接
+// 复制快速隧道临时链接（点击临时域名触发）
 const copyQuickUrl = async (url: string) => {
   try {
     await navigator.clipboard.writeText(url);
     showToast('临时链接已复制到剪贴板');
   } catch {
     appendLog('复制临时链接失败，请检查剪贴板权限', 'error', 'quick');
+  }
+};
+
+// 复制绑定域名（点击列表里的域名标签触发）
+const copyHostname = async (hostname: string) => {
+  try {
+    await navigator.clipboard.writeText(hostname);
+    showToast(`域名已复制: ${hostname}`);
+  } catch {
+    appendLog(`复制域名失败: ${hostname}（请检查剪贴板权限）`, 'error', 'server');
   }
 };
 
@@ -1856,9 +1988,6 @@ const onKeyDown = (e: KeyboardEvent) => {
       isLangDropdownOpen.value = false;
     } else if (showDeleteModal.value) {
       showDeleteModal.value = false;
-    } else if (showQuickDeleteModal.value) {
-      showQuickDeleteModal.value = false;
-      pendingQuickDeleteKey.value = '';
     } else if (showExitConfirmModal.value) {
       showExitConfirmModal.value = false;
     }
@@ -1930,7 +2059,7 @@ onMounted(async () => {
   // 异步获取初始隧道列表与状态
   try {
     const serverKeys = await invoke<string[]>('is_server_running');
-    serverRunning.value = serverKeys.length > 0;
+    serverRunningNames.value = serverKeys;
     clientRunning.value = await invoke<boolean>('is_client_running');
     const remoteKeys = await invoke<string[]>('is_remote_running');
     remoteRunning.value = remoteKeys.length > 0;
@@ -3018,6 +3147,72 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* 运行状态列（多开时逐条显示哪条在跑） */
+.col-status {
+  white-space: nowrap;
+}
+
+.tunnel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-disabled);
+}
+
+.tunnel-status.online {
+  color: var(--success-color);
+}
+
+.status-dot.gray {
+  background-color: var(--text-disabled);
+  box-shadow: none;
+}
+
+/* 行内启停按钮（多开时逐条控制） */
+.col-actions {
+  white-space: nowrap;
+}
+
+.row-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.row-action-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.row-action-btn:active {
+  background-color: var(--bg-active);
+}
+
+.icon-triangle {
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-left: 7px solid var(--accent-color);
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+}
+
+.icon-square {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background-color: var(--danger-color);
+}
+
 .hostname-tag {
   display: inline-block;
   padding: 2px 8px;
@@ -3028,6 +3223,18 @@ onUnmounted(() => {
   font-size: 11.5px;
   font-family: 'Consolas', 'Courier New', monospace;
   white-space: nowrap;
+  /* 点击即复制，给出手型光标与反馈 */
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.hostname-tag:hover {
+  background-color: #0078d4;
+}
+
+.hostname-tag:active {
+  background-color: #004578;
 }
 
 .hostname-empty {
@@ -3062,6 +3269,13 @@ onUnmounted(() => {
   color: var(--accent-color);
   word-break: break-all;
   padding: 6px 0;
+  /* 点击即复制 */
+  cursor: pointer;
+  user-select: none;
+}
+
+.quick-url-value:hover {
+  text-decoration: underline;
 }
 
 .quick-url-empty {
@@ -3076,23 +3290,10 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 
-.quick-url-hint {
-  margin-top: 10px;
-  font-size: 11.5px;
-  color: var(--warning-color);
-}
-
 .quick-list {
-  margin-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.quick-list-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
 }
 
 .quick-list-empty {

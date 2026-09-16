@@ -59,6 +59,7 @@ export interface LangPack {
     btn_clear_log: string;
     status_running: string;
     status_stopped: string;
+    status_not_running: string;
     mode_local: string;
     mode_remote: string;
     sub_mode_quick: string;
@@ -72,14 +73,10 @@ export interface LangPack {
     btn_stop_quick: string;
     quick_url_title: string;
     quick_url_empty: string;
-    quick_url_hint: string;
     quick_list_title: string;
     quick_list_empty: string;
     quick_stop: string;
-    quick_delete: string;
-    quick_delete_confirm_title: string;
-    quick_delete_confirm_msg: string;
-    btn_copy: string;
+    click_to_copy: string;
     btn_open: string;
     hostname_unbound: string;
     local_list_title: string;
@@ -108,6 +105,8 @@ export interface LangPack {
       created: string;
       connections: string;
       hostname: string;
+      status: string;
+      actions: string;
     };
     errors: {
       tunnel_invalid: string;
