@@ -4,7 +4,15 @@ export interface TunnelInfo {
   created: string;
   connections: string;
   tunnel_type: 'local' | 'remote';
-  hostnames?: string[];
+  hostnames?: DnsBinding[];
+}
+
+/** 一条指向隧道的 DNS 绑定记录（Cloudflare 区域内的 CNAME）。 */
+export interface DnsBinding {
+  /** Cloudflare dns_record_id，改名与解绑以此为操作对象 */
+  id: string;
+  /** 绑定的完整域名，例如 mc.example.com */
+  name: string;
 }
 
 export interface QuickTunnelItem {
@@ -89,6 +97,14 @@ export interface LangPack {
     dns_domain: string;
     dns_domain_placeholder: string;
     btn_route_dns: string;
+    dns_bound_title: string;
+    dns_bound_hint: string;
+    dns_bound_empty: string;
+    dns_col_tunnel: string;
+    dns_edit_title: string;
+    dns_edit_label: string;
+    btn_unbind: string;
+    btn_save: string;
     remote_token_label: string;
     remote_token_placeholder: string;
     remote_token_hint: string;
@@ -115,6 +131,8 @@ export interface LangPack {
       delete_confirm_title: string;
       delete_confirm_msg: string;
       dns_domain_invalid: string;
+      dns_unbind_confirm_title: string;
+      dns_unbind_confirm_msg: string;
     };
   };
   client_tab: {

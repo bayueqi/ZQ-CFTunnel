@@ -423,21 +423,13 @@
               </button>
 
               <button
-                class="fluent-btn primary"
-                @click="handleStartServer"
-                :disabled="!canStartServer || currentServerNameRunning"
+                class="fluent-btn"
+                :class="currentServerNameRunning ? 'danger' : 'primary'"
+                @click="currentServerNameRunning ? handleStopServer() : handleStartServer()"
+                :disabled="!currentServerNameRunning && !canStartServer"
               >
-                <span class="btn-icon">▶</span>
-                {{ t.server_tab.btn_start }}
-              </button>
-
-              <button
-                class="fluent-btn danger"
-                @click="handleStopServer()"
-                :disabled="!currentServerNameRunning"
-              >
-                <span class="btn-icon">⏹</span>
-                {{ t.server_tab.btn_stop }}
+                <span class="btn-icon">{{ currentServerNameRunning ? '⏹' : '▶' }}</span>
+                {{ currentServerNameRunning ? t.server_tab.btn_stop : t.server_tab.btn_start }}
               </button>
 
               <div class="status-pill" :class="currentServerNameRunning ? 'online' : 'offline'">
@@ -487,10 +479,10 @@
                         <span
                           class="hostname-tag"
                           v-for="h in tunnel.hostnames"
-                          :key="h"
+                          :key="h.id"
                           :title="t.server_tab.click_to_copy"
-                          @click.stop="copyHostname(h)"
-                        >{{ h }}</span>
+                          @click.stop="copyHostname(h.name)"
+                        >{{ h.name }}</span>
                       </template>
                       <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
                     </td>
@@ -593,6 +585,53 @@
                 {{ t.server_tab.btn_route_dns }}
               </button>
             </div>
+
+            <!-- 已绑定域名管理：只列出固定域名（本地）隧道，每条可直接改名 / 解绑 -->
+            <div class="dns-bound-block">
+              <div class="dns-bound-head">
+                <h4 class="dns-bound-title">{{ t.server_tab.dns_bound_title }}</h4>
+                <span class="dns-bound-hint">{{ t.server_tab.dns_bound_hint }}</span>
+              </div>
+
+              <div class="fluent-table-wrapper">
+                <table class="fluent-table dns-bound-table">
+                  <thead>
+                    <tr>
+                      <th class="col-tunnel-name">{{ t.server_tab.dns_col_tunnel }}</th>
+                      <th class="col-bound-hostname">{{ t.server_tab.headers.hostname }}</th>
+                      <th class="col-bound-actions">{{ t.server_tab.headers.actions }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in dnsBoundRows" :key="row.recordId">
+                      <td class="col-tunnel-name font-bold">{{ row.tunnelName }}</td>
+                      <td class="col-bound-hostname">
+                        <span
+                          class="hostname-tag"
+                          :title="t.server_tab.click_to_copy"
+                          @click="copyHostname(row.hostname)"
+                        >{{ row.hostname }}</span>
+                      </td>
+                      <td class="col-bound-actions">
+                        <button
+                          class="row-action-btn"
+                          :title="t.server_tab.dns_edit_title"
+                          @click="promptEditDnsRoute(row)"
+                        >✎</button>
+                        <button
+                          class="row-action-btn danger"
+                          :title="t.server_tab.btn_unbind"
+                          @click="promptUnbindDnsRoute(row)"
+                        >🗑</button>
+                      </td>
+                    </tr>
+                    <tr v-if="dnsBoundRows.length === 0">
+                      <td colspan="3" class="empty-table">{{ t.server_tab.dns_bound_empty }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
           </div>
         </div>
@@ -676,10 +715,10 @@
                         <span
                           class="hostname-tag"
                           v-for="h in tunnel.hostnames"
-                          :key="h"
+                          :key="h.id"
                           :title="t.server_tab.click_to_copy"
-                          @click.stop="copyHostname(h)"
-                        >{{ h }}</span>
+                          @click.stop="copyHostname(h.name)"
+                        >{{ h.name }}</span>
                       </template>
                       <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
                     </td>
@@ -921,6 +960,55 @@
       </div>
     </div>
 
+    <!-- DNS 绑定域名：改名弹窗（只改 DNS 记录名，不动隧道 ingress） -->
+    <div v-if="showDnsEditModal" class="fluent-modal-overlay" @click.self="cancelEditDnsRoute">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">✎ {{ t.server_tab.dns_edit_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p class="modal-context">{{ dnsEditTarget?.tunnelName }} · {{ dnsEditTarget?.hostname }}</p>
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.dns_edit_label }}</label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="dnsEditValue"
+                :placeholder="t.server_tab.dns_domain_placeholder"
+                :class="['fluent-input', { 'input-error': dnsEditHasError }]"
+                @input="dnsEditHasError = false"
+                @keydown.enter="confirmEditDnsRoute"
+              />
+            </div>
+            <div v-if="dnsEditHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.server_tab.errors.dns_domain_invalid }}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelEditDnsRoute">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn primary" @click="confirmEditDnsRoute">{{ t.server_tab.btn_save }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DNS 绑定域名：解绑确认弹窗 -->
+    <div v-if="showDnsUnbindModal" class="fluent-modal-overlay" @click.self="cancelUnbindDnsRoute">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚠️ {{ t.server_tab.errors.dns_unbind_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ t.server_tab.errors.dns_unbind_confirm_msg.replace('{name}', dnsUnbindTarget?.hostname || '').replace('{tunnel}', dnsUnbindTarget?.tunnelName || '') }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelUnbindDnsRoute">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn danger" @click="confirmUnbindDnsRoute">{{ t.server_tab.btn_unbind }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Win11 退出应用二次确认模态弹窗 -->
     <div v-if="showExitConfirmModal" class="fluent-modal-overlay" @click.self="showExitConfirmModal = false">
       <div class="fluent-modal-dialog">
@@ -951,7 +1039,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
 import { LANG_ORDER, LANG_DATA } from './i18n';
-import { LangKey, TunnelInfo, QuickTunnelItem, LogEntry } from './types';
+import { LangKey, TunnelInfo, QuickTunnelItem, LogEntry, DnsBinding } from './types';
 import { isTunnelNameValid, isPortValid, isDomainValid } from './utils/validation';
 import { getCloudflaredTarget } from './utils/cloudflaredDownloader';
 import { soundManager } from './utils/sound';
@@ -1128,6 +1216,22 @@ const clientPortHasError = ref(false);
 const dnsRouteNameHasError = ref(false);
 const dnsRouteDomainHasError = ref(false);
 
+// DNS 绑定域名管理（改名 / 解绑），只作用于固定域名（本地）隧道的绑定记录
+type DnsBoundRow = {
+  recordId: string;
+  hostname: string;
+  tunnelName: string;
+  tunnelId: string;
+};
+const showDnsEditModal = ref(false);
+const showDnsUnbindModal = ref(false);
+const dnsEditTarget = ref<DnsBoundRow | null>(null);
+const dnsUnbindTarget = ref<DnsBoundRow | null>(null);
+const dnsEditValue = ref('');
+const dnsEditHasError = ref(false);
+// 改名 / 解绑进行中，避免重复提交
+const isDnsMutating = ref(false);
+
 // 判断服务端表单是否满足启动条件（hello_world 无需端口，unix 协议需要套接字路径）
 const canStartServer = computed(() => {
   const p = serverConfig.value.protocol;
@@ -1245,6 +1349,19 @@ const selectedTunnel = ref<TunnelInfo | null>(null);
 
 const localTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'local'));
 const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'remote'));
+
+// 「已绑定域名」管理列表：只展开固定域名（本地）隧道，
+// 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
+const dnsBoundRows = computed<DnsBoundRow[]>(() =>
+  localTunnelList.value.flatMap(t =>
+    (t.hostnames || []).map(h => ({
+      recordId: h.id,
+      hostname: h.name,
+      tunnelName: t.name,
+      tunnelId: t.id,
+    })),
+  ),
+);
 
 // 控制台高度与拖拽调整逻辑
 const consoleHeight = ref(Number(localStorage.getItem('console_height')) || 170);
@@ -1446,7 +1563,7 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
     const res = await invoke<TunnelInfo[]>('list_tunnels');
     // 拉取各隧道绑定的域名（读取 cert.pem 的 apiToken 查 Cloudflare API）
     try {
-      const hostnames = await invoke<Record<string, string[]>>('get_tunnel_hostnames');
+      const hostnames = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
       for (const t of res) {
         t.hostnames = hostnames[t.id] || [];
       }
@@ -1711,8 +1828,104 @@ const handleRouteDns = async () => {
     const res = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
     showToast(`DNS 路由绑定成功: ${domain} → ${name}`);
+    // 绑定后立即刷新域名列表，新域名马上出现在「已绑定域名」里
+    await refreshHostnamesOnly();
   } catch (err: any) {
     appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'server');
+  }
+};
+
+// 只重新拉取绑定域名并回填到已有隧道列表（不重拉隧道列表、不写刷新日志），
+// 用于绑定 / 改名 / 解绑后同步界面显示。
+const refreshHostnamesOnly = async () => {
+  try {
+    const map = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
+    for (const t of tunnelList.value) t.hostnames = map[t.id] || [];
+  } catch (err: any) {
+    appendLog(`[WARN] 刷新绑定域名失败: ${err}`, 'warn', 'server');
+  }
+};
+
+// 打开「修改绑定域名」弹窗（预填当前域名）
+const promptEditDnsRoute = (row: DnsBoundRow) => {
+  soundManager.playClick();
+  dnsEditTarget.value = row;
+  dnsEditValue.value = row.hostname;
+  dnsEditHasError.value = false;
+  showDnsEditModal.value = true;
+};
+
+const cancelEditDnsRoute = () => {
+  showDnsEditModal.value = false;
+  dnsEditTarget.value = null;
+  dnsEditValue.value = '';
+  dnsEditHasError.value = false;
+};
+
+// 提交改名：只 PATCH DNS 记录的 name 字段，不改动隧道 ingress 配置
+const confirmEditDnsRoute = async () => {
+  const target = dnsEditTarget.value;
+  if (!target || isDnsMutating.value) return;
+
+  const next = dnsEditValue.value.trim();
+  if (!isDomainValid(next)) {
+    dnsEditHasError.value = true;
+    appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
+    return;
+  }
+  // 没改动就直接关掉，不发无意义的请求
+  if (next === target.hostname) {
+    cancelEditDnsRoute();
+    return;
+  }
+
+  isDnsMutating.value = true;
+  try {
+    const res = await invoke<string>('rename_dns_route', {
+      recordId: target.recordId,
+      hostname: next,
+    });
+    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+    showToast(`${target.hostname} → ${next}`);
+    cancelEditDnsRoute();
+    await refreshHostnamesOnly();
+  } catch (err: any) {
+    appendLog(`[ERROR] 修改绑定域名失败: ${err}`, 'error', 'server');
+    showToast(`修改域名失败: ${err}`);
+  } finally {
+    isDnsMutating.value = false;
+  }
+};
+
+// 打开「解除绑定」确认弹窗
+const promptUnbindDnsRoute = (row: DnsBoundRow) => {
+  soundManager.playClick();
+  dnsUnbindTarget.value = row;
+  showDnsUnbindModal.value = true;
+};
+
+const cancelUnbindDnsRoute = () => {
+  showDnsUnbindModal.value = false;
+  dnsUnbindTarget.value = null;
+};
+
+// 解绑：删除 Cloudflare 侧的 CNAME 记录，不影响隧道本身与 ingress 配置
+const confirmUnbindDnsRoute = async () => {
+  const target = dnsUnbindTarget.value;
+  if (!target || isDnsMutating.value) return;
+
+  isDnsMutating.value = true;
+  try {
+    const res = await invoke<string>('delete_dns_route', { recordId: target.recordId });
+    appendLog(`[SUCCESS] ${res} (${target.hostname})`, 'success', 'server');
+    showToast(`${target.hostname} 已解除绑定`);
+    cancelUnbindDnsRoute();
+    await refreshHostnamesOnly();
+  } catch (err: any) {
+    appendLog(`[ERROR] 解除域名绑定失败: ${err}`, 'error', 'server');
+    showToast(`解除绑定失败: ${err}`);
+  } finally {
+    isDnsMutating.value = false;
   }
 };
 
@@ -1986,6 +2199,10 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
     if (isLangDropdownOpen.value) {
       isLangDropdownOpen.value = false;
+    } else if (showDnsEditModal.value) {
+      cancelEditDnsRoute();
+    } else if (showDnsUnbindModal.value) {
+      cancelUnbindDnsRoute();
     } else if (showDeleteModal.value) {
       showDeleteModal.value = false;
     } else if (showExitConfirmModal.value) {
@@ -2764,6 +2981,66 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* 「已绑定域名」管理块（位于 DNS 路由绑定卡片内，与上方绑定表单用分割线隔开） */
+.dns-bound-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dns-bound-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.dns-bound-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dns-bound-hint {
+  font-size: 11.5px;
+  color: var(--text-disabled);
+}
+
+.dns-bound-table .col-tunnel-name {
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.dns-bound-table .col-bound-hostname {
+  white-space: nowrap;
+}
+
+.dns-bound-table .col-bound-actions {
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* 解绑按钮：危险色描边，与行内启停按钮区分 */
+.row-action-btn.danger {
+  border-color: var(--danger-color);
+}
+
+.row-action-btn.danger:hover {
+  background-color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+/* 弹窗内的上下文说明行（隧道 · 域名） */
+.modal-context {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: var(--text-secondary);
+  word-break: break-all;
 }
 
 /* 服务端子视图状态圆点（侧边栏下边栏使用） */

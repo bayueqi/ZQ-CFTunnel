@@ -33,6 +33,16 @@ pub struct TunnelInfo {
     pub tunnel_type: String,
 }
 
+/// 一条指向隧道的 DNS 绑定记录（Cloudflare 区域内的 CNAME）。
+///
+/// `id` 是 Cloudflare 的 dns_record_id，改名与解绑都以它为操作对象，
+/// 避免按域名匹配时因重名或已改动而操作到错误的记录。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DnsBinding {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LogPayload {
     pub message: String,
@@ -1485,11 +1495,13 @@ fn is_quick_running(state: State<'_, AppState>) -> Vec<String> {
     keys
 }
 
-/// 从本机 `~/.cloudflared/cert.pem` 提取 Cloudflare API Token，查询
-/// 该账号域名下所有指向隧道（*.cfargotunnel.com）的 CNAME 记录，
-/// 返回 `{ 隧道ID: [绑定域名...] }` 的映射，供前端隧道列表展示绑定域名。
-#[tauri::command]
-fn get_tunnel_hostnames() -> Result<std::collections::HashMap<String, Vec<String>>, String> {
+/// 从本机 `~/.cloudflared/cert.pem` 读取 Cloudflare 凭据，返回 `(apiToken, zoneID)`。
+///
+/// cert.pem 由 `cloudflared tunnel login` 生成，PEM 正文是 base64 编码的 JSON，
+/// 内含 apiToken 与 zoneID。该 token 属于 Cloudflare 的 DNS:Edit 权限组
+/// （`cloudflared tunnel route dns` 正是用它创建记录），因此读写删除都可用。
+/// 注意：证书只授权单个区域，其它区域的记录既看不到也改不了。
+fn cloudflare_credentials() -> Result<(String, String), String> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .map(PathBuf::from)
@@ -1513,47 +1525,240 @@ fn get_tunnel_hostnames() -> Result<std::collections::HashMap<String, Vec<String
         .get("apiToken")
         .or_else(|| json.get("t"))
         .and_then(|v| v.as_str())
-        .ok_or("cert.pem 中未找到 API Token")?;
+        .ok_or("cert.pem 中未找到 API Token")?
+        .to_string();
     let zone_id = json
         .get("zoneID")
         .and_then(|v| v.as_str())
-        .ok_or("cert.pem 中未找到 zoneID")?;
+        .ok_or("cert.pem 中未找到 zoneID")?
+        .to_string();
 
-    let agent = ureq::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
-    let url = format!(
-        "https://api.cloudflare.com/client/v4/zones/{}/dns_records?per_page=100",
-        zone_id
-    );
-    let resp = agent
-        .get(&url)
-        .set("Authorization", &format!("Bearer {}", api_token))
-        .set("User-Agent", "Cloudflare-Tunnel-GUI")
-        .call()
-        .map_err(|e| format!("Cloudflare API 请求失败: {}", e))?;
+    Ok((api_token, zone_id))
+}
 
-    let body: serde_json::Value = resp
-        .into_string()
-        .map_err(|e| format!("读取 API 响应失败: {}", e))
-        .and_then(|s| serde_json::from_str(&s).map_err(|e| format!("解析 API 响应失败: {}", e)))?;
-
-    let mut map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    if let Some(result) = body.get("result").and_then(|v| v.as_array()) {
-        for rec in result {
-            // 仅关注指向隧道的 CNAME 记录，content 形如 <tunnel-id>.cfargotunnel.com
-            let content = rec.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            if let Some(tunnel_id) = content.strip_suffix(".cfargotunnel.com") {
-                if let Some(name) = rec.get("name").and_then(|v| v.as_str()) {
-                    map.entry(tunnel_id.to_string())
-                        .or_insert_with(Vec::new)
-                        .push(name.to_string());
-                }
+/// 从 Cloudflare API 的错误响应体中提取可读信息（形如 `[81044] Record does not exist.`）。
+fn extract_cf_error(body: &str) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(errs) = v.get("errors").and_then(|x| x.as_array()) {
+            let msgs: Vec<String> = errs
+                .iter()
+                .map(|e| {
+                    let code = e.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
+                    let msg = e.get("message").and_then(|m| m.as_str()).unwrap_or("");
+                    if code != 0 {
+                        format!("[{}] {}", code, msg)
+                    } else {
+                        msg.to_string()
+                    }
+                })
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            if !msgs.is_empty() {
+                return msgs.join("; ");
             }
         }
     }
+    body.trim().to_string()
+}
+
+/// 发起一次 Cloudflare API 请求并返回响应体文本。
+///
+/// ureq 会把 4xx/5xx 视为错误，这里统一转成带 Cloudflare 错误码的可读信息，
+/// 避免把 `Response code 403` 这种无用提示抛给界面。
+fn cf_api_request(
+    method: &str,
+    url: &str,
+    token: &str,
+    json_body: Option<&str>,
+) -> Result<String, String> {
+    let agent = ureq::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build();
+
+    let req = agent
+        .request(method, url)
+        .set("Authorization", &format!("Bearer {}", token))
+        .set("User-Agent", "Cloudflare-Tunnel-GUI");
+
+    let result = match json_body {
+        Some(body) => req
+            .set("Content-Type", "application/json")
+            .send_string(body),
+        None => req.call(),
+    };
+
+    match result {
+        Ok(resp) => resp
+            .into_string()
+            .map_err(|e| format!("读取 API 响应失败: {}", e)),
+        Err(ureq::Error::Status(code, resp)) => {
+            let body = resp.into_string().unwrap_or_default();
+            Err(format!(
+                "Cloudflare API 返回 {}: {}",
+                code,
+                extract_cf_error(&body)
+            ))
+        }
+        Err(e) => Err(format!("Cloudflare API 请求失败: {}", e)),
+    }
+}
+
+/// 校验 Cloudflare DNS 记录 ID（32 位十六进制）。
+///
+/// 该 ID 会被直接拼进请求 URL，必须严格校验以防路径注入。
+fn is_valid_record_id(id: &str) -> bool {
+    id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// 校验域名格式：不能为空、不含空白或协议/路径符号、至少两级、每级字符合法且不以下划线外的符号开头。
+fn is_valid_hostname(hostname: &str) -> bool {
+    let h = hostname.trim();
+    if h.is_empty() || h.len() > 253 {
+        return false;
+    }
+    if h.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    if h.contains("://") || h.contains('/') || h.contains('?') || h.contains('#') || h.contains('@') {
+        return false;
+    }
+    if h.starts_with('.') || h.ends_with('.') || h.starts_with('-') {
+        return false;
+    }
+    let labels: Vec<&str> = h.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+    labels.iter().all(|l| {
+        !l.is_empty()
+            && l.len() <= 63
+            && !l.starts_with('-')
+            && !l.ends_with('-')
+            && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    })
+}
+
+/// 从本机 `~/.cloudflared/cert.pem` 提取 Cloudflare API Token，查询
+/// 该账号域名下所有指向隧道（*.cfargotunnel.com）的 CNAME 记录，
+/// 返回 `{ 隧道ID: [绑定域名...] }` 的映射，供前端隧道列表展示绑定域名。
+///
+/// 每条记录带上 Cloudflare 的 dns_record_id，前端据此执行改名/解绑。
+/// 区域记录数可能超过单页上限，按 result_info.total_pages 翻页取全。
+#[tauri::command]
+fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
+    let (api_token, zone_id) = cloudflare_credentials()?;
+
+    let mut map: HashMap<String, Vec<DnsBinding>> = HashMap::new();
+    let mut page: u64 = 1;
+
+    loop {
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records?per_page=100&page={}",
+            zone_id, page
+        );
+        let body = cf_api_request("GET", &url, &api_token, None)?;
+        let json: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| format!("解析 API 响应失败: {}", e))?;
+
+        if let Some(result) = json.get("result").and_then(|v| v.as_array()) {
+            for rec in result {
+                // 仅关注指向隧道的 CNAME 记录，content 形如 <tunnel-id>.cfargotunnel.com
+                let content = rec.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                let Some(tunnel_id) = content.strip_suffix(".cfargotunnel.com") else {
+                    continue;
+                };
+                let name = rec.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let id = rec.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                if name.is_empty() || id.is_empty() {
+                    continue;
+                }
+                map.entry(tunnel_id.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(DnsBinding {
+                        id: id.to_string(),
+                        name: name.to_string(),
+                    });
+            }
+        }
+
+        let total_pages = json
+            .get("result_info")
+            .and_then(|v| v.get("total_pages"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1);
+        if page >= total_pages || page >= 50 {
+            break;
+        }
+        page += 1;
+    }
+
+    // 同一隧道下的域名按字典序排列，避免每次刷新顺序漂移
+    for v in map.values_mut() {
+        v.sort_by(|a, b| a.name.cmp(&b.name));
+    }
 
     Ok(map)
+}
+
+/// 修改 DNS 绑定记录的域名（仅重命名 DNS 记录，不改动隧道 ingress 配置）。
+///
+/// 对应 `PATCH /zones/{zone_id}/dns_records/{record_id}`，只提交 name 字段，
+/// 因此记录的 type、content（指向的隧道）、proxied、ttl 等均保持不变。
+#[tauri::command]
+fn rename_dns_route(record_id: String, hostname: String) -> Result<String, String> {
+    let trimmed_id = record_id.trim();
+    let trimmed_hostname = hostname.trim();
+
+    if !is_valid_record_id(trimmed_id) {
+        return Err("DNS 记录 ID 格式不正确".to_string());
+    }
+    if !is_valid_hostname(trimmed_hostname) {
+        return Err("域名格式不正确 (例如: mc.example.com)".to_string());
+    }
+
+    let (api_token, zone_id) = cloudflare_credentials()?;
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{}/dns_records/{}",
+        zone_id, trimmed_id
+    );
+    let payload = serde_json::json!({ "name": trimmed_hostname }).to_string();
+    let body = cf_api_request("PATCH", &url, &api_token, Some(&payload))?;
+
+    let json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
+    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(format!("修改域名失败: {}", extract_cf_error(&body)));
+    }
+
+    Ok(format!("域名已修改为 {}", trimmed_hostname))
+}
+
+/// 删除 DNS 绑定记录，即解除域名与隧道的绑定。
+///
+/// 只删 Cloudflare 侧的 CNAME 记录，不影响隧道本身，也不改动 ingress 配置；
+/// 删除后该域名立即无法再通过隧道访问。
+#[tauri::command]
+fn delete_dns_route(record_id: String) -> Result<String, String> {
+    let trimmed_id = record_id.trim();
+
+    if !is_valid_record_id(trimmed_id) {
+        return Err("DNS 记录 ID 格式不正确".to_string());
+    }
+
+    let (api_token, zone_id) = cloudflare_credentials()?;
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{}/dns_records/{}",
+        zone_id, trimmed_id
+    );
+    let body = cf_api_request("DELETE", &url, &api_token, None)?;
+
+    let json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
+    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(format!("删除域名失败: {}", extract_cf_error(&body)));
+    }
+
+    Ok("域名绑定已删除".to_string())
 }
 
 /// 简易 base64 解码（标准字符集）
@@ -1690,7 +1895,9 @@ pub fn run() {
             start_quick_tunnel,
             stop_quick_tunnel,
             is_quick_running,
-            get_tunnel_hostnames
+            get_tunnel_hostnames,
+            rename_dns_route,
+            delete_dns_route
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
