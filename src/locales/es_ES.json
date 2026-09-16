@@ -106,7 +106,7 @@
     "port": "Puerto de Escucha Local:",
     "domain_placeholder": "ej: example.com",
     "port_placeholder": "ej: 25566 (1-65535)",
-    "btn_connect": "Conectar Cliente",
+    "btn_connect": "Conectar",
     "btn_disconnect": "Desconectar",
     "status_connected": "Conectado",
     "status_disconnected": "Desconectado",

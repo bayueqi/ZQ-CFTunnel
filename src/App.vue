@@ -581,7 +581,7 @@
                 @click="handleRouteDns"
                 :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
               >
-                <span class="btn-icon">🔗</span>
+                <span class="btn-icon">🏷️</span>
                 {{ t.server_tab.btn_route_dns }}
               </button>
             </div>

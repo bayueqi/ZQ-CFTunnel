@@ -106,8 +106,8 @@
     "port": "本地監聽端口:",
     "domain_placeholder": "例如: example.com",
     "port_placeholder": "例如: 25566 (1-65535)",
-    "btn_connect": "連接客戶端",
-    "btn_disconnect": "中斷連線",
+    "btn_connect": "連接",
+    "btn_disconnect": "中斷",
     "status_connected": "已連線",
     "status_disconnected": "未連線",
     "errors": {
