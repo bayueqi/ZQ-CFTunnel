@@ -122,90 +122,105 @@
       </div>
     </header>
 
-    <!-- Win11 选项卡导航 (带平滑横向滑动指示滑块) -->
-    <nav class="fluent-nav-tabs" ref="navTabsRef">
-      <!-- 平滑滑动背景指示滑块 -->
-      <div class="nav-tab-slider" :style="tabSliderStyle"></div>
+    <!-- 双栏布局：左侧可折叠侧边栏 + 主体内容区 -->
+    <div class="app-layout">
+      <!-- ============ 左侧侧边栏 ============ -->
+      <aside :class="['fluent-sidebar', { collapsed: sidebarCollapsed }]">
+        <!-- 侧边栏整体展开/折叠按钮 -->
+        <button
+          class="sidebar-toggle"
+          @click="sidebarCollapsed = !sidebarCollapsed"
+          :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+        >
+          <span class="toggle-icon">{{ sidebarCollapsed ? '☰' : '⟨⟨' }}</span>
+          <span v-if="!sidebarCollapsed" class="toggle-text">收起</span>
+        </button>
 
-      <button
-        ref="serverTabRef"
-        :class="['nav-tab', { active: currentTab === 'server' }]"
-        @click="switchTab('server')"
-      >
-        <span class="tab-icon">🖥️</span>
-        <span class="tab-text">{{ t.tabs.server }}</span>
-        <span v-if="serverRunning" class="status-dot green"></span>
-      </button>
-
-      <button
-        ref="clientTabRef"
-        :class="['nav-tab', { active: currentTab === 'client' }]"
-        @click="switchTab('client')"
-      >
-        <span class="tab-icon">💻</span>
-        <span class="tab-text">{{ t.tabs.client }}</span>
-        <span v-if="clientRunning" class="status-dot green"></span>
-      </button>
-
-      <button
-        ref="miscTabRef"
-        :class="['nav-tab', { active: currentTab === 'misc' }]"
-        @click="switchTab('misc')"
-      >
-        <span class="tab-icon">⚙️</span>
-        <span class="tab-text">{{ t.tabs.misc }}</span>
-      </button>
-    </nav>
-
-    <!-- 主体内容卡片区 (平滑过渡动效) -->
-    <main class="fluent-body">
-      <!-- 1. 服务端 Tab -->
-      <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
-        <!-- 本地 / 远程 切换 -->
-        <div class="mode-switch-bar">
+        <!-- 1. 服务端（含子级：临时链接 / 固定域名 / 云端托管） -->
+        <div class="sidebar-group">
           <button
-            :class="['mode-switch-btn', { active: serverMode === 'local' }]"
-            @click="switchServerMode('local')"
+            :class="['sidebar-item', { active: currentTab === 'server', expanded: sidebarOpen.server }]"
+            @click="handleSidebarClick('server')"
+            :title="t.tabs.server"
           >
-            <span class="mode-dot local"></span>
-            {{ t.server_tab.mode_local }}
+            <span class="sidebar-icon">🖥️</span>
+            <span class="sidebar-text">{{ t.tabs.server }}</span>
+            <span v-if="serverRunning" class="status-dot green"></span>
+            <span class="sidebar-arrow">▸</span>
           </button>
+
+          <!-- 服务端下边栏（默认折叠） -->
+          <transition name="sub-list">
+            <div v-show="sidebarOpen.server && !sidebarCollapsed" class="sidebar-sub-list">
+              <button
+                :class="['sidebar-sub-item', { active: currentTab === 'server' && isServerView('quick') }]"
+                @click="switchServerView('quick')"
+                :title="t.server_tab.nav_quick"
+              >
+                <span class="mode-dot quick"></span>
+                <span class="sidebar-text">{{ t.server_tab.nav_quick }}</span>
+              </button>
+
+              <button
+                :class="['sidebar-sub-item', { active: currentTab === 'server' && isServerView('named') }]"
+                @click="switchServerView('named')"
+                :title="t.server_tab.nav_named"
+              >
+                <span class="mode-dot local"></span>
+                <span class="sidebar-text">{{ t.server_tab.nav_named }}</span>
+              </button>
+
+              <button
+                :class="['sidebar-sub-item', { active: currentTab === 'server' && isServerView('remote') }]"
+                @click="switchServerView('remote')"
+                :title="t.server_tab.nav_remote"
+              >
+                <span class="mode-dot remote"></span>
+                <span class="sidebar-text">{{ t.server_tab.nav_remote }}</span>
+              </button>
+            </div>
+          </transition>
+        </div>
+
+        <!-- 2. 客户端 -->
+        <div class="sidebar-group">
           <button
-            :class="['mode-switch-btn', { active: serverMode === 'remote' }]"
-            @click="switchServerMode('remote')"
+            :class="['sidebar-item', { active: currentTab === 'client' }]"
+            @click="handleSidebarClick('client')"
+            :title="t.tabs.client"
           >
-            <span class="mode-dot remote"></span>
-            {{ t.server_tab.mode_remote }}
+            <span class="sidebar-icon">💻</span>
+            <span class="sidebar-text">{{ t.tabs.client }}</span>
+            <span v-if="clientRunning" class="status-dot green"></span>
           </button>
         </div>
 
+        <!-- 3. 配置 -->
+        <div class="sidebar-group">
+          <button
+            :class="['sidebar-item', { active: currentTab === 'misc' }]"
+            @click="handleSidebarClick('misc')"
+            :title="t.tabs.misc"
+          >
+            <span class="sidebar-icon">⚙️</span>
+            <span class="sidebar-text">{{ t.tabs.misc }}</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- 主体内容卡片区 (平滑过渡动效) -->
+      <main class="fluent-body">
+      <!-- 1. 服务端 Tab -->
+      <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
         <!-- ============ 本地隧道视图 ============ -->
         <div v-show="serverMode === 'local'" class="server-sub-view">
-          <!-- 二级切换：临时域名 / 绑定域名 -->
-          <div class="mode-switch-bar sub-mode-bar">
-            <button
-              :class="['mode-switch-btn', { active: localSubMode === 'quick' }]"
-              @click="switchLocalSubMode('quick')"
-            >
-              <span class="mode-dot quick"></span>
-              {{ t.server_tab.sub_mode_quick }}
-            </button>
-            <button
-              :class="['mode-switch-btn', { active: localSubMode === 'named' }]"
-              @click="switchLocalSubMode('named')"
-            >
-              <span class="mode-dot local"></span>
-              {{ t.server_tab.sub_mode_named }}
-            </button>
-          </div>
-
-          <!-- ============ 快速隧道（临时域名） ============ -->
+          <!-- ============ 快速隧道（临时链接 / 临时域名） ============ -->
           <div v-show="localSubMode === 'quick'" class="fluent-card form-card">
             <div class="form-grid">
               <div class="fluent-form-group">
                 <label class="form-label">
                   {{ t.server_tab.quick_port_label }}
-                  <span class="required">*</span>
+                  <span v-if="needsQuickPort" class="required">*</span>
                 </label>
                 <div class="input-container">
                   <input
@@ -213,6 +228,7 @@
                     v-model="quickConfig.port"
                     :placeholder="t.server_tab.quick_port_placeholder"
                     :class="['fluent-input', { 'input-error': quickPortHasError }]"
+                    :disabled="!needsQuickPort"
                     @input="onQuickPortInput"
                   />
                 </div>
@@ -228,14 +244,34 @@
                     <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
                     <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
                     <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                    <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                    <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                    <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
                   </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Unix 套接字路径（仅 unix / unix+tls 协议时显示） -->
+            <div class="form-grid" v-if="quickConfig.protocol === 'unix' || quickConfig.protocol === 'unix+tls'">
+              <div class="fluent-form-group">
+                <label class="form-label">
+                  {{ t.server_tab.unix_socket_label }}
+                  <span class="required">*</span>
+                </label>
+                <div class="input-container">
+                  <input
+                    type="text"
+                    v-model="quickConfig.unixSocket"
+                    :placeholder="t.server_tab.unix_socket_placeholder"
+                    class="fluent-input"
+                  />
                 </div>
               </div>
             </div>
 
             <div class="actions-row center-actions">
               <button
-                v-if="!quickRunning"
                 class="fluent-btn primary"
                 @click="handleStartQuick"
                 :disabled="!canStartQuick"
@@ -243,24 +279,39 @@
                 <span class="btn-icon">⚡</span>
                 {{ t.server_tab.btn_generate_quick }}
               </button>
-              <button v-else class="fluent-btn danger" @click="handleStopQuick">
-                <span class="btn-icon">⏹</span>
-                {{ t.server_tab.btn_stop_quick }}
+              <button class="fluent-btn" @click="refreshQuickTunnels">
+                <span class="btn-icon">🔄</span>
+                {{ t.server_tab.btn_refresh }}
               </button>
               <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
-                {{ quickRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
+                {{ quickRunning ? `${t.server_tab.status_running} (${quickTunnels.length})` : t.server_tab.status_stopped }}
               </div>
             </div>
 
-            <!-- 临时链接结果展示 -->
-            <div class="quick-url-box" :class="{ active: !!quickUrl }">
-              <div class="quick-url-label">{{ t.server_tab.quick_url_title }}</div>
-              <div v-if="quickUrl" class="quick-url-value mono">{{ quickUrl }}</div>
-              <div v-else class="quick-url-empty">{{ t.server_tab.quick_url_empty }}</div>
-              <div class="quick-url-actions" v-if="quickUrl">
-                <button class="fluent-btn small" @click="copyQuickUrl">📋 {{ t.server_tab.btn_copy }}</button>
-                <button class="fluent-btn small primary" @click="openUrl(quickUrl)">🌐 {{ t.server_tab.btn_open }}</button>
+            <!-- 运行中的快速隧道列表 -->
+            <div class="quick-list">
+              <div class="quick-list-title">{{ t.server_tab.quick_list_title }}</div>
+              <div v-if="quickTunnels.length === 0" class="quick-list-empty">
+                {{ t.server_tab.quick_list_empty }}
+              </div>
+              <div v-for="qt in quickTunnels" :key="qt.key" class="quick-item">
+                <div class="quick-item-head">
+                  <span class="quick-item-target mono">{{ quickTargetLabel(qt) }}</span>
+                  <span class="type-badge" :class="qt.status === 'running' ? 'type-local' : 'type-remote'">
+                    {{ qt.status === 'running' ? '在线' : '生成中...' }}
+                  </span>
+                </div>
+                <div class="quick-item-url">
+                  <span v-if="qt.url" class="quick-url-value mono">{{ qt.url }}</span>
+                  <span v-else class="quick-url-empty">{{ t.server_tab.quick_url_empty }}</span>
+                </div>
+                <div class="quick-item-actions">
+                  <button v-if="qt.url" class="fluent-btn small" @click="copyQuickUrl(qt.url)">📋 {{ t.server_tab.btn_copy }}</button>
+                  <button v-if="qt.url" class="fluent-btn small primary" @click="openUrl(qt.url)">🌐 {{ t.server_tab.btn_open }}</button>
+                  <button class="fluent-btn small danger" @click="handleStopQuick(qt.key)">⏹ {{ t.server_tab.quick_stop }}</button>
+                  <button class="fluent-btn small" @click="promptDeleteQuick(qt.key)">🗑 {{ t.server_tab.quick_delete }}</button>
+                </div>
               </div>
               <div class="quick-url-hint">{{ t.server_tab.quick_url_hint }}</div>
             </div>
@@ -379,16 +430,6 @@
               >
                 <span class="btn-icon">⏹</span>
                 {{ t.server_tab.btn_stop }}
-              </button>
-
-              <button
-                v-if="serverRunning"
-                class="fluent-btn primary"
-                @click="handleStartServer"
-                :disabled="!canStartServer"
-              >
-                <span class="btn-icon">🔄</span>
-                {{ t.server_tab.btn_restart }}
               </button>
 
               <div class="status-pill" :class="serverRunning ? 'online' : 'offline'">
@@ -778,7 +819,8 @@
         </div>
 
       </section>
-    </main>
+      </main>
+    </div>
 
     <!-- 底部 Windows Terminal 风格控制台 (支持顶部拖拽调高 & 文本鼠标复制) -->
     <footer
@@ -841,6 +883,22 @@
       </div>
     </div>
 
+    <!-- 删除快速隧道确认弹窗 -->
+    <div v-if="showQuickDeleteModal" class="fluent-modal-overlay" @click.self="cancelDeleteQuick">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚠️ {{ t.server_tab.quick_delete_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ t.server_tab.quick_delete_confirm_msg }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelDeleteQuick">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn danger" @click="confirmDeleteQuick">{{ t.server_tab.quick_delete }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Win11 退出应用二次确认模态弹窗 -->
     <div v-if="showExitConfirmModal" class="fluent-modal-overlay" @click.self="showExitConfirmModal = false">
       <div class="fluent-modal-dialog">
@@ -868,10 +926,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
 import { LANG_ORDER, LANG_DATA } from './i18n';
-import { LangKey, TunnelInfo, LogEntry } from './types';
+import { LangKey, TunnelInfo, QuickTunnelItem, LogEntry } from './types';
 import { isTunnelNameValid, isPortValid, isDomainValid } from './utils/validation';
 import { getCloudflaredTarget } from './utils/cloudflaredDownloader';
 import { soundManager } from './utils/sound';
@@ -977,39 +1035,48 @@ const selectLanguage = (key: LangKey) => {
   window.location.reload();
 };
 
-// 选项卡状态与平滑滑动指示器
-const currentTab = ref(localStorage.getItem('app_tab') || 'server');
-const navTabsRef = ref<HTMLElement | null>(null);
-const serverTabRef = ref<HTMLButtonElement | null>(null);
-const clientTabRef = ref<HTMLButtonElement | null>(null);
-const miscTabRef = ref<HTMLButtonElement | null>(null);
+// 选项卡状态（点击软件默认进入「配置」页）
+const currentTab = ref('misc');
 
-const tabSliderStyle = ref({
-  left: '0px',
-  width: '0px',
-  opacity: '0',
+// 侧边栏状态：整体默认折叠（图标栏），服务端下边栏默认折叠
+const sidebarCollapsed = ref(true);
+const sidebarOpen = ref<Record<string, boolean>>({
+  server: false,
+  client: false,
+  misc: false,
 });
 
-const updateTabSlider = () => {
-  nextTick(() => {
-    let targetEl: HTMLButtonElement | null = null;
-    if (currentTab.value === 'server') targetEl = serverTabRef.value;
-    else if (currentTab.value === 'client') targetEl = clientTabRef.value;
-    else if (currentTab.value === 'misc') targetEl = miscTabRef.value;
-
-    if (targetEl && navTabsRef.value) {
-      const navRect = navTabsRef.value.getBoundingClientRect();
-      const elRect = targetEl.getBoundingClientRect();
-      const left = elRect.left - navRect.left;
-      const width = elRect.width;
-
-      tabSliderStyle.value = {
-        left: `${left}px`,
-        width: `${width}px`,
-        opacity: '1',
-      };
+// 点击侧边栏一级项：服务端需要连带处理下边栏的展开/折叠
+const handleSidebarClick = (tab: string) => {
+  if (tab === 'server') {
+    if (sidebarCollapsed.value) {
+      // 折叠态下点击：先展开侧边栏，同时展开服务端下边栏
+      sidebarCollapsed.value = false;
+      sidebarOpen.value.server = true;
+    } else {
+      // 展开态下点击：切换下边栏的展开/折叠
+      sidebarOpen.value.server = !sidebarOpen.value.server;
     }
-  });
+  }
+  switchTab(tab);
+};
+
+// 服务端下边栏的三视图切换：临时链接 / 固定域名 / 云端托管
+const switchServerView = (view: 'quick' | 'named' | 'remote') => {
+  if (view === 'remote') {
+    switchServerMode('remote');
+  } else {
+    switchServerMode('local');
+    switchLocalSubMode(view);
+  }
+  sidebarOpen.value.server = true;
+  switchTab('server');
+};
+
+// 当前是否处于服务端某个子视图
+const isServerView = (view: 'quick' | 'named' | 'remote') => {
+  if (view === 'remote') return serverMode.value === 'remote';
+  return serverMode.value === 'local' && localSubMode.value === view;
 };
 
 // 表单输入
@@ -1077,9 +1144,10 @@ const switchLocalSubMode = (mode: 'quick' | 'named') => {
 const quickConfig = ref({
   port: localStorage.getItem('quick_port') || '5244',
   protocol: localStorage.getItem('quick_protocol') || 'http',
+  unixSocket: localStorage.getItem('quick_unix_socket') || '',
 });
-const quickRunning = ref(false);
-const quickUrl = ref('');
+const quickTunnels = ref<QuickTunnelItem[]>([]);
+const quickRunning = computed(() => quickTunnels.value.length > 0);
 const quickPortHasError = ref(false);
 
 const onQuickPortInput = () => {
@@ -1088,9 +1156,37 @@ const onQuickPortInput = () => {
   localStorage.setItem('quick_port', val);
 };
 
+// 快速隧道：hello_world / unix / unix+tls 无需端口，其余协议需要端口
+const needsQuickPort = computed(() => {
+  const p = quickConfig.value.protocol;
+  return p !== 'hello_world' && p !== 'unix' && p !== 'unix+tls';
+});
+
 const canStartQuick = computed(() => {
+  if (!needsQuickPort.value) {
+    if (quickConfig.value.protocol === 'hello_world') return true;
+    return !!quickConfig.value.unixSocket.trim();
+  }
   return !quickPortHasError.value && !!quickConfig.value.port.trim();
 });
+
+// 解析后端返回的快速隧道 key → 协议与端口/套接字
+// key 格式：`协议://127.0.0.1:端口` / `unix:路径` / `unix+tls:路径` / `hello_world`
+const parseQuickKey = (key: string): { protocol: string; port: string } => {
+  const m = key.match(/^([a-z0-9]+):\/\/[^:]+:(\d+)$/i);
+  if (m) return { protocol: m[1], port: m[2] };
+  const u = key.match(/^(unix\+tls|unix):(.+)$/);
+  if (u) return { protocol: u[1], port: u[2] };
+  if (key === 'hello_world') return { protocol: 'hello_world', port: '' };
+  return { protocol: 'http', port: '' };
+};
+
+// 快速隧道目标描述：hello_world / unix / unix+tls 与普通协议显示格式不同
+const quickTargetLabel = (qt: QuickTunnelItem) => {
+  if (qt.protocol === 'hello_world') return 'hello_world 内置测试服务器';
+  if (qt.protocol === 'unix' || qt.protocol === 'unix+tls') return `${qt.protocol}:${qt.port}`;
+  return `${qt.protocol}://127.0.0.1:${qt.port}`;
+};
 
 // 远程隧道
 const remoteToken = ref(localStorage.getItem('remote_token') || '');
@@ -1204,8 +1300,6 @@ const toggleTheme = () => {
 // 切换 Tab
 const switchTab = (tab: string) => {
   currentTab.value = tab;
-  localStorage.setItem('app_tab', tab);
-  updateTabSlider();
 };
 
 // 显示 Toast
@@ -1355,16 +1449,11 @@ const handleStartServer = async () => {
 
   soundManager.playSuccess();
   try {
-    // 若隧道正在运行，且协议/端口发生变化，则先自动停止旧隧道再重启（相当于重置协议）
+    // 若隧道正在运行，先停止当前名称的旧隧道，避免协议/端口冲突
     if (serverRunning.value) {
-      const lastProtocol = localStorage.getItem('server_protocol') || '';
-      const lastPort = localStorage.getItem('server_port') || '';
-      if (lastProtocol !== protocol || lastPort !== port) {
-        appendLog(`[INFO] 检测到协议/端口变化 (${lastProtocol}://127.0.0.1:${lastPort} -> ${protocol}://127.0.0.1:${port})，正在自动重启隧道...`, 'info', 'server');
-        try {
-          await invoke<string>('stop_server_tunnel');
-        } catch {}
-      }
+      try {
+        await invoke<string>('stop_server_tunnel', { name });
+      } catch {}
     }
 
     const res = await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
@@ -1384,6 +1473,59 @@ const handleStartServer = async () => {
     appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
   }
 };
+
+// 切换协议/端口时，若隧道正在运行，自动停止旧隧道并切到新协议
+watch(
+  () => [serverConfig.value.protocol, serverConfig.value.port, serverConfig.value.unixSocket] as const,
+  (newVal, oldVal) => {
+    // 隧道未运行时不处理
+    if (!serverRunning.value) return;
+    // 值未实际变化时不处理
+    if (newVal[0] === oldVal[0] && newVal[1] === oldVal[1] && newVal[2] === oldVal[2]) return;
+
+    const protocol = newVal[0];
+    const port = newVal[1].trim();
+    const unixSocket = newVal[2].trim();
+    const name = serverConfig.value.name.trim();
+
+    appendLog(
+      `[INFO] 检测到协议/端口变化 (${oldVal[0]}://127.0.0.1:${oldVal[1]} -> ${protocol}://127.0.0.1:${port})，自动切换隧道 [${name}]...`,
+      'info',
+      'server',
+    );
+
+    // 校验新配置是否合法，非法则仅停止旧隧道、不启动新隧道
+    const configValid =
+      (protocol === 'hello_world' || isPortValid(port)) &&
+      (!(protocol === 'unix' || protocol === 'unix+tls') || !!unixSocket);
+
+    (async () => {
+      try {
+        // 只停止当前名称的隧道，避免影响其他并行运行的隧道
+        try {
+          await invoke<string>('stop_server_tunnel', { name });
+        } catch {}
+        serverRunning.value = false;
+
+        if (!configValid) {
+          appendLog(`[WARN] 新协议配置不完整，已停止旧隧道，请补全后重新启动`, 'warn', 'server');
+          return;
+        }
+
+        const res = await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
+        localStorage.setItem('server_tunnel_name', name);
+        localStorage.setItem('server_port', port);
+        localStorage.setItem('server_protocol', protocol);
+        localStorage.setItem('server_unix_socket', unixSocket);
+        serverRunning.value = true;
+        appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+        showToast(`隧道 [${name}] 已切换 (${protocol}://127.0.0.1:${port})`);
+      } catch (err: any) {
+        appendLog(`[ERROR] 切换协议失败: ${err}`, 'error', 'server');
+      }
+    })();
+  },
+);
 
 // 停止服务端隧道 (普通点击音效)
 const handleStopServer = async () => {
@@ -1461,18 +1603,34 @@ const handleStopRemoteTunnel = async () => {
 const handleStartQuick = async () => {
   const port = quickConfig.value.port.trim();
   const protocol = quickConfig.value.protocol;
-  if (!isPortValid(port)) {
+  const unixSocket = quickConfig.value.unixSocket.trim();
+
+  if (protocol === 'unix' || protocol === 'unix+tls') {
+    if (!unixSocket) {
+      appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'quick');
+      return;
+    }
+  } else if (protocol !== 'hello_world' && !isPortValid(port)) {
     quickPortHasError.value = true;
     appendLog(`[ERROR] 本地端口错误`, 'error', 'quick');
     return;
   }
   soundManager.playSuccess();
-  quickUrl.value = '';
+  // key 需与后端进程表一致：hello_world 固定 key；unix 用 协议:套接字路径
+  const key = protocol === 'hello_world'
+    ? 'hello_world'
+    : (protocol === 'unix' || protocol === 'unix+tls')
+      ? `${protocol}:${unixSocket}`
+      : `${protocol}://127.0.0.1:${port}`;
+  const displayPort = (protocol === 'unix' || protocol === 'unix+tls') ? unixSocket : port;
   try {
-    const res = await invoke<string>('start_quick_tunnel', { port, protocol });
+    const res = await invoke<string>('start_quick_tunnel', { port, protocol, unixSocket });
     localStorage.setItem('quick_port', port);
     localStorage.setItem('quick_protocol', protocol);
-    quickRunning.value = true;
+    localStorage.setItem('quick_unix_socket', unixSocket);
+    // 移除同 key 的旧条目，新增一条「启动中」状态的条目
+    quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
+    quickTunnels.value.push({ key, protocol, port: displayPort, url: '', status: 'starting' });
     appendLog(`[SUCCESS] ${res}`, 'success', 'quick');
     showToast('快速隧道已启动，临时域名生成中...');
   } catch (err: any) {
@@ -1480,13 +1638,35 @@ const handleStartQuick = async () => {
   }
 };
 
-// 停止快速隧道
-const handleStopQuick = async () => {
+// 刷新快速隧道列表（从后端同步运行状态）
+const refreshQuickTunnels = async () => {
+  try {
+    const quickKeys = await invoke<string[]>('is_quick_running');
+    // 保留已有 url 信息，合并后端返回的运行中 key
+    const merged: QuickTunnelItem[] = quickKeys.map(key => {
+      const { protocol, port } = parseQuickKey(key);
+      const existing = quickTunnels.value.find(t => t.key === key);
+      return {
+        key,
+        protocol,
+        port,
+        url: existing?.url || '',
+        status: 'running' as const,
+      };
+    });
+    quickTunnels.value = merged;
+    appendLog(`[INFO] 已刷新快速隧道列表，共 ${merged.length} 个运行中`, 'info', 'quick');
+  } catch (err: any) {
+    appendLog(`[ERROR] 刷新快速隧道列表失败: ${err}`, 'error', 'quick');
+  }
+};
+
+// 停止指定快速隧道（按 key）
+const handleStopQuick = async (key: string) => {
   soundManager.playClick();
   try {
-    const res = await invoke<string>('stop_quick_tunnel');
-    quickRunning.value = false;
-    quickUrl.value = '';
+    const res = await invoke<string>('stop_quick_tunnel', { key });
+    quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
     appendLog(`[INFO] ${res}`, 'warn', 'quick');
     showToast('快速隧道已停止');
   } catch (err: any) {
@@ -1494,10 +1674,38 @@ const handleStopQuick = async () => {
   }
 };
 
-// 复制快速隧道临时链接
-const copyQuickUrl = async () => {
+// 删除指定快速隧道（等于停止 + 移除，弹确认）
+const pendingQuickDeleteKey = ref('');
+const showQuickDeleteModal = ref(false);
+
+const promptDeleteQuick = (key: string) => {
+  pendingQuickDeleteKey.value = key;
+  showQuickDeleteModal.value = true;
+};
+
+const cancelDeleteQuick = () => {
+  showQuickDeleteModal.value = false;
+  pendingQuickDeleteKey.value = '';
+};
+
+const confirmDeleteQuick = async () => {
+  const key = pendingQuickDeleteKey.value;
+  showQuickDeleteModal.value = false;
+  pendingQuickDeleteKey.value = '';
+  if (!key) return;
+  soundManager.playClick();
   try {
-    await navigator.clipboard.writeText(quickUrl.value);
+    await invoke<string>('stop_quick_tunnel', { key });
+  } catch {}
+  quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
+  appendLog(`[INFO] 快速隧道 [${key}] 已删除`, 'warn', 'quick');
+  showToast('快速隧道已删除');
+};
+
+// 复制快速隧道临时链接
+const copyQuickUrl = async (url: string) => {
+  try {
+    await navigator.clipboard.writeText(url);
     showToast('临时链接已复制到剪贴板');
   } catch {
     appendLog('复制临时链接失败，请检查剪贴板权限', 'error', 'quick');
@@ -1648,6 +1856,9 @@ const onKeyDown = (e: KeyboardEvent) => {
       isLangDropdownOpen.value = false;
     } else if (showDeleteModal.value) {
       showDeleteModal.value = false;
+    } else if (showQuickDeleteModal.value) {
+      showQuickDeleteModal.value = false;
+      pendingQuickDeleteKey.value = '';
     } else if (showExitConfirmModal.value) {
       showExitConfirmModal.value = false;
     }
@@ -1666,9 +1877,6 @@ onMounted(async () => {
   document.title = t.value.title;
   window.addEventListener('keydown', onKeyDown);
   document.addEventListener('click', onClickOutside);
-  window.addEventListener('resize', updateTabSlider);
-
-  updateTabSlider();
 
   // 获取并监听窗口最大化状态
   try {
@@ -1701,9 +1909,18 @@ onMounted(async () => {
     });
 
     // 监听快速隧道临时域名分配
-    await listen<string>('quick-tunnel-url', (event) => {
-      quickUrl.value = event.payload;
-      appendLog(`[SUCCESS] 临时域名已分配: ${event.payload}`, 'success', 'quick');
+    await listen<{ key: string; url: string }>('quick-tunnel-url', (event) => {
+      const { key, url } = event.payload;
+      const item = quickTunnels.value.find(t => t.key === key);
+      if (item) {
+        item.url = url;
+        item.status = 'running';
+      } else {
+        // 若列表里没有（如应用重连后），补一条
+        const { protocol, port } = parseQuickKey(key);
+        quickTunnels.value.push({ key, protocol, port, url, status: 'running' });
+      }
+      appendLog(`[SUCCESS] 临时域名已分配: ${url}`, 'success', 'quick');
       showToast('临时域名已生成');
     });
   } catch (e) {
@@ -1712,10 +1929,22 @@ onMounted(async () => {
 
   // 异步获取初始隧道列表与状态
   try {
-    serverRunning.value = await invoke<boolean>('is_server_running');
+    const serverKeys = await invoke<string[]>('is_server_running');
+    serverRunning.value = serverKeys.length > 0;
     clientRunning.value = await invoke<boolean>('is_client_running');
-    remoteRunning.value = await invoke<boolean>('is_remote_running');
-    quickRunning.value = await invoke<boolean>('is_quick_running');
+    const remoteKeys = await invoke<string[]>('is_remote_running');
+    remoteRunning.value = remoteKeys.length > 0;
+    const quickKeys = await invoke<string[]>('is_quick_running');
+    quickTunnels.value = quickKeys.map(key => {
+      const { protocol, port } = parseQuickKey(key);
+      return {
+        key,
+        protocol,
+        port,
+        url: '',
+        status: 'running' as const,
+      };
+    });
     await handleRefreshTunnels();
   } catch {}
 });
@@ -1723,7 +1952,6 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown);
   document.removeEventListener('click', onClickOutside);
-  window.removeEventListener('resize', updateTabSlider);
 });
 </script>
 
@@ -2130,70 +2358,216 @@ onUnmounted(() => {
   100% { transform: rotate(360deg) scale(1); }
 }
 
-/* 选项卡导航 (带平滑横向滑动指示器) */
-.fluent-nav-tabs {
+/* 双栏布局：左侧侧边栏 + 主体内容区 */
+.app-layout {
   position: relative;
-  z-index: 10;
+  z-index: 5;
+  flex: 1;
   display: flex;
-  gap: 6px;
-  padding: 6px 16px 0;
-  background-color: var(--bg-tab-bar);
-  border-bottom: 1px solid var(--border-subtle);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 左侧侧边栏 (默认折叠为图标栏，可展开显示文字) */
+.fluent-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 178px;
   flex-shrink: 0;
+  padding: 10px 8px;
+  background-color: var(--bg-tab-bar);
+  border-right: 1px solid var(--border-subtle);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  transition: width 0.22s cubic-bezier(0.25, 1, 0.5, 1),
+              padding 0.22s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* 平滑滑动背景指示滑块 */
-.nav-tab-slider {
-  position: absolute;
-  bottom: 0;
-  height: calc(100% - 6px);
-  background-color: var(--bg-app);
+.fluent-sidebar.collapsed {
+  width: 56px;
+  padding: 10px 6px;
+}
+
+/* 侧边栏展开/折叠按钮 */
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 30px;
+  margin-bottom: 6px;
+  padding: 0 6px;
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  transition: left 0.28s cubic-bezier(0.25, 1, 0.5, 1),
-              width 0.28s cubic-bezier(0.25, 1, 0.5, 1),
-              opacity 0.2s ease;
-  z-index: 1;
-  pointer-events: none;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: color 0.18s ease, background-color 0.18s ease;
 }
 
-.nav-tab-slider::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 20%;
-  right: 20%;
-  height: 3px;
-  background-color: var(--accent-color);
-  border-radius: 3px 3px 0 0;
+.sidebar-toggle:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
 }
 
-.nav-tab {
+.toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.toggle-text {
+  font-size: 12px;
+}
+
+/* 一级菜单分组 */
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 18px;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 9px;
   background: transparent;
   border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color 0.2s ease;
-  z-index: 2;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
-.nav-tab:hover {
+.sidebar-item:hover {
+  background-color: var(--bg-hover);
   color: var(--text-primary);
 }
 
-.nav-tab.active {
+.sidebar-item.active {
+  background-color: var(--bg-active);
   color: var(--text-primary);
   font-weight: 600;
+}
+
+/* 选中项左侧强调竖条 */
+.sidebar-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 0 3px 3px 0;
+  background-color: var(--accent-color);
+}
+
+.sidebar-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.sidebar-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-arrow {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.sidebar-item.expanded .sidebar-arrow {
+  transform: rotate(90deg);
+}
+
+/* 折叠态下强调竖条贴合边缘，避免被 overflow 裁掉 */
+.fluent-sidebar.collapsed .sidebar-item.active::before {
+  left: -6px;
+}
+
+/* 服务端下边栏 (子项列表) */
+.sidebar-sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 2px 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.sidebar-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.sidebar-sub-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-sub-item.active {
+  background-color: var(--bg-active);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* 下边栏展开/折叠过渡 */
+.sub-list-enter-active,
+.sub-list-leave-active {
+  transition: opacity 0.18s ease, max-height 0.22s ease;
+  max-height: 180px;
+}
+
+.sub-list-enter-from,
+.sub-list-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+/* 侧边栏折叠态：只留图标 */
+.fluent-sidebar.collapsed .sidebar-text,
+.fluent-sidebar.collapsed .sidebar-arrow,
+.fluent-sidebar.collapsed .toggle-text {
+  display: none;
+}
+
+.fluent-sidebar.collapsed .sidebar-item,
+.fluent-sidebar.collapsed .sidebar-sub-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .status-dot {
@@ -2212,6 +2586,7 @@ onUnmounted(() => {
   position: relative;
   z-index: 5;
   flex: 1;
+  min-width: 0;
   padding: 12px 16px;
   overflow: hidden;
   display: flex;
@@ -2262,39 +2637,7 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-/* 本地/远程切换栏 */
-.mode-switch-bar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-  flex-shrink: 0;
-}
-
-.mode-switch-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background-color: var(--bg-input);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.mode-switch-btn:hover {
-  background-color: var(--bg-hover);
-}
-
-.mode-switch-btn.active {
-  background-color: var(--accent-color);
-  border-color: var(--accent-color);
-  color: var(--accent-text);
-}
-
+/* 服务端子视图状态圆点（侧边栏下边栏使用） */
 .mode-dot {
   width: 8px;
   height: 8px;
@@ -2313,11 +2656,6 @@ onUnmounted(() => {
 
 .mode-dot.quick {
   background-color: #f2a900;
-}
-
-/* 二级切换条（临时域名 / 绑定域名） */
-.sub-mode-bar {
-  margin-bottom: 0;
 }
 
 /* 子视图容器 */
@@ -2622,6 +2960,8 @@ onUnmounted(() => {
 
 .fluent-table {
   width: 100%;
+  /* 内容过宽（如超长域名）时按内容撑开，由列表容器整体横向滚动 */
+  min-width: max-content;
   border-collapse: collapse;
   text-align: left;
   font-size: 12.5px;
@@ -2673,10 +3013,9 @@ onUnmounted(() => {
   color: var(--text-disabled);
 }
 
-/* 绑定域名列 */
+/* 绑定域名列：域名过长时由列表整体横向滚动，不竖向折行 */
 .col-hostname {
-  max-width: 200px;
-  white-space: normal !important;
+  white-space: nowrap;
 }
 
 .hostname-tag {
@@ -2684,11 +3023,11 @@ onUnmounted(() => {
   padding: 2px 8px;
   margin: 1px 2px;
   border-radius: 4px;
-  background-color: rgba(0, 95, 184, 0.1);
-  color: var(--accent-color);
+  background-color: #005fb8;
+  color: #ffffff;
   font-size: 11.5px;
   font-family: 'Consolas', 'Courier New', monospace;
-  word-break: break-all;
+  white-space: nowrap;
 }
 
 .hostname-empty {
@@ -2741,6 +3080,59 @@ onUnmounted(() => {
   margin-top: 10px;
   font-size: 11.5px;
   color: var(--warning-color);
+}
+
+.quick-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quick-list-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.quick-list-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-disabled);
+  font-size: 13px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+
+.quick-item {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background-color: var(--bg-input);
+}
+
+.quick-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.quick-item-target {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quick-item-url {
+  min-height: 24px;
+}
+
+.quick-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .fluent-btn.small {

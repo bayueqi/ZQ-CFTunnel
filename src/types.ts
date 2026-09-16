@@ -7,6 +7,14 @@ export interface TunnelInfo {
   hostnames?: string[];
 }
 
+export interface QuickTunnelItem {
+  key: string;
+  protocol: string;
+  port: string;
+  url: string;
+  status: 'starting' | 'running';
+}
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -46,7 +54,6 @@ export interface LangPack {
     btn_create: string;
     btn_start: string;
     btn_stop: string;
-    btn_restart: string;
     btn_refresh: string;
     btn_delete: string;
     btn_clear_log: string;
@@ -56,6 +63,9 @@ export interface LangPack {
     mode_remote: string;
     sub_mode_quick: string;
     sub_mode_named: string;
+    nav_quick: string;
+    nav_named: string;
+    nav_remote: string;
     quick_port_label: string;
     quick_port_placeholder: string;
     btn_generate_quick: string;
@@ -63,6 +73,12 @@ export interface LangPack {
     quick_url_title: string;
     quick_url_empty: string;
     quick_url_hint: string;
+    quick_list_title: string;
+    quick_list_empty: string;
+    quick_stop: string;
+    quick_delete: string;
+    quick_delete_confirm_title: string;
+    quick_delete_confirm_msg: string;
     btn_copy: string;
     btn_open: string;
     hostname_unbound: string;

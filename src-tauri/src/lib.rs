@@ -3,6 +3,7 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::menu::{Menu, MenuItem};
@@ -17,10 +18,10 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Default)]
 pub struct AppState {
-    server_process: Arc<Mutex<Option<Child>>>,
+    server_process: Arc<Mutex<HashMap<String, Child>>>,
     client_process: Arc<Mutex<Option<Child>>>,
-    remote_process: Arc<Mutex<Option<Child>>>,
-    quick_process: Arc<Mutex<Option<Child>>>,
+    remote_process: Arc<Mutex<HashMap<String, Child>>>,
+    quick_process: Arc<Mutex<HashMap<String, Child>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -37,6 +38,12 @@ pub struct LogPayload {
     pub message: String,
     pub level: String,
     pub source: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuickUrlPayload {
+    pub key: String,
+    pub url: String,
 }
 
 /// 优先获取本地应用目录下的 cloudflared 可执行文件，不存在时回退到系统环境变量 PATH 中的程序
@@ -331,9 +338,9 @@ fn start_server_tunnel(
     }
 
     let mut proc_guard = state.server_process.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut child) = *proc_guard {
-        let _ = child.kill();
-        *proc_guard = None;
+    // 同一隧道名重复启动时，先停掉旧实例再启动新的（按隧道名去重）
+    if let Some(mut old) = proc_guard.remove(name_trimmed) {
+        let _ = old.kill();
     }
 
     let url_arg = if protocol_trimmed == "hello_world" {
@@ -406,7 +413,7 @@ fn start_server_tunnel(
         });
     }
 
-    *proc_guard = Some(child);
+    proc_guard.insert(name_trimmed.to_string(), child);
 
     let start_msg = if protocol_trimmed == "hello_world" {
         format!("已启动服务端隧道 [{}]（hello_world 内置测试服务器）", name_trimmed)
@@ -434,22 +441,43 @@ fn start_server_tunnel(
 }
 
 #[tauri::command]
-fn stop_server_tunnel(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+fn stop_server_tunnel(app: AppHandle, state: State<'_, AppState>, name: Option<String>) -> Result<String, String> {
     let mut proc_guard = state.server_process.lock().map_err(|e| e.to_string())?;
-    if let Some(mut child) = proc_guard.take() {
-        let _ = child.kill();
-        let msg = "[INFO] 服务端隧道已停止".to_string();
+    if let Some(n) = name.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        // 停止指定名称的隧道
+        if let Some(mut child) = proc_guard.remove(n) {
+            let _ = child.kill();
+            let _ = app.emit(
+                "log-message",
+                LogPayload {
+                    message: format!("[INFO] 服务端隧道 [{}] 已停止", n),
+                    level: "warn".to_string(),
+                    source: "server".to_string(),
+                },
+            );
+            Ok(format!("服务端隧道 [{}] 已停止", n))
+        } else {
+            Ok(format!("隧道 [{}] 当前未在运行", n))
+        }
+    } else {
+        // 停止全部
+        let count = proc_guard.len();
+        for (_, mut child) in proc_guard.drain() {
+            let _ = child.kill();
+        }
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: msg.clone(),
+                message: format!("[INFO] 已停止全部服务端隧道（共 {} 个）", count),
                 level: "warn".to_string(),
                 source: "server".to_string(),
             },
         );
-        Ok("服务端隧道已停止".to_string())
-    } else {
-        Ok("当前没有正在运行的服务端隧道".to_string())
+        if count > 0 {
+            Ok(format!("已停止全部服务端隧道（共 {} 个）", count))
+        } else {
+            Ok("当前没有正在运行的服务端隧道".to_string())
+        }
     }
 }
 
@@ -570,22 +598,18 @@ fn stop_client_tunnel(app: AppHandle, state: State<'_, AppState>) -> Result<Stri
 }
 
 #[tauri::command]
-fn is_server_running(state: State<'_, AppState>) -> bool {
+fn is_server_running(state: State<'_, AppState>) -> Vec<String> {
+    let mut names = Vec::new();
     if let Ok(mut guard) = state.server_process.lock() {
-        if let Some(ref mut child) = *guard {
-            match child.try_wait() {
-                Ok(None) => true,
-                _ => {
-                    *guard = None;
-                    false
-                }
-            }
-        } else {
-            false
-        }
-    } else {
-        false
+        // 清理已退出的进程
+        guard.retain(|_k, child| match child.try_wait() {
+            Ok(None) => true,
+            _ => false,
+        });
+        names = guard.keys().cloned().collect();
     }
+    names.sort();
+    names
 }
 
 #[tauri::command]
@@ -1002,7 +1026,7 @@ fn is_window_maximized(window: tauri::WebviewWindow) -> bool {
 #[tauri::command]
 fn exit_app(app: AppHandle, state: State<'_, AppState>) {
     if let Ok(mut guard) = state.server_process.lock() {
-        if let Some(mut child) = guard.take() {
+        for (_, mut child) in guard.drain() {
             let _ = child.kill();
         }
     }
@@ -1012,12 +1036,12 @@ fn exit_app(app: AppHandle, state: State<'_, AppState>) {
         }
     }
     if let Ok(mut guard) = state.remote_process.lock() {
-        if let Some(mut child) = guard.take() {
+        for (_, mut child) in guard.drain() {
             let _ = child.kill();
         }
     }
     if let Ok(mut guard) = state.quick_process.lock() {
-        if let Some(mut child) = guard.take() {
+        for (_, mut child) in guard.drain() {
             let _ = child.kill();
         }
     }
@@ -1100,9 +1124,14 @@ fn start_remote_tunnel(
     let token_trimmed = extract_token(&token)?;
 
     let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut child) = *proc_guard {
-        let _ = child.kill();
-        *proc_guard = None;
+    // 同一 token 重复启动时，先停掉旧实例（用 token 前 16 字符作为 key）
+    let key = if token_trimmed.len() > 16 {
+        token_trimmed[..16].to_string()
+    } else {
+        token_trimmed.clone()
+    };
+    if let Some(mut old) = proc_guard.remove(&key) {
+        let _ = old.kill();
     }
 
     let mut cmd = create_base_command();
@@ -1165,7 +1194,7 @@ fn start_remote_tunnel(
         });
     }
 
-    *proc_guard = Some(child);
+    proc_guard.insert(key, child);
 
     let start_msg = "已启动远程隧道（tunnel run --token）".to_string();
     let _ = app.emit(
@@ -1181,31 +1210,82 @@ fn start_remote_tunnel(
 }
 
 #[tauri::command]
-fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<String>) -> Result<String, String> {
     let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
-    if let Some(mut child) = proc_guard.take() {
-        let _ = child.kill();
+    if let Some(k) = key.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if let Some(mut child) = proc_guard.remove(k) {
+            let _ = child.kill();
+            let _ = app.emit(
+                "log-message",
+                LogPayload {
+                    message: "[INFO] 远程隧道已停止".to_string(),
+                    level: "warn".to_string(),
+                    source: "remote".to_string(),
+                },
+            );
+            Ok("远程隧道已停止".to_string())
+        } else {
+            Ok("指定的远程隧道当前未在运行".to_string())
+        }
+    } else {
+        let count = proc_guard.len();
+        for (_, mut child) in proc_guard.drain() {
+            let _ = child.kill();
+        }
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: "[INFO] 远程隧道已停止".to_string(),
+                message: format!("[INFO] 已停止全部远程隧道（共 {} 个）", count),
                 level: "warn".to_string(),
                 source: "remote".to_string(),
             },
         );
-        Ok("远程隧道已停止".to_string())
-    } else {
-        Ok("当前没有正在运行的远程隧道".to_string())
+        if count > 0 {
+            Ok(format!("已停止全部远程隧道（共 {} 个）", count))
+        } else {
+            Ok("当前没有正在运行的远程隧道".to_string())
+        }
     }
 }
 
 #[tauri::command]
-fn is_remote_running(state: State<'_, AppState>) -> bool {
-    state.remote_process.lock().map(|g| g.is_some()).unwrap_or(false)
+fn is_remote_running(state: State<'_, AppState>) -> Vec<String> {
+    let mut keys = Vec::new();
+    if let Ok(mut guard) = state.remote_process.lock() {
+        guard.retain(|_k, child| match child.try_wait() {
+            Ok(None) => true,
+            _ => false,
+        });
+        keys = guard.keys().cloned().collect();
+    }
+    keys.sort();
+    keys
+}
+
+/// 从一行日志中尝试提取 trycloudflare.com 临时域名。
+/// cloudflared 的 quick tunnel 域名可能出现在 stdout 或 stderr 中，
+/// 行格式形如: `|  https://xxx.trycloudflare.com  |`，故需两边都检测。
+fn try_extract_quick_url(line: &str) -> Option<String> {
+    let idx = line.find("trycloudflare.com")?;
+    let start = line[..idx].rfind("https://").unwrap_or(0);
+    let url = line[start..]
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .trim_matches(|c| c == '|' || c == ' ' || c == '*')
+        .to_string();
+    if url.starts_with("https://") && url.contains("trycloudflare.com") {
+        Some(url)
+    } else {
+        None
+    }
 }
 
 /// 快速隧道（Quick Tunnel）：`cloudflared tunnel --url <协议>://127.0.0.1:<端口>`
 /// 免登录、免凭证、免绑定域名，Cloudflare 自动分配一个临时 trycloudflare.com 域名。
+/// 支持协议与命名隧道一致：http/https/tcp/ssh/rdp/smb 需端口；
+/// unix/unix+tls 需套接字路径（--url unix:/path/to/socket）；
+/// hello_world 使用内置测试服务器（cloudflared tunnel --hello-world）。
 /// 每次启动域名随机变化，进程停止即失效。
 #[tauri::command]
 fn start_quick_tunnel(
@@ -1213,33 +1293,53 @@ fn start_quick_tunnel(
     state: State<'_, AppState>,
     port: String,
     protocol: String,
+    unix_socket: String,
 ) -> Result<String, String> {
     let port_trimmed = port.trim();
     let protocol_trimmed = protocol.trim();
+    let socket_trimmed = unix_socket.trim();
 
     if !is_supported_protocol(protocol_trimmed) {
         return Err(format!("不支持的协议类型: {}", protocol_trimmed));
     }
 
-    // 快速隧道不支持 unix / unix+tls / hello_world 这类特殊模式
-    if matches!(protocol_trimmed, "unix" | "unix+tls" | "hello_world") {
-        return Err(format!("快速隧道不支持协议 [{}]，请改用命名隧道", protocol_trimmed));
-    }
+    // 构造 --url 参数：hello_world / unix / unix+tls 无需端口，其余协议需要合法端口
+    let url_arg = match protocol_trimmed {
+        "hello_world" => String::new(),
+        "unix" | "unix+tls" => {
+            if socket_trimmed.is_empty() {
+                return Err("unix / unix+tls 协议必须填写套接字路径".to_string());
+            }
+            format!("{}:{}", protocol_trimmed, socket_trimmed)
+        }
+        _ => {
+            if port_trimmed.is_empty() || port_trimmed.parse::<u16>().is_err() {
+                return Err("端口号必须为 1-65535 的纯数字".to_string());
+            }
+            format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed)
+        }
+    };
 
-    if port_trimmed.is_empty() || port_trimmed.parse::<u16>().is_err() {
-        return Err("端口号必须为 1-65535 的纯数字".to_string());
-    }
+    // 进程表 key：hello_world 无端口/路径，用固定 key；其余直接用 --url 参数
+    let key = if protocol_trimmed == "hello_world" {
+        "hello_world".to_string()
+    } else {
+        url_arg.clone()
+    };
 
     let mut proc_guard = state.quick_process.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut child) = *proc_guard {
-        let _ = child.kill();
-        *proc_guard = None;
+    // 同一 key 重复启动时，先停掉旧实例
+    if let Some(mut old) = proc_guard.remove(&key) {
+        let _ = old.kill();
     }
 
-    let url_arg = format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed);
     let mut cmd = create_base_command();
-    cmd.args(["tunnel", "--url", &url_arg, "--no-autoupdate"])
-        .stdout(Stdio::piped())
+    if protocol_trimmed == "hello_world" {
+        cmd.args(["tunnel", "--hello-world", "--no-autoupdate"]);
+    } else {
+        cmd.args(["tunnel", "--url", &url_arg, "--no-autoupdate"]);
+    }
+    cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
     let mut child = cmd.spawn().map_err(|e| {
@@ -1255,6 +1355,7 @@ fn start_quick_tunnel(
 
     // 从输出流中抓取 trycloudflare.com 临时域名并回传前端
     let app_emit = app.clone();
+    let key_stdout = key.clone();
     if let Some(out) = stdout {
         thread::spawn(move || {
             let reader = BufReader::new(out);
@@ -1267,24 +1368,18 @@ fn start_quick_tunnel(
                         source: "quick".to_string(),
                     },
                 );
-                if let Some(idx) = line.find("trycloudflare.com") {
-                    // 该行形如: | https://xxx.trycloudflare.com |
-                    let start = line[..idx].rfind("https://").unwrap_or(0);
-                    let url: String = line[start..]
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or("")
-                        .trim_matches(|c| c == '|' || c == ' ' || c == '*')
-                        .to_string();
-                    if url.starts_with("https://") && url.contains("trycloudflare.com") {
-                        let _ = app_emit.emit("quick-tunnel-url", url);
-                    }
+                if let Some(url) = try_extract_quick_url(&line) {
+                    let _ = app_emit.emit(
+                        "quick-tunnel-url",
+                        QuickUrlPayload { key: key_stdout.clone(), url },
+                    );
                 }
             }
         });
     }
 
     let app_emit2 = app.clone();
+    let key_stderr = key.clone();
     if let Some(err) = stderr {
         thread::spawn(move || {
             let reader = BufReader::new(err);
@@ -1299,18 +1394,32 @@ fn start_quick_tunnel(
                 let _ = app_emit2.emit(
                     "log-message",
                     LogPayload {
-                        message: line,
+                        message: line.clone(),
                         level: level.to_string(),
                         source: "quick".to_string(),
                     },
                 );
+                // cloudflared 的 quick tunnel 域名实际从 stderr 输出，需在此处抓取
+                if let Some(url) = try_extract_quick_url(&line) {
+                    let _ = app_emit2.emit(
+                        "quick-tunnel-url",
+                        QuickUrlPayload { key: key_stderr.clone(), url },
+                    );
+                }
             }
         });
     }
 
-    *proc_guard = Some(child);
+    proc_guard.insert(key.clone(), child);
 
-    let start_msg = format!("已启动快速隧道 [{}://127.0.0.1:{}]（临时域名生成中...）", protocol_trimmed, port_trimmed);
+    let start_desc = if protocol_trimmed == "hello_world" {
+        "hello_world 内置测试服务器".to_string()
+    } else if protocol_trimmed == "unix" || protocol_trimmed == "unix+tls" {
+        format!("{}:{}", protocol_trimmed, socket_trimmed)
+    } else {
+        format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed)
+    };
+    let start_msg = format!("已启动快速隧道 [{}]（临时域名生成中...）", start_desc);
     let _ = app.emit(
         "log-message",
         LogPayload {
@@ -1324,41 +1433,56 @@ fn start_quick_tunnel(
 }
 
 #[tauri::command]
-fn stop_quick_tunnel(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+fn stop_quick_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<String>) -> Result<String, String> {
     let mut proc_guard = state.quick_process.lock().map_err(|e| e.to_string())?;
-    if let Some(mut child) = proc_guard.take() {
-        let _ = child.kill();
+    if let Some(k) = key.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if let Some(mut child) = proc_guard.remove(k) {
+            let _ = child.kill();
+            let _ = app.emit(
+                "log-message",
+                LogPayload {
+                    message: format!("[INFO] 快速隧道 [{}] 已停止，临时域名已失效", k),
+                    level: "warn".to_string(),
+                    source: "quick".to_string(),
+                },
+            );
+            Ok(format!("快速隧道 [{}] 已停止", k))
+        } else {
+            Ok("指定的快速隧道当前未在运行".to_string())
+        }
+    } else {
+        let count = proc_guard.len();
+        for (_, mut child) in proc_guard.drain() {
+            let _ = child.kill();
+        }
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: "[INFO] 快速隧道已停止，临时域名已失效".to_string(),
+                message: format!("[INFO] 已停止全部快速隧道（共 {} 个），临时域名已失效", count),
                 level: "warn".to_string(),
                 source: "quick".to_string(),
             },
         );
-        Ok("快速隧道已停止".to_string())
-    } else {
-        Ok("当前没有正在运行的快速隧道".to_string())
+        if count > 0 {
+            Ok(format!("已停止全部快速隧道（共 {} 个）", count))
+        } else {
+            Ok("当前没有正在运行的快速隧道".to_string())
+        }
     }
 }
 
 #[tauri::command]
-fn is_quick_running(state: State<'_, AppState>) -> bool {
+fn is_quick_running(state: State<'_, AppState>) -> Vec<String> {
+    let mut keys = Vec::new();
     if let Ok(mut guard) = state.quick_process.lock() {
-        if let Some(ref mut child) = *guard {
-            match child.try_wait() {
-                Ok(None) => true,
-                _ => {
-                    *guard = None;
-                    false
-                }
-            }
-        } else {
-            false
-        }
-    } else {
-        false
+        guard.retain(|_k, child| match child.try_wait() {
+            Ok(None) => true,
+            _ => false,
+        });
+        keys = guard.keys().cloned().collect();
     }
+    keys.sort();
+    keys
 }
 
 /// 从本机 `~/.cloudflared/cert.pem` 提取 Cloudflare API Token，查询
