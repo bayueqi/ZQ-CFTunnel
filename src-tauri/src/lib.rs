@@ -891,6 +891,98 @@ fn download_and_install_cloudflared(
     Ok("已在后台开始下载与安装流程，请观察控制台实时进度".to_string())
 }
 
+/// 授权登录期间，stdout / stderr 两个日志线程共享的一次性状态。
+///
+/// 背景（真实踩过的 bug：授权页面被打开两次）：
+/// `cloudflared tunnel login` **自己就会帮用户打开浏览器**（Cloudflare 官方文档原话：
+/// "The client will launch a browser window…"）。本机 cloudflared 2026.9.0 实测，
+/// 它的这句自白就是「我有没有帮你打开」的判据：
+///   - 正常 PATH（能调起系统打开器）→ `A browser window should have opened at the following URL:`
+///   - 清空 PATH（调不起）        → `Please open the following URL and log in with your Cloudflare account:`
+///
+/// 原实现是 stdout、stderr 各起一个线程，各自持有一个**局部** `opened` 布尔，
+/// 逐行扫到 `https://` 就 `open::that(url)`。cloudflared 已经开过一次，我们又开一次，
+/// 用户就看到两个授权页面。现在两个线程共用这一份状态：URL 只可能被决策一次，
+/// 且默认不再重复打开。
+#[derive(Default)]
+struct LoginWatch {
+    /// 是否已经为这条链接做过决定（跨两条流共享，杜绝重复打开）
+    handled: bool,
+    /// cloudflared 自述「我已经帮你把浏览器打开了」
+    cf_opened: bool,
+    /// cloudflared 自述「我打不开，请你自己开」
+    cf_failed: bool,
+    /// 看到了、但暂时还判不定的授权链接。
+    /// 需要它是因为：「我开好了 / 我打不开」那两句和链接本身不保证落在同一条流、
+    /// 也不保证链接在后面。先把链接挂起来，等判据到齐再决定，这样无论两条流谁先谁后，
+    /// 结论都一样。
+    pending_url: Option<String>,
+}
+
+/// 逐行观察 cloudflared 输出。
+/// 返回需要额外补打的日志（消息, 级别）；不需要补打时返回 None。
+fn watch_login_line(line: &str, watch: &Arc<Mutex<LoginWatch>>) -> Option<(String, String)> {
+    let mut w = match watch.lock() {
+        Ok(guard) => guard,
+        // 某个线程 panic 导致锁中毒时，继续用内部数据，别把功能带崩
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    // 判据一：cloudflared 说自己已经帮你打开了。
+    if line.contains("should have opened") {
+        w.cf_opened = true;
+    }
+    // 判据二：cloudflared 说自己打不开。
+    // 这里千万**不能**改用 "browser failed to open"：那句话在**成功**横幅里也有
+    // （"If the browser failed to open, please visit the URL above directly in your
+    // browser."）。眼下它是被判据一抢先盖住了才没出事，可一旦哪版 cloudflared 不再
+    // 输出 "should have opened" 那半句，它就会把"成功"判成"失败"，又变回开两次。
+    if line.contains("Please open the following URL") {
+        w.cf_failed = true;
+    }
+
+    // 先登记链接（只认第一条），再依据当前掌握的判据决定
+    if w.pending_url.is_none() {
+        if let Some(idx) = line.find("https://") {
+            let url = line[idx..].split_whitespace().next().unwrap_or("").to_string();
+            if !url.is_empty() {
+                w.pending_url = Some(url);
+            }
+        }
+    }
+
+    if w.handled {
+        return None;
+    }
+    let url = w.pending_url.clone()?;
+    if !w.cf_opened && !w.cf_failed {
+        // 判据还没到，这次不决定；等后面带判据的行进来再定。
+        // 若始终等不到（比如将来 cloudflared 把这两句文案全改了），
+        // 就保持「什么都不做」——这段输出里链接本身已经原样打进控制台了，
+        // 用户仍能看到并手动打开。宁可让用户手点，也不再冒「又开两次」的风险。
+        return None;
+    }
+
+    w.handled = true;
+    let cf_opened = w.cf_opened;
+    drop(w);
+
+    if cf_opened {
+        // cloudflared 已经开过了，我们绝不能再开第二次
+        Some((
+            format!("[INFO] 授权链接已由 cloudflared 自动在浏览器中打开: {}", url),
+            "info".to_string(),
+        ))
+    } else {
+        // 走到这里必然意味着 cf_failed（上面已排除「判据未到」的情况）：它打不开，我们补一次
+        let _ = open::that(&url);
+        Some((
+            format!("[INFO] cloudflared 未能自动打开浏览器，已代为打开授权链接: {}", url),
+            "success".to_string(),
+        ))
+    }
+}
+
 #[tauri::command]
 fn login_cloudflared(app: AppHandle) -> Result<String, String> {
     let mut cmd = create_base_command();
@@ -918,11 +1010,14 @@ fn login_cloudflared(app: AppHandle) -> Result<String, String> {
         },
     );
 
+    // 两个线程共用，保证授权链接只被决策一次
+    let watch = Arc::new(Mutex::new(LoginWatch::default()));
+
     let app_c1 = app.clone();
+    let watch_c1 = Arc::clone(&watch);
     if let Some(out) = stdout {
         thread::spawn(move || {
             let reader = BufReader::new(out);
-            let mut opened = false;
             for line in reader.lines().flatten() {
                 let _ = app_c1.emit(
                     "log-message",
@@ -932,32 +1027,25 @@ fn login_cloudflared(app: AppHandle) -> Result<String, String> {
                         source: "misc".to_string(),
                     },
                 );
-                if line.contains("https://") && !opened {
-                    opened = true;
-                    if let Some(idx) = line.find("https://") {
-                        let url: String = line[idx..].split_whitespace().next().unwrap_or("").to_string();
-                        if !url.is_empty() {
-                            let _ = open::that(&url);
-                            let _ = app_c1.emit(
-                                "log-message",
-                                LogPayload {
-                                    message: format!("[INFO] 已自动在默认浏览器中打开授权链接: {}", url),
-                                    level: "success".to_string(),
-                                    source: "misc".to_string(),
-                                },
-                            );
-                        }
-                    }
+                if let Some((message, level)) = watch_login_line(&line, &watch_c1) {
+                    let _ = app_c1.emit(
+                        "log-message",
+                        LogPayload {
+                            message,
+                            level,
+                            source: "misc".to_string(),
+                        },
+                    );
                 }
             }
         });
     }
 
     let app_c2 = app.clone();
+    let watch_c2 = Arc::clone(&watch);
     if let Some(err) = stderr {
         thread::spawn(move || {
             let reader = BufReader::new(err);
-            let mut opened = false;
             for line in reader.lines().flatten() {
                 let _ = app_c2.emit(
                     "log-message",
@@ -967,22 +1055,15 @@ fn login_cloudflared(app: AppHandle) -> Result<String, String> {
                         source: "misc".to_string(),
                     },
                 );
-                if line.contains("https://") && !opened {
-                    opened = true;
-                    if let Some(idx) = line.find("https://") {
-                        let url: String = line[idx..].split_whitespace().next().unwrap_or("").to_string();
-                        if !url.is_empty() {
-                            let _ = open::that(&url);
-                            let _ = app_c2.emit(
-                                "log-message",
-                                LogPayload {
-                                    message: format!("[INFO] 已自动在默认浏览器中打开授权链接: {}", url),
-                                    level: "success".to_string(),
-                                    source: "misc".to_string(),
-                                },
-                            );
-                        }
-                    }
+                if let Some((message, level)) = watch_login_line(&line, &watch_c2) {
+                    let _ = app_c2.emit(
+                        "log-message",
+                        LogPayload {
+                            message,
+                            level,
+                            source: "misc".to_string(),
+                        },
+                    );
                 }
             }
         });
