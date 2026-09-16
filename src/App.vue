@@ -598,34 +598,41 @@
                     <tr>
                       <th class="col-tunnel-name">{{ t.server_tab.dns_col_tunnel }}</th>
                       <th class="col-bound-hostname">{{ t.server_tab.headers.hostname }}</th>
-                      <th class="col-bound-actions">{{ t.server_tab.headers.actions }}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in dnsBoundRows" :key="row.recordId">
-                      <td class="col-tunnel-name font-bold">{{ row.tunnelName }}</td>
+                    <!-- 按隧道聚合：一个隧道占一行，该隧道下的多个域名以标签换行排列，
+                         改 / 解绑按钮内嵌在各自的标签里，不再一条域名占一整行。 -->
+                    <tr v-for="group in dnsBoundGroups" :key="group.tunnelId">
+                      <td class="col-tunnel-name font-bold" :title="group.tunnelName">{{ group.tunnelName }}</td>
                       <td class="col-bound-hostname">
-                        <span
-                          class="hostname-tag"
-                          :title="t.server_tab.click_to_copy"
-                          @click="copyHostname(row.hostname)"
-                        >{{ row.hostname }}</span>
-                      </td>
-                      <td class="col-bound-actions">
-                        <button
-                          class="row-action-btn"
-                          :title="t.server_tab.dns_edit_title"
-                          @click="promptEditDnsRoute(row)"
-                        >✎</button>
-                        <button
-                          class="row-action-btn danger"
-                          :title="t.server_tab.btn_unbind"
-                          @click="promptUnbindDnsRoute(row)"
-                        >🗑</button>
+                        <div class="hostname-chip-list">
+                          <span
+                            v-for="rec in group.records"
+                            :key="rec.recordId"
+                            class="hostname-chip"
+                          >
+                            <span
+                              class="hostname-chip-text"
+                              :title="rec.hostname + ' · ' + t.server_tab.click_to_copy"
+                              @click="copyHostname(rec.hostname)"
+                            >{{ rec.hostname }}</span>
+                            <button
+                              class="chip-action-btn"
+                              :title="t.server_tab.dns_edit_title"
+                              @click.stop="promptEditDnsRoute(rec)"
+                            >✎</button>
+                            <button
+                              class="chip-action-btn danger"
+                              :title="t.server_tab.btn_unbind"
+                              @click.stop="promptUnbindDnsRoute(rec)"
+                            >🗑</button>
+                          </span>
+                        </div>
                       </td>
                     </tr>
-                    <tr v-if="dnsBoundRows.length === 0">
-                      <td colspan="3" class="empty-table">{{ t.server_tab.dns_bound_empty }}</td>
+                    <tr v-if="dnsBoundGroups.length === 0">
+                      <td colspan="2" class="empty-table">{{ t.server_tab.dns_bound_empty }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1404,15 +1411,27 @@ const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_ty
 
 // 「已绑定域名」管理列表：只展开固定域名（本地）隧道，
 // 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
-const dnsBoundRows = computed<DnsBoundRow[]>(() =>
-  localTunnelList.value.flatMap(t =>
-    (t.hostnames || []).map(h => ({
-      recordId: h.id,
-      hostname: h.name,
-      tunnelName: t.name,
+// 按隧道聚合：一个隧道一行，其下所有绑定的域名收在 records 里，
+// 避免同一个隧道有 N 个域名就重复出现 N 行隧道名（原表格太乱）。
+type DnsBoundGroup = {
+  tunnelId: string;
+  tunnelName: string;
+  records: DnsBoundRow[];
+};
+
+const dnsBoundGroups = computed<DnsBoundGroup[]>(() =>
+  localTunnelList.value
+    .map(t => ({
       tunnelId: t.id,
-    })),
-  ),
+      tunnelName: t.name,
+      records: (t.hostnames || []).map(h => ({
+        recordId: h.id,
+        hostname: h.name,
+        tunnelName: t.name,
+        tunnelId: t.id,
+      })),
+    }))
+    .filter(g => g.records.length > 0),
 );
 
 // 控制台高度与拖拽调整逻辑
@@ -2401,9 +2420,27 @@ onUnmounted(() => {
   --error-border: #c42b1c;
   --error-bg: rgba(196, 43, 28, 0.06);
   --error-text: #c42b1c;
-  --console-bg: #181818;
-  --console-text: #d4d4d4;
-  --console-header-bg: #222222;
+  /* 控制台（浅色主题 = 亮底黑字，跟随主题切换） */
+  --console-bg: #ffffff;
+  --console-text: #1c1c1c;
+  --console-header-bg: #f3f3f3;
+  --console-header-border: rgba(0, 0, 0, 0.08);
+  --console-title-text: #1c1c1c;
+  --console-count-text: #767676;
+  --console-time-text: #6f6f6f;
+  --console-empty-text: #8c8c8c;
+  --console-btn-text: #3d3d3d;
+  --console-btn-border: rgba(0, 0, 0, 0.16);
+  --console-btn-hover-bg: rgba(0, 0, 0, 0.06);
+  --console-btn-hover-text: #000000;
+  --console-info-tag: #005fb8;
+  --console-info-text: #1c1c1c;
+  --console-warn-tag: #9d5d00;
+  --console-warn-text: #7a4a00;
+  --console-error-tag: #c42b1c;
+  --console-error-text: #b02418;
+  --console-success-tag: #107c10;
+  --console-success-text: #0e6b0e;
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
   --dropdown-bg: rgba(255, 255, 255, 0.96);
   --dropdown-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
@@ -2435,9 +2472,27 @@ onUnmounted(() => {
   --error-border: #ff99a4;
   --error-bg: rgba(255, 153, 164, 0.12);
   --error-text: #ff99a4;
+  /* 控制台（深色主题 = 终端风格深底） */
   --console-bg: #141414;
   --console-text: #d4d4d4;
   --console-header-bg: #1f1f1f;
+  --console-header-border: rgba(255, 255, 255, 0.08);
+  --console-title-text: #eaeaea;
+  --console-count-text: #888888;
+  --console-time-text: #777777;
+  --console-empty-text: #666666;
+  --console-btn-text: #cccccc;
+  --console-btn-border: rgba(255, 255, 255, 0.15);
+  --console-btn-hover-bg: rgba(255, 255, 255, 0.1);
+  --console-btn-hover-text: #ffffff;
+  --console-info-tag: #60cdff;
+  --console-info-text: #d4d4d4;
+  --console-warn-tag: #fce100;
+  --console-warn-text: #ffe666;
+  --console-error-tag: #ff99a4;
+  --console-error-text: #ff99a4;
+  --console-success-tag: #6ccb5f;
+  --console-success-text: #98e68e;
   --shadow-card: 0 6px 16px rgba(0, 0, 0, 0.35);
   --dropdown-bg: rgba(40, 40, 40, 0.96);
   --dropdown-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -3065,8 +3120,15 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+/* 左列的两个输入框并排。
+   全局 .form-grid 是 minmax(260px,1fr)：左列只有约 494px 宽，放不下两列，
+   于是「隧道名称 / 绑定域名」竖着排，光这一列就 128px 高 —— 比右列的域名列表
+   （164px）还接近，白白把卡片顶高 13px。并排后整列压到约 50px，
+   卡片高度改由右列的域名列表决定，默认窗口下三张卡刚好一屏放下、不用滚动。 */
 .dns-route-card > .form-grid {
   grid-column: 1;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
   margin-bottom: 0;
 }
 
@@ -3075,10 +3137,11 @@ onUnmounted(() => {
 }
 
 /* 服务端页：让子视图参与父级的高度约束。
-   否则 .table-card 的 flex:1 失效（父级高度为 auto），隧道列表会按内容无限撑高整页，
-   把下方的「DNS 路由绑定」卡片（含「已绑定域名」块）挤出视口 —— 即"一眼看不到底"。
-   约束生效后：隧道列表在卡片内部滚动，DNS 路由卡始终完整可见。
-   内容真超出时由外层 .tab-view 兜底滚动，不会丢失内容。 */
+   约束生效后：三张卡片按可用高度分配，隧道列表在卡片内部滚动，
+   DNS 路由卡始终完整可见；内容真超出时由外层 .tab-view 兜底滚动。
+   注意：子视图可压缩（flex:1），所以压缩空间必须由各卡片自己的
+   min-height 兜底，否则隧道列表会被一路压到只剩一条表头 —— 见下方
+   .table-card > .fluent-table-wrapper 的 min-height。 */
 .server-view .server-sub-view {
   flex: 1;
   min-height: 0;
@@ -3100,13 +3163,17 @@ onUnmounted(() => {
   max-height: 176px;
 }
 
-/* 该表按内容收缩。
-   注意：必须用 .dns-bound-block .fluent-table 这个两级选择器，
+/* 该表铺满右列。
+   注意 1：必须用 .dns-bound-block .fluent-table 这个两级选择器，
    否则会被后面同样只有一级的 .fluent-table { min-width: max-content } 覆盖，
-   导致窄框里的表格仍按内容撑宽、只露出第一列并出现横向滚动。 */
+   导致窄框里的表格仍按内容撑宽、只露出第一列并出现横向滚动。
+   注意 2：table-layout:fixed 是这里的关键。表格默认按"最长域名"的 min-content
+   撑宽，min-width:0 也压不住（实测：框 473px、表 559px、右侧被切 85px）；
+   固定布局后列宽只按 width 分配，域名放不下由标签换行 / 省略号处理，不会撑破框。 */
 .dns-bound-block .fluent-table {
-  width: auto;
+  width: 100%;
   min-width: 0;
+  table-layout: fixed;
 }
 
 .dns-bound-head {
@@ -3126,16 +3193,85 @@ onUnmounted(() => {
 
 .dns-bound-table .col-tunnel-name {
   white-space: nowrap;
-  max-width: 180px;
+  /* 定宽 + 省略号：table-layout:fixed 下百分比/1% 会被严格按比例算，
+     写成 1% 会把这一列压成一条线（隧道名只剩 "local…"）。
+     固定 104px 后剩余宽度（约 370px）全部给域名列，
+     正好放得下两个常规域名标签一行（约 343px），不会因为列太窄而多折一行。 */
+  width: 104px;
+  max-width: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
 }
 
+/* 域名列允许换行：同一隧道的多个域名以标签横向排列，放不下时自然折行 */
 .dns-bound-table .col-bound-hostname {
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: top;
 }
 
-.dns-bound-table .col-bound-actions {
+/* ---- 域名标签：一个隧道一行，域名做成小胶囊，改/解绑按钮内嵌在胶囊里 ---- */
+.hostname-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hostname-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  max-width: 100%;
+  padding: 1px 3px 1px 8px;
+  border-radius: 4px;
+  background-color: #005fb8;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.hostname-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  width: 1%;
+  /* 点击即复制 */
+  cursor: pointer;
+  user-select: none;
+}
+
+.hostname-chip-text:hover {
+  text-decoration: underline;
+}
+
+.chip-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.chip-action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.32);
+  opacity: 1;
+}
+
+.chip-action-btn.danger:hover {
+  background-color: #d13438;
+  opacity: 1;
 }
 
 /* 解绑按钮：危险色描边，与行内启停按钮区分 */
@@ -3464,9 +3600,23 @@ onUnmounted(() => {
 .table-card {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 140px;
+  flex: 1 1 auto;
+  /* 这里必须给一个显式下限，不能写 min-height:0 / auto：
+     CSS 规定 overflow 不是 visible 的元素，其 flex 自动最小尺寸为 0，
+     于是窗口一矮这张卡会被一路压扁（实测 580 高时只剩 36px），
+     里面 min-height:100px 的表格框随即溢出卡片被 overflow 切掉 ——
+     看起来正是"隧道列表内容被挤压看不到了"。
+     196px = 标题(33) + 表格框下限(100) + 按钮行(35) + 卡片内边距(28)。
+     压缩止步于此，再矮就交给外层 .tab-view 滚动，数据行不会被吃掉。 */
+  min-height: 196px;
   overflow: hidden;
+}
+
+/* 隧道列表的表格框给一个高度下限：表头 + 1 整行 + 横向滚动条。
+   没有这个下限时，flex 压缩会把它压到只剩一条 sticky 表头，
+   数据行全被顶出可视区 —— 这是"隧道列表内容消失"的真正原因。 */
+.table-card > .fluent-table-wrapper {
+  min-height: 100px;
 }
 
 .fluent-table-wrapper {
@@ -3874,7 +4024,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 6px 14px;
   background-color: var(--console-header-bg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--console-header-border);
   user-select: none;
 }
 
@@ -3884,12 +4034,12 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #eaeaea;
+  color: var(--console-title-text);
 }
 
 .log-count {
   font-size: 11px;
-  color: #888888;
+  color: var(--console-count-text);
 }
 
 .console-actions {
@@ -3900,8 +4050,8 @@ onUnmounted(() => {
 .console-btn {
   padding: 2px 8px;
   background: transparent;
-  color: #cccccc;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--console-btn-text);
+  border: 1px solid var(--console-btn-border);
   border-radius: 4px;
   font-size: 11px;
   cursor: pointer;
@@ -3909,8 +4059,8 @@ onUnmounted(() => {
 }
 
 .console-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background-color: var(--console-btn-hover-bg);
+  color: var(--console-btn-hover-text);
 }
 
 /* 日志内容区 (完全允许鼠标划选与复制) */
@@ -3929,7 +4079,7 @@ onUnmounted(() => {
 }
 
 .console-empty {
-  color: #666666;
+  color: var(--console-empty-text);
   font-style: italic;
   padding-top: 4px;
   user-select: none;
@@ -3944,7 +4094,7 @@ onUnmounted(() => {
 }
 
 .log-time {
-  color: #777777;
+  color: var(--console-time-text);
   flex-shrink: 0;
   user-select: text !important;
 }
@@ -3959,17 +4109,17 @@ onUnmounted(() => {
   user-select: text !important;
 }
 
-.log-info .log-tag { color: #60cdff; }
-.log-info .log-msg { color: #d4d4d4; }
+.log-info .log-tag { color: var(--console-info-tag); }
+.log-info .log-msg { color: var(--console-info-text); }
 
-.log-warn .log-tag { color: #fce100; }
-.log-warn .log-msg { color: #ffe666; }
+.log-warn .log-tag { color: var(--console-warn-tag); }
+.log-warn .log-msg { color: var(--console-warn-text); }
 
-.log-error .log-tag { color: #ff99a4; }
-.log-error .log-msg { color: #ff99a4; }
+.log-error .log-tag { color: var(--console-error-tag); }
+.log-error .log-msg { color: var(--console-error-text); }
 
-.log-success .log-tag { color: #6ccb5f; }
-.log-success .log-msg { color: #98e68e; }
+.log-success .log-tag { color: var(--console-success-tag); }
+.log-success .log-msg { color: var(--console-success-text); }
 
 /* 模态对话框 */
 .fluent-modal-overlay {
