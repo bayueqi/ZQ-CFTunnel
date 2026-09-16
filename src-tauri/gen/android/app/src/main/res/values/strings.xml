@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">"cloudflared_gui"</string>
+    <string name="main_activity_title">"cloudflared_gui"</string>
+</resources>
