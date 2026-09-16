@@ -63,7 +63,6 @@
     "dns_domain_placeholder": "e.g. mc.example.com",
     "btn_route_dns": "Bind",
     "dns_bound_title": "Bound Hostnames",
-    "dns_bound_hint": "Click a hostname to copy · ✎ rename · 🗑 unbind",
     "dns_bound_empty": "No bound hostnames yet",
     "dns_col_tunnel": "Tunnel",
     "dns_edit_title": "Edit Bound Hostname",

@@ -63,7 +63,6 @@
     "dns_domain_placeholder": "例: mc.example.com",
     "btn_route_dns": "バインド",
     "dns_bound_title": "バインド済みドメイン",
-    "dns_bound_hint": "ドメインをクリックでコピー · ✎ 名前変更 · 🗑 バインド解除",
     "dns_bound_empty": "バインド済みドメインはありません",
     "dns_col_tunnel": "トンネル",
     "dns_edit_title": "バインドドメインの変更",

@@ -590,7 +590,6 @@
             <div class="dns-bound-block">
               <div class="dns-bound-head">
                 <h4 class="dns-bound-title">{{ t.server_tab.dns_bound_title }}</h4>
-                <span class="dns-bound-hint">{{ t.server_tab.dns_bound_hint }}</span>
               </div>
 
               <div class="fluent-table-wrapper">
@@ -3042,13 +3041,13 @@ onUnmounted(() => {
 }
 
 /* DNS 路由绑定卡片 (位于服务端本地视图)
-   改两列：左列「绑定表单」，右列「已绑定域名」列表。
+   改两列：左列「绑定表单」，右列「已绑定域名」列表，两列各占一半宽度。
    纵向堆叠时该卡高达 394px，而卡片可用高度仅约 261px，必然被挤出视口看不到底；
-   两列后可压到 257px（实测），整卡与域名列表都能一屏看全。 */
+   两列后可压到约 242px（实测），整卡与域名列表都能一屏看全。 */
 .dns-route-card {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px 20px;
   align-items: start;
 }
@@ -3094,13 +3093,10 @@ onUnmounted(() => {
   border-left: 1px solid var(--border-subtle);
 }
 
-/* 列表按内容宽度收缩（不横撑整列，避免列被拉得极宽），
+/* 列表铺满右列（两列各占一半后右列约 502px，不会像原先那样被拉成 1000+px），
    并限制最大高度做内部滚动：列表再长也不会把卡片撑出屏幕。 */
 .dns-bound-block .fluent-table-wrapper {
-  width: fit-content;
-  /* 空态（暂无已绑定域名）时避免收缩成一条；min() 保证不会超出右列 */
-  min-width: min(380px, 100%);
-  max-width: 100%;
+  width: 100%;
   max-height: 176px;
 }
 
@@ -3126,11 +3122,6 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.dns-bound-hint {
-  font-size: 11.5px;
-  color: var(--text-disabled);
 }
 
 .dns-bound-table .col-tunnel-name {

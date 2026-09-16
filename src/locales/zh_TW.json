@@ -63,7 +63,6 @@
     "dns_domain_placeholder": "例如: mc.example.com",
     "btn_route_dns": "綁定",
     "dns_bound_title": "已綁定域名",
-    "dns_bound_hint": "點擊域名可複製 · ✎ 改名 · 🗑 解除綁定",
     "dns_bound_empty": "暫無已綁定的域名",
     "dns_col_tunnel": "隧道",
     "dns_edit_title": "修改綁定域名",

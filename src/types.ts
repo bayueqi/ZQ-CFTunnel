@@ -98,7 +98,6 @@ export interface LangPack {
     dns_domain_placeholder: string;
     btn_route_dns: string;
     dns_bound_title: string;
-    dns_bound_hint: string;
     dns_bound_empty: string;
     dns_col_tunnel: string;
     dns_edit_title: string;

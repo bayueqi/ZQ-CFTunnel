@@ -63,7 +63,6 @@
     "dns_domain_placeholder": "ej: mc.example.com",
     "btn_route_dns": "Vincular",
     "dns_bound_title": "Dominios Vinculados",
-    "dns_bound_hint": "Clic en el dominio para copiar · ✎ renombrar · 🗑 desvincular",
     "dns_bound_empty": "Aún no hay dominios vinculados",
     "dns_col_tunnel": "Túnel",
     "dns_edit_title": "Editar Dominio Vinculado",
