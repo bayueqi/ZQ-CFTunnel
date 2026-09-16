@@ -319,7 +319,7 @@
                 </div>
                 <div class="quick-item-actions">
                   <button v-if="qt.url" class="fluent-btn small primary" @click="openUrl(qt.url)">🌐 {{ t.server_tab.btn_open }}</button>
-                  <button class="fluent-btn small danger" @click="handleStopQuick(qt.key)">⏹ {{ t.server_tab.quick_stop }}</button>
+                  <button class="fluent-btn small danger" @click="promptStopQuick(qt.key)">⏹ {{ t.server_tab.quick_stop }}</button>
                 </div>
               </div>
             </div>
@@ -1009,6 +1009,24 @@
       </div>
     </div>
 
+    <!-- 临时隧道：停止二次确认弹窗 -->
+    <div v-if="showQuickStopModal" class="fluent-modal-overlay" @click.self="cancelStopQuick">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚠️ {{ t.server_tab.errors.quick_stop_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p v-if="quickStopTarget" class="modal-context">{{ quickTargetLabel(quickStopTarget) }}</p>
+          <p v-if="quickStopTarget?.url" class="modal-context mono">{{ quickStopTarget.url }}</p>
+          <p>{{ t.server_tab.errors.quick_stop_confirm_msg }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelStopQuick">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn danger" @click="confirmStopQuick">{{ t.server_tab.quick_stop }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Win11 退出应用二次确认模态弹窗 -->
     <div v-if="showExitConfirmModal" class="fluent-modal-overlay" @click.self="showExitConfirmModal = false">
       <div class="fluent-modal-dialog">
@@ -1141,7 +1159,16 @@ const selectLanguage = (key: LangKey) => {
   currentLang.value = key;
   isLangDropdownOpen.value = false;
   localStorage.setItem('app_lang', key);
-  // 切换语言后立即强制刷新页面，让 Vue 重新挂载整个 DOM，彻底防止错乱
+  // 切换语言需要重载页面（让 Vue 重新挂载整个 DOM，彻底防止错乱）。
+  // 重载会丢失内存里的视图状态，所以先把当前所在界面暂存到 sessionStorage，
+  // 由 setup 阶段同步恢复，避免重载后跳回「配置」页。
+  try {
+    sessionStorage.setItem('restore_view_on_reload', JSON.stringify({
+      tab: currentTab.value,
+      sidebarCollapsed: sidebarCollapsed.value,
+      sidebarOpen: sidebarOpen.value,
+    }));
+  } catch {}
   window.location.reload();
 };
 
@@ -1155,6 +1182,25 @@ const sidebarOpen = ref<Record<string, boolean>>({
   client: false,
   misc: false,
 });
+
+// 若上一动作是「切换语言」触发的页面重载，则同步还原当时的视图位置，
+// 避免重载后跳回「配置」页（server_mode / local_sub_mode 本就持久化，无需再还原）。
+try {
+  const raw = sessionStorage.getItem('restore_view_on_reload');
+  if (raw) {
+    sessionStorage.removeItem('restore_view_on_reload');
+    const saved = JSON.parse(raw) as {
+      tab?: string;
+      sidebarCollapsed?: boolean;
+      sidebarOpen?: Record<string, boolean>;
+    };
+    if (typeof saved.tab === 'string') currentTab.value = saved.tab;
+    if (typeof saved.sidebarCollapsed === 'boolean') sidebarCollapsed.value = saved.sidebarCollapsed;
+    if (saved.sidebarOpen && typeof saved.sidebarOpen === 'object') {
+      sidebarOpen.value = { ...sidebarOpen.value, ...saved.sidebarOpen };
+    }
+  }
+} catch {}
 
 // 点击侧边栏一级项：服务端需要连带处理下边栏的展开/折叠
 const handleSidebarClick = (tab: string) => {
@@ -1299,6 +1345,13 @@ const quickConfig = ref({
 const quickTunnels = ref<QuickTunnelItem[]>([]);
 const quickRunning = computed(() => quickTunnels.value.length > 0);
 const quickPortHasError = ref(false);
+
+// 停止临时隧道：二次确认弹窗（记录待停止的 key）
+const showQuickStopModal = ref(false);
+const quickStopKey = ref('');
+const quickStopTarget = computed(
+  () => quickTunnels.value.find(qt => qt.key === quickStopKey.value) || null
+);
 
 const onQuickPortInput = () => {
   const val = quickConfig.value.port;
@@ -2024,9 +2077,24 @@ const refreshQuickTunnels = async () => {
   }
 };
 
-// 停止指定快速隧道（按 key）
-const handleStopQuick = async (key: string) => {
+// 点击「停止」仅弹二次确认框，不直接停止
+const promptStopQuick = (key: string) => {
   soundManager.playClick();
+  quickStopKey.value = key;
+  showQuickStopModal.value = true;
+};
+
+const cancelStopQuick = () => {
+  showQuickStopModal.value = false;
+  quickStopKey.value = '';
+};
+
+// 确认停止指定快速隧道（按 key）
+const confirmStopQuick = async () => {
+  const key = quickStopKey.value;
+  if (!key) return;
+  showQuickStopModal.value = false;
+  quickStopKey.value = '';
   try {
     const res = await invoke<string>('stop_quick_tunnel', { key });
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
@@ -2203,6 +2271,8 @@ const onKeyDown = (e: KeyboardEvent) => {
       cancelEditDnsRoute();
     } else if (showDnsUnbindModal.value) {
       cancelUnbindDnsRoute();
+    } else if (showQuickStopModal.value) {
+      cancelStopQuick();
     } else if (showDeleteModal.value) {
       showDeleteModal.value = false;
     } else if (showExitConfirmModal.value) {
@@ -2971,9 +3041,16 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* DNS 路由绑定卡片 (位于服务端本地视图) */
+/* DNS 路由绑定卡片 (位于服务端本地视图)
+   改两列：左列「绑定表单」，右列「已绑定域名」列表。
+   纵向堆叠时该卡高达 394px，而卡片可用高度仅约 261px，必然被挤出视口看不到底；
+   两列后可压到 257px（实测），整卡与域名列表都能一屏看全。 */
 .dns-route-card {
   flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 12px 20px;
+  align-items: start;
 }
 
 .dns-route-title {
@@ -2983,11 +3060,57 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-/* 「已绑定域名」管理块（位于 DNS 路由绑定卡片内，与上方绑定表单用分割线隔开） */
+/* 标题横跨两列；表单与按钮归左列 */
+.dns-route-card > .dns-route-title {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.dns-route-card > .form-grid {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+
+.dns-route-card > .actions-row {
+  grid-column: 1;
+}
+
+/* 服务端页：让子视图参与父级的高度约束。
+   否则 .table-card 的 flex:1 失效（父级高度为 auto），隧道列表会按内容无限撑高整页，
+   把下方的「DNS 路由绑定」卡片（含「已绑定域名」块）挤出视口 —— 即"一眼看不到底"。
+   约束生效后：隧道列表在卡片内部滚动，DNS 路由卡始终完整可见。
+   内容真超出时由外层 .tab-view 兜底滚动，不会丢失内容。 */
+.server-view .server-sub-view {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 「已绑定域名」管理块：位于 DNS 卡右列，与左列表单用竖分割线隔开 */
 .dns-bound-block {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
+  grid-column: 2;
+  grid-row: 2 / span 2;
+  min-width: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* 列表按内容宽度收缩（不横撑整列，避免列被拉得极宽），
+   并限制最大高度做内部滚动：列表再长也不会把卡片撑出屏幕。 */
+.dns-bound-block .fluent-table-wrapper {
+  width: fit-content;
+  /* 空态（暂无已绑定域名）时避免收缩成一条；min() 保证不会超出右列 */
+  min-width: min(380px, 100%);
+  max-width: 100%;
+  max-height: 176px;
+}
+
+/* 该表按内容收缩。
+   注意：必须用 .dns-bound-block .fluent-table 这个两级选择器，
+   否则会被后面同样只有一级的 .fluent-table { min-width: max-content } 覆盖，
+   导致窄框里的表格仍按内容撑宽、只露出第一列并出现横向滚动。 */
+.dns-bound-block .fluent-table {
+  width: auto;
+  min-width: 0;
 }
 
 .dns-bound-head {

@@ -97,7 +97,9 @@
       "delete_confirm_msg": "Tem certeza de que deseja excluir o túnel \"{name}\"?",
       "dns_domain_invalid": "Insira um domínio válido (ex: mc.example.com)",
       "dns_unbind_confirm_title": "Confirmar Desvinculação",
-      "dns_unbind_confirm_msg": "Desvincular o domínio \"{name}\" do túnel \"{tunnel}\"? O domínio deixará de funcionar imediatamente; o túnel não será afetado."
+      "dns_unbind_confirm_msg": "Desvincular o domínio \"{name}\" do túnel \"{tunnel}\"? O domínio deixará de funcionar imediatamente; o túnel não será afetado.",
+      "quick_stop_confirm_title": "Confirmar parada do túnel temporário",
+      "quick_stop_confirm_msg": "Parar este túnel temporário? O domínio temporário deixa de funcionar imediatamente e o mesmo domínio não pode ser recuperado."
     }
   },
   "client_tab": {

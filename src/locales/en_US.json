@@ -97,7 +97,9 @@
       "delete_confirm_msg": "Are you sure you want to delete tunnel \"{name}\"? This action cannot be undone.",
       "dns_domain_invalid": "Please enter a valid domain (e.g. mc.example.com)",
       "dns_unbind_confirm_title": "Confirm Unbind",
-      "dns_unbind_confirm_msg": "Unbind hostname \"{name}\" from tunnel \"{tunnel}\"? The hostname will stop working immediately; the tunnel itself is not affected."
+      "dns_unbind_confirm_msg": "Unbind hostname \"{name}\" from tunnel \"{tunnel}\"? The hostname will stop working immediately; the tunnel itself is not affected.",
+      "quick_stop_confirm_title": "Confirm Stop Temporary Tunnel",
+      "quick_stop_confirm_msg": "Stop this temporary tunnel? Its temporary domain stops working immediately and the same domain cannot be recovered."
     }
   },
   "client_tab": {

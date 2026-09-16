@@ -97,7 +97,9 @@
       "delete_confirm_msg": "确定要删除隧道 \"{name}\" 吗？此操作无法撤销。",
       "dns_domain_invalid": "请输入有效的域名格式 (例如: mc.example.com)",
       "dns_unbind_confirm_title": "确认解除绑定",
-      "dns_unbind_confirm_msg": "确定要解除域名 \"{name}\" 与隧道 \"{tunnel}\" 的绑定吗？解除后该域名将立即无法访问，隧道本身不受影响。"
+      "dns_unbind_confirm_msg": "确定要解除域名 \"{name}\" 与隧道 \"{tunnel}\" 的绑定吗？解除后该域名将立即无法访问，隧道本身不受影响。",
+      "quick_stop_confirm_title": "确认停止临时隧道",
+      "quick_stop_confirm_msg": "确定要停止该临时隧道吗？停止后临时域名会立即失效，且无法恢复为同一个域名。"
     }
   },
   "client_tab": {

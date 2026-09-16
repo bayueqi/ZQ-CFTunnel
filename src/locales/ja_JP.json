@@ -97,7 +97,9 @@
       "delete_confirm_msg": "トンネル「{name}」を削除してもよろしいですか？",
       "dns_domain_invalid": "有効なドメインを入力してください (例: mc.example.com)",
       "dns_unbind_confirm_title": "バインド解除の確認",
-      "dns_unbind_confirm_msg": "ドメイン \"{name}\" とトンネル \"{tunnel}\" のバインドを解除しますか？解除後このドメインは即座にアクセスできなくなります。トンネル自体には影響しません。"
+      "dns_unbind_confirm_msg": "ドメイン \"{name}\" とトンネル \"{tunnel}\" のバインドを解除しますか？解除後このドメインは即座にアクセスできなくなります。トンネル自体には影響しません。",
+      "quick_stop_confirm_title": "一時トンネルの停止確認",
+      "quick_stop_confirm_msg": "この一時トンネルを停止しますか？停止すると一時ドメインは即座に無効になり、同じドメインには戻せません。"
     }
   },
   "client_tab": {

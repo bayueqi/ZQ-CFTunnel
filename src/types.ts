@@ -133,6 +133,8 @@ export interface LangPack {
       dns_domain_invalid: string;
       dns_unbind_confirm_title: string;
       dns_unbind_confirm_msg: string;
+      quick_stop_confirm_title: string;
+      quick_stop_confirm_msg: string;
     };
   };
   client_tab: {
