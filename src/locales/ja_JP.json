@@ -65,6 +65,8 @@
     "dns_bound_title": "バインド済みドメイン",
     "dns_bound_empty": "バインド済みドメインはありません",
     "dns_col_tunnel": "トンネル",
+    "dns_add_btn": "追加",
+    "dns_add_title": "バインドを追加",
     "dns_edit_title": "バインドドメインの変更",
     "dns_edit_label": "新しいドメイン：",
     "btn_unbind": "バインド解除",

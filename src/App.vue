@@ -530,68 +530,18 @@
             </div>
           </div>
 
-          <!-- DNS 路由绑定卡片 -->
+          <!-- DNS 路由绑定卡片：标题行 + 添加按钮 + 通栏已绑定域名表 -->
           <div class="fluent-card form-card dns-route-card">
-            <h3 class="card-title dns-route-title">{{ t.server_tab.dns_section }}</h3>
-            <div class="form-grid">
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.dns_tunnel_name }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="dnsRoute.name"
-                    :placeholder="t.server_tab.dns_tunnel_name_placeholder"
-                    :class="['fluent-input', { 'input-error': dnsRouteNameHasError }]"
-                    @input="onDnsRouteNameInput"
-                  />
-                </div>
-                <div v-if="dnsRouteNameHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.tunnel_invalid }}
-                </div>
-              </div>
-
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.dns_domain }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="dnsRoute.domain"
-                    :placeholder="t.server_tab.dns_domain_placeholder"
-                    :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
-                    @input="onDnsRouteDomainInput"
-                  />
-                </div>
-                <div v-if="dnsRouteDomainHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.dns_domain_invalid }}
-                </div>
-              </div>
-            </div>
-
-            <div class="actions-row center-actions">
-              <button
-                class="fluent-btn primary"
-                @click="handleRouteDns"
-                :disabled="dnsRouteNameHasError || dnsRouteDomainHasError || !dnsRoute.name || !dnsRoute.domain"
-              >
-                <span class="btn-icon">🏷️</span>
-                {{ t.server_tab.btn_route_dns }}
+            <div class="dns-route-title-row">
+              <h3 class="card-title dns-route-title">{{ t.server_tab.dns_section }}</h3>
+              <button class="fluent-btn small primary" @click="openDnsAddModal">
+                <span class="btn-icon">＋</span>
+                {{ t.server_tab.dns_add_btn }}
               </button>
             </div>
 
             <!-- 已绑定域名管理：只列出固定域名（本地）隧道，每条可直接改名 / 解绑 -->
             <div class="dns-bound-block">
-              <div class="dns-bound-head">
-                <h4 class="dns-bound-title">{{ t.server_tab.dns_bound_title }}</h4>
-              </div>
-
               <div class="fluent-table-wrapper">
                 <table class="fluent-table dns-bound-table">
                   <thead>
@@ -967,6 +917,67 @@
     </div>
 
     <!-- DNS 绑定域名：改名弹窗（只改 DNS 记录名，不动隧道 ingress） -->
+    <!-- DNS 路由绑定：添加绑定弹窗（隧道下拉 + 域名输入） -->
+    <div v-if="showDnsAddModal" class="fluent-modal-overlay" @click.self="cancelDnsAdd">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">🏷️ {{ t.server_tab.dns_add_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <div class="fluent-form-group">
+            <label class="form-label">
+              {{ t.server_tab.dns_col_tunnel }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <select
+                v-model="dnsRoute.name"
+                class="fluent-input fluent-select"
+              >
+                <option value="" disabled>{{ t.server_tab.dns_tunnel_name_placeholder }}</option>
+                <option
+                  v-for="tn in localTunnelList"
+                  :key="tn.id"
+                  :value="tn.name"
+                >{{ tn.name }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="fluent-form-group">
+            <label class="form-label">
+              {{ t.server_tab.dns_domain }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="dnsRoute.domain"
+                :placeholder="t.server_tab.dns_domain_placeholder"
+                :class="['fluent-input', { 'input-error': dnsRouteDomainHasError }]"
+                @input="onDnsRouteDomainInput"
+                @keydown.enter="confirmDnsAdd"
+              />
+            </div>
+            <div v-if="dnsRouteDomainHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.server_tab.errors.dns_domain_invalid }}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelDnsAdd">{{ t.exit_modal.btn_cancel }}</button>
+          <button
+            class="fluent-btn primary"
+            @click="confirmDnsAdd"
+            :disabled="!dnsRoute.name || !dnsRoute.domain || isDnsMutating"
+          >
+            {{ t.server_tab.btn_route_dns }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showDnsEditModal" class="fluent-modal-overlay" @click.self="cancelEditDnsRoute">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
@@ -1277,6 +1288,7 @@ type DnsBoundRow = {
 };
 const showDnsEditModal = ref(false);
 const showDnsUnbindModal = ref(false);
+const showDnsAddModal = ref(false);
 const dnsEditTarget = ref<DnsBoundRow | null>(null);
 const dnsUnbindTarget = ref<DnsBoundRow | null>(null);
 const dnsEditValue = ref('');
@@ -1506,12 +1518,6 @@ const onClientPortInput = () => {
   const val = clientConfig.value.port;
   clientPortHasError.value = val.length > 0 && !isPortValid(val);
   localStorage.setItem('client_port', val);
-};
-
-const onDnsRouteNameInput = () => {
-  const val = dnsRoute.value.name;
-  dnsRouteNameHasError.value = val.length > 0 && !isTunnelNameValid(val);
-  localStorage.setItem('dns_route_name', val);
 };
 
 const onDnsRouteDomainInput = () => {
@@ -1878,20 +1884,46 @@ const handleStopServer = async (name?: string) => {
   }
 };
 
+// 打开「添加绑定」弹窗（隧道下拉 + 域名输入）
+const openDnsAddModal = () => {
+  soundManager.playClick();
+  // 预选第一个本地隧道（若有），域名清空
+  dnsRoute.value.name = localTunnelList.value[0]?.name || '';
+  dnsRoute.value.domain = '';
+  dnsRouteNameHasError.value = false;
+  dnsRouteDomainHasError.value = false;
+  showDnsAddModal.value = true;
+};
+
+const cancelDnsAdd = () => {
+  showDnsAddModal.value = false;
+  dnsRouteDomainHasError.value = false;
+};
+
+// 提交添加绑定（复用 handleRouteDns 的校验与调用，成功才关闭弹窗）
+const confirmDnsAdd = async () => {
+  if (isDnsMutating.value) return;
+  const ok = await handleRouteDns();
+  if (ok) {
+    showDnsAddModal.value = false;
+  }
+};
+
 // 绑定 DNS 路由 (cloudflared tunnel route dns <name> <hostname>)
-const handleRouteDns = async () => {
+// 返回是否绑定成功（供添加弹窗据此决定是否关闭）
+const handleRouteDns = async (): Promise<boolean> => {
   const name = dnsRoute.value.name.trim();
   const domain = dnsRoute.value.domain.trim();
 
   if (!isTunnelNameValid(name)) {
     dnsRouteNameHasError.value = true;
     appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
-    return;
+    return false;
   }
   if (!isDomainValid(domain)) {
     dnsRouteDomainHasError.value = true;
     appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
-    return;
+    return false;
   }
 
   soundManager.playSuccess();
@@ -1901,8 +1933,11 @@ const handleRouteDns = async () => {
     showToast(`DNS 路由绑定成功: ${domain} → ${name}`);
     // 绑定后立即刷新域名列表，新域名马上出现在「已绑定域名」里
     await refreshHostnamesOnly();
+    return true;
   } catch (err: any) {
     appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'server');
+    showToast(`绑定失败: ${err}`);
+    return false;
   }
 };
 
@@ -2287,6 +2322,8 @@ const onKeyDown = (e: KeyboardEvent) => {
       isLangDropdownOpen.value = false;
     } else if (showDnsEditModal.value) {
       cancelEditDnsRoute();
+    } else if (showDnsAddModal.value) {
+      cancelDnsAdd();
     } else if (showDnsUnbindModal.value) {
       cancelUnbindDnsRoute();
     } else if (showQuickStopModal.value) {
@@ -3093,6 +3130,10 @@ onUnmounted(() => {
 
 .form-card {
   flex-shrink: 0;
+  /* 比 .fluent-card 的 14px 更紧凑：表单卡是高度预算里的最大头，
+     收紧上下内边距能给隧道列表卡让出约 8px，默认窗口下多露一行隧道。 */
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 /* DNS 路由绑定卡片 (位于服务端本地视图)
@@ -3101,39 +3142,26 @@ onUnmounted(() => {
    两列后可压到约 242px（实测），整卡与域名列表都能一屏看全。 */
 .dns-route-card {
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px 20px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* 标题行：标题居左，「添加」按钮居右，两端对齐 */
+.dns-route-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .dns-route-title {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-/* 标题横跨两列；表单与按钮归左列 */
-.dns-route-card > .dns-route-title {
-  grid-column: 1 / -1;
-  margin-bottom: 0;
-}
-
-/* 左列的两个输入框并排。
-   全局 .form-grid 是 minmax(260px,1fr)：左列只有约 494px 宽，放不下两列，
-   于是「隧道名称 / 绑定域名」竖着排，光这一列就 128px 高 —— 比右列的域名列表
-   （164px）还接近，白白把卡片顶高 13px。并排后整列压到约 50px，
-   卡片高度改由右列的域名列表决定，默认窗口下三张卡刚好一屏放下、不用滚动。 */
-.dns-route-card > .form-grid {
-  grid-column: 1;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  margin-bottom: 0;
-}
-
-.dns-route-card > .actions-row {
-  grid-column: 1;
 }
 
 /* 服务端页：让子视图参与父级的高度约束。
@@ -3147,20 +3175,16 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-/* 「已绑定域名」管理块：位于 DNS 卡右列，与左列表单用竖分割线隔开 */
+/* 「已绑定域名」管理块：通栏铺满整卡（原五五开两列已取消，表单移入添加弹窗） */
 .dns-bound-block {
-  grid-column: 2;
-  grid-row: 2 / span 2;
   min-width: 0;
-  padding-left: 20px;
-  border-left: 1px solid var(--border-subtle);
 }
 
-/* 列表铺满右列（两列各占一半后右列约 502px，不会像原先那样被拉成 1000+px），
-   并限制最大高度做内部滚动：列表再长也不会把卡片撑出屏幕。 */
+/* 列表铺满整卡宽度，并限制最大高度做内部滚动：列表再长也不会把卡片撑出屏幕。
+   上限取约 2 行（表头 34 + 2 行 ≈ 100px），把更多高度让给上方的隧道列表卡（更常用）。 */
 .dns-bound-block .fluent-table-wrapper {
   width: 100%;
-  max-height: 176px;
+  max-height: 100px;
 }
 
 /* 该表铺满右列。
@@ -3174,21 +3198,6 @@ onUnmounted(() => {
   width: 100%;
   min-width: 0;
   table-layout: fixed;
-}
-
-.dns-bound-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-.dns-bound-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .dns-bound-table .col-tunnel-name {
@@ -3318,7 +3327,7 @@ onUnmounted(() => {
 .server-sub-view {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 /* 隧道类型徽章 */
@@ -3391,7 +3400,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .fluent-form-group {
@@ -3612,11 +3621,12 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 隧道列表的表格框给一个高度下限：表头 + 1 整行 + 横向滚动条。
+/* 隧道列表的表格框给一个高度下限：表头 + 2~3 整行。
    没有这个下限时，flex 压缩会把它压到只剩一条 sticky 表头，
-   数据行全被顶出可视区 —— 这是"隧道列表内容消失"的真正原因。 */
+   数据行全被顶出可视区 —— 这是"隧道列表内容消失"的真正原因。
+   150px ≈ 表头 34 + 3 行 × 35 + 横向滚动条，保证默认窗口能直接看到至少 3 条隧道。 */
 .table-card > .fluent-table-wrapper {
-  min-height: 100px;
+  min-height: 150px;
 }
 
 .fluent-table-wrapper {

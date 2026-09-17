@@ -65,6 +65,8 @@
     "dns_bound_title": "Dominios Vinculados",
     "dns_bound_empty": "Aún no hay dominios vinculados",
     "dns_col_tunnel": "Túnel",
+    "dns_add_btn": "Añadir",
+    "dns_add_title": "Añadir Vinculación",
     "dns_edit_title": "Editar Dominio Vinculado",
     "dns_edit_label": "Nuevo dominio:",
     "btn_unbind": "Desvincular",

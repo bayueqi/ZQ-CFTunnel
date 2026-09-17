@@ -65,6 +65,8 @@
     "dns_bound_title": "Bound Hostnames",
     "dns_bound_empty": "No bound hostnames yet",
     "dns_col_tunnel": "Tunnel",
+    "dns_add_btn": "Add",
+    "dns_add_title": "Add Binding",
     "dns_edit_title": "Edit Bound Hostname",
     "dns_edit_label": "New hostname:",
     "btn_unbind": "Unbind",

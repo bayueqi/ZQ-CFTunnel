@@ -65,6 +65,8 @@
     "dns_bound_title": "已绑定域名",
     "dns_bound_empty": "暂无已绑定的域名",
     "dns_col_tunnel": "隧道",
+    "dns_add_btn": "添加",
+    "dns_add_title": "添加绑定",
     "dns_edit_title": "修改绑定域名",
     "dns_edit_label": "新域名：",
     "btn_unbind": "解除绑定",

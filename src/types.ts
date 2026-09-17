@@ -100,6 +100,8 @@ export interface LangPack {
     dns_bound_title: string;
     dns_bound_empty: string;
     dns_col_tunnel: string;
+    dns_add_btn: string;
+    dns_add_title: string;
     dns_edit_title: string;
     dns_edit_label: string;
     btn_unbind: string;
