@@ -124,7 +124,14 @@
     "col_port": "Porta local",
     "col_status": "Status",
     "col_action": "Ação",
-    "empty": "Nenhum túnel encontrado"
+    "empty": "Nenhum túnel encontrado",
+    "refresh_btn": "Atualizar",
+    "btn_start": "Iniciar",
+    "btn_stop": "Parar",
+    "btn_edit": "Editar",
+    "btn_delete": "Excluir",
+    "btn_save": "Salvar",
+    "edit_title": "Editar túnel de cliente"
   },
   "misc_tab": {
     "btn_install": "Instalar cloudflared",

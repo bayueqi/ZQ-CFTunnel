@@ -124,7 +124,14 @@
     "col_port": "ローカルポート",
     "col_status": "状態",
     "col_action": "操作",
-    "empty": "トンネルが見つかりません"
+    "empty": "トンネルが見つかりません",
+    "refresh_btn": "更新",
+    "btn_start": "起動",
+    "btn_stop": "停止",
+    "btn_edit": "編集",
+    "btn_delete": "削除",
+    "btn_save": "保存",
+    "edit_title": "クライアントトンネルを編集"
   },
   "misc_tab": {
     "btn_install": "cloudflared をインストール",

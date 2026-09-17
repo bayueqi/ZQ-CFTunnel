@@ -124,7 +124,14 @@
     "col_port": "本地端口",
     "col_status": "状态",
     "col_action": "操作",
-    "empty": "未发现隧道"
+    "empty": "未发现隧道",
+    "refresh_btn": "刷新",
+    "btn_start": "启动",
+    "btn_stop": "停止",
+    "btn_edit": "编辑",
+    "btn_delete": "删除",
+    "btn_save": "保存",
+    "edit_title": "编辑客户端隧道"
   },
   "misc_tab": {
     "btn_install": "安装 cloudflared",

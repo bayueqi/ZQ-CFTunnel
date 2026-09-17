@@ -124,7 +124,14 @@
     "col_port": "本機連接埠",
     "col_status": "狀態",
     "col_action": "操作",
-    "empty": "未發現隧道"
+    "empty": "未發現隧道",
+    "refresh_btn": "重新整理",
+    "btn_start": "啟動",
+    "btn_stop": "停止",
+    "btn_edit": "編輯",
+    "btn_delete": "刪除",
+    "btn_save": "儲存",
+    "edit_title": "編輯客戶端隧道"
   },
   "misc_tab": {
     "btn_install": "安裝 cloudflared",

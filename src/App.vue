@@ -217,37 +217,29 @@
           <!-- 输入表单卡片 -->
           <div class="fluent-card form-card">
             <div class="form-grid">
-              <!-- 目标地址：随协议自动切换形态
-                   普通协议 = 端口输入框；unix / unix+tls = 套接字路径直接顶替端口位置；
-                   hello_world = 无需填写，只给一行说明，不显示输入框。 -->
-              <div class="fluent-form-group">
+              <div v-if="quickAddressMode !== 'none'" class="fluent-form-group">
                 <label class="form-label">
-                  {{ quickAddressMode === 'socket' ? t.server_tab.unix_socket_label
-                     : quickAddressMode === 'none' ? t.server_tab.quick_no_address_label
-                     : t.server_tab.quick_port_label }}
-                  <span v-if="quickAddressMode !== 'none'" class="required">*</span>
+                  {{ quickAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.quick_port_label }}
+                  <span class="required">*</span>
                 </label>
-                <template v-if="quickAddressMode !== 'none'">
-                  <div class="input-container">
-                    <input
-                      v-if="quickAddressMode === 'port'"
-                      type="text"
-                      v-model="quickConfig.port"
-                      :placeholder="t.server_tab.quick_port_placeholder"
-                      :class="['fluent-input', { 'input-error': quickPortHasError }]"
-                      @input="onQuickPortInput"
-                    />
-                    <input
-                      v-else
-                      type="text"
-                      v-model="quickConfig.unixSocket"
-                      :placeholder="t.server_tab.unix_socket_placeholder"
-                      class="fluent-input"
-                      @input="onQuickUnixSocketInput"
-                    />
-                  </div>
-                </template>
-                <div v-else class="address-hint">{{ t.server_tab.quick_no_address_hint }}</div>
+                <div class="input-container">
+                  <input
+                    v-if="quickAddressMode === 'port'"
+                    type="text"
+                    v-model="quickConfig.port"
+                    :placeholder="t.server_tab.quick_port_placeholder"
+                    :class="['fluent-input', { 'input-error': quickPortHasError }]"
+                    @input="onQuickPortInput"
+                  />
+                  <input
+                    v-else
+                    type="text"
+                    v-model="quickConfig.unixSocket"
+                    :placeholder="t.server_tab.unix_socket_placeholder"
+                    class="fluent-input"
+                    @input="onQuickUnixSocketInput"
+                  />
+                </div>
               </div>
 
               <div class="fluent-form-group">
@@ -283,7 +275,9 @@
               </button>
               <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
-                {{ quickRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
+                {{ quickRunning
+                  ? `${t.server_tab.status_running} (${quickTunnels.length})`
+                  : t.server_tab.status_stopped }}
               </div>
             </div>
           </div>
@@ -349,39 +343,33 @@
                 </div>
               </div>
 
-              <!-- 目标地址：随协议自动切换形态（端口 / 套接字路径 / 无需填写） -->
-              <div class="fluent-form-group">
+              <div v-if="serverAddressMode !== 'none'" class="fluent-form-group">
                 <label class="form-label">
-                  {{ serverAddressMode === 'socket' ? t.server_tab.unix_socket_label
-                     : serverAddressMode === 'none' ? t.server_tab.quick_no_address_label
-                     : t.server_tab.port }}
-                  <span v-if="serverAddressMode !== 'none'" class="required">*</span>
+                  {{ serverAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
+                  <span class="required">*</span>
                 </label>
-                <template v-if="serverAddressMode !== 'none'">
-                  <div class="input-container">
-                    <input
-                      v-if="serverAddressMode === 'port'"
-                      type="text"
-                      v-model="serverConfig.port"
-                      :placeholder="t.server_tab.port_placeholder"
-                      :class="['fluent-input', { 'input-error': serverPortHasError }]"
-                      @input="onServerPortInput"
-                    />
-                    <input
-                      v-else
-                      type="text"
-                      v-model="serverConfig.unixSocket"
-                      :placeholder="t.server_tab.unix_socket_placeholder"
-                      class="fluent-input"
-                      @input="onServerUnixSocketInput"
-                    />
-                  </div>
-                  <div v-if="serverAddressMode === 'port' && serverPortHasError" class="error-tip">
-                    <span class="error-icon">⚠️</span>
-                    {{ t.server_tab.errors.port_invalid }}
-                  </div>
-                </template>
-                <div v-else class="address-hint">{{ t.server_tab.quick_no_address_hint }}</div>
+                <div class="input-container">
+                  <input
+                    v-if="serverAddressMode === 'port'"
+                    type="text"
+                    v-model="serverConfig.port"
+                    :placeholder="t.server_tab.port_placeholder"
+                    :class="['fluent-input', { 'input-error': serverPortHasError }]"
+                    @input="onServerPortInput"
+                  />
+                  <input
+                    v-else
+                    type="text"
+                    v-model="serverConfig.unixSocket"
+                    :placeholder="t.server_tab.unix_socket_placeholder"
+                    class="fluent-input"
+                    @input="onServerUnixSocketInput"
+                  />
+                </div>
+                <div v-if="serverAddressMode === 'port' && serverPortHasError" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ t.server_tab.errors.port_invalid }}
+                </div>
               </div>
 
               <!-- 协议选择 -->
@@ -425,9 +413,11 @@
                 {{ currentServerNameRunning ? t.server_tab.btn_stop : t.server_tab.btn_start }}
               </button>
 
-              <div class="status-pill" :class="currentServerNameRunning ? 'online' : 'offline'">
+              <div class="status-pill" :class="localRunningCount > 0 ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
-                {{ currentServerNameRunning ? t.server_tab.status_running : t.server_tab.status_stopped }}
+                {{ localRunningCount > 0
+                  ? `${t.server_tab.status_running} (${localRunningCount})`
+                  : t.server_tab.status_stopped }}
               </div>
             </div>
           </div>
@@ -625,7 +615,9 @@
 
               <div class="status-pill" :class="remoteRunning ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
-                {{ remoteRunning ? t.server_tab.status_remote_running : t.server_tab.status_remote_stopped }}
+                {{ remoteRunning
+                  ? `${t.server_tab.status_remote_running} (${remoteRunningCount})`
+                  : t.server_tab.status_remote_stopped }}
               </div>
             </div>
           </div>
@@ -707,20 +699,23 @@
           <div class="client-title-row">
             <h3 class="card-title client-title">{{ t.client_tab.title }}</h3>
             <div class="client-title-actions">
-              <div class="status-pill" :class="clientConnections.length > 0 ? 'online' : 'offline'">
-                <span class="pill-dot"></span>
-                {{ clientConnections.length > 0
-                  ? `${t.client_tab.status_connected} ${clientConnections.length}`
+              <div class="status-pill" :class="clientRunningCount > 0 ? 'online' : 'offline'">
+                {{ clientRunningCount > 0
+                  ? `${t.client_tab.status_connected} ${clientRunningCount}`
                   : t.client_tab.status_disconnected }}
               </div>
               <button class="fluent-btn small primary" @click="openClientAddModal">
                 <span class="btn-icon">＋</span>
                 {{ t.client_tab.add_btn }}
               </button>
+              <button class="fluent-btn small" @click="refreshClientTunnels(true)">
+                <span class="btn-icon">🔄</span>
+                {{ t.client_tab.refresh_btn }}
+              </button>
             </div>
           </div>
 
-          <!-- 已连接的客户端隧道：每条隧道一个进程，互不影响，可逐条断开 -->
+          <!-- 客户端隧道列表：配置持久保存，断开后条目保留，可随时再启动 -->
           <div class="fluent-table-wrapper client-table-wrapper">
             <table class="fluent-table">
               <thead>
@@ -732,25 +727,41 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="c in clientConnections" :key="c.key">
+                <tr v-for="c in clientRows" :key="c.key">
                   <td class="col-hostname font-bold" :title="c.domain">{{ c.domain }}</td>
                   <td class="col-port mono">{{ c.port }}</td>
                   <td class="col-status">
-                    <span class="tunnel-status online">
-                      {{ t.client_tab.status_connected }}
+                    <span class="tunnel-status" :class="{ online: c.running }">
+                      {{ c.running ? t.client_tab.status_connected : t.client_tab.status_disconnected }}
                     </span>
                   </td>
                   <td class="col-actions">
                     <button
-                      class="row-action-btn danger"
-                      :title="t.client_tab.btn_disconnect"
-                      @click.stop="handleStopClient(c)"
+                      class="row-action-btn"
+                      :class="c.running ? 'danger' : 'primary'"
+                      :title="c.running ? t.client_tab.btn_stop : t.client_tab.btn_start"
+                      @click.stop="c.running ? handleStopClient(c) : handleStartClient(c)"
                     >
-                      <span class="icon-square"></span>
+                      {{ c.running ? '⏹' : '▶' }}
+                    </button>
+                    <button
+                      class="row-action-btn"
+                      :title="t.client_tab.btn_edit"
+                      :disabled="c.running"
+                      @click.stop="openClientEditModal(c)"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      class="row-action-btn danger"
+                      :title="t.client_tab.btn_delete"
+                      @click.stop="handleDeleteClient(c)"
+                    >
+                      🗑
                     </button>
                   </td>
                 </tr>
-                <tr v-if="clientConnections.length === 0">
+                <tr v-if="clientRows.length === 0">
                   <td colspan="4" class="empty-table">{{ t.client_tab.empty }}</td>
                 </tr>
               </tbody>
@@ -1004,11 +1015,13 @@
       </div>
     </div>
 
-    <!-- 客户端：新增一条隧道连接弹窗（可重复打开，逐条累加，互不影响） -->
+    <!-- 客户端：新增 / 编辑隧道配置弹窗（配置持久保存，是否启动由列表里的按钮控制） -->
     <div v-if="showClientAddModal" class="fluent-modal-overlay" @click.self="cancelClientAdd">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">🔗 {{ t.client_tab.add_title }}</h3>
+          <h3 class="modal-title">
+            {{ editingClientKey ? `✎ ${t.client_tab.edit_title}` : `🔗 ${t.client_tab.add_title}` }}
+          </h3>
         </div>
         <div class="modal-body">
           <div class="fluent-form-group">
@@ -1060,7 +1073,7 @@
             @click="confirmClientAdd"
             :disabled="!canSubmitClientAdd"
           >
-            {{ t.client_tab.btn_connect }}
+            {{ t.client_tab.btn_save }}
           </button>
         </div>
       </div>
@@ -1373,10 +1386,61 @@ const reconcileServerRunning = async () => {
   } catch {}
 };
 
-// 客户端隧道支持多开：这里保存后端每条 access tcp 桥接进程的实时快照
+// 客户端隧道支持多开：配置持久保存（localStorage），运行状态与后端对账。
+// 断开只是停掉 cloudflared 进程，条目留在列表里，随时可再次启动。
 const clientConnections = ref<ClientTunnelItem[]>([]);
+type SavedClientTunnel = { key: string; domain: string; port: string };
+const CLIENT_TUNNELS_STORAGE_KEY = 'client_tunnels_v1';
+const clientTunnelKey = (domain: string, port: string) => `${domain.trim()}:${port.trim()}`;
+
+const loadSavedClientTunnels = (): SavedClientTunnel[] => {
+  try {
+    const raw = localStorage.getItem(CLIENT_TUNNELS_STORAGE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x: any) => x && typeof x.domain === 'string' && typeof x.port === 'string')
+      .map((x: any) => ({
+        key: clientTunnelKey(x.domain, x.port),
+        domain: String(x.domain).trim(),
+        port: String(x.port).trim(),
+      }));
+  } catch {
+    return [];
+  }
+};
+const savedClientTunnels = ref<SavedClientTunnel[]>(loadSavedClientTunnels());
+const persistClientTunnels = () => {
+  localStorage.setItem(
+    CLIENT_TUNNELS_STORAGE_KEY,
+    JSON.stringify(savedClientTunnels.value.map(({ domain, port }) => ({ domain, port }))),
+  );
+};
+
+// 后端此刻真正在跑的客户端隧道 key（一条隧道一个 cloudflared access 进程）
+const clientRunningKeys = ref<string[]>([]);
+const clientRunningCount = computed(() => clientRunningKeys.value.length);
+const isClientRunning = (key: string) => clientRunningKeys.value.includes(key);
+
+// 表格行 = 已保存的配置 ∪ 后端正在跑的实例（旧版本遗留或外部启动的也能看到）
+const clientRows = computed(() => {
+  const rows: Array<SavedClientTunnel & { running: boolean }> = savedClientTunnels.value.map(
+    t => ({ ...t, running: isClientRunning(t.key) }),
+  );
+  const known = new Set(rows.map(r => r.key));
+  for (const item of clientConnections.value) {
+    if (!known.has(item.key)) {
+      rows.push({ key: item.key, domain: item.domain, port: item.port, running: true });
+    }
+  }
+  return rows;
+});
+
 const showClientAddModal = ref(false);
-// 打开弹窗的瞬间先取快照，确认按钮据此避免重复提交
+// 非空表示弹窗处于「编辑」模式，值是正在编辑条目的 key
+const editingClientKey = ref('');
+// 提交中标记，确认按钮据此避免重复提交
 const clientSubmitting = ref(false);
 const canSubmitClientAdd = computed(
   () =>
@@ -1483,6 +1547,12 @@ const selectedTunnel = ref<TunnelInfo | null>(null);
 
 const localTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'local'));
 const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'remote'));
+
+// 服务端三类隧道状态胶囊的「运行中 (数量)」统计
+const localRunningCount = computed(() =>
+  localTunnelList.value.filter(x => isTunnelRunning(x.name)).length,
+);
+const remoteRunningCount = computed(() => (remoteRunning.value ? 1 : 0));
 
 // 「已绑定域名」管理列表：只展开固定域名（本地）隧道，
 // 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
@@ -2281,17 +2351,55 @@ const confirmDeleteTunnel = async () => {
   }
 };
 
-// 与后端对账客户端隧道：后端用 try_wait() 回收已退出的进程，返回真实在跑的快照
+// 与后端对账客户端隧道：后端用 try_wait() 回收已退出的进程，返回真实在跑的快照；
+// 顺手把「后端在跑但本地没保存过」的条目补进保存列表（旧版本遗留 / 外部启动），避免刷新后消失。
 const refreshClientConnections = async () => {
   try {
-    clientConnections.value = await invoke<ClientTunnelItem[]>('list_client_tunnels');
+    const list = await invoke<ClientTunnelItem[]>('list_client_tunnels');
+    clientConnections.value = list;
+    clientRunningKeys.value = list.map(x => x.key);
+
+    const known = new Set(savedClientTunnels.value.map(t => t.key));
+    let added = false;
+    for (const item of list) {
+      if (!known.has(item.key)) {
+        savedClientTunnels.value.push({ key: item.key, domain: item.domain, port: item.port });
+        known.add(item.key);
+        added = true;
+      }
+    }
+    if (added) persistClientTunnels();
   } catch {}
 };
 
-// 打开「添加客户端连接」弹窗：每次清空域名，端口沿用上次填的值
+// 「刷新」按钮：与后端对账，并在控制台输出条数
+const refreshClientTunnels = async (withLog = false) => {
+  await refreshClientConnections();
+  if (withLog) {
+    appendLog(
+      `[INFO] 已刷新客户端隧道列表，共获取到 ${clientRunningKeys.value.length} 条隧道`,
+      'info',
+      'client',
+    );
+  }
+};
+
+// 打开「添加客户端隧道」弹窗
 const openClientAddModal = () => {
   soundManager.playClick();
+  editingClientKey.value = '';
   clientForm.value.domain = '';
+  clientFormDomainHasError.value = false;
+  clientFormPortHasError.value = false;
+  showClientAddModal.value = true;
+};
+
+// 打开「编辑客户端隧道」弹窗（运行中的条目不参与编辑，按钮已置灰）
+const openClientEditModal = (row: SavedClientTunnel) => {
+  soundManager.playClick();
+  editingClientKey.value = row.key;
+  clientForm.value.domain = row.domain;
+  clientForm.value.port = row.port;
   clientFormDomainHasError.value = false;
   clientFormPortHasError.value = false;
   showClientAddModal.value = true;
@@ -2299,11 +2407,12 @@ const openClientAddModal = () => {
 
 const cancelClientAdd = () => {
   showClientAddModal.value = false;
+  editingClientKey.value = '';
   clientFormDomainHasError.value = false;
   clientFormPortHasError.value = false;
 };
 
-// 新增一条客户端隧道（可重复添加，多条同时桥接，互不影响）
+// 保存客户端隧道：新增走「保存 + 自动启动」，编辑只改配置不动进程
 const confirmClientAdd = async () => {
   if (clientSubmitting.value) return;
 
@@ -2321,24 +2430,71 @@ const confirmClientAdd = async () => {
     return;
   }
 
-  soundManager.playSuccess();
+  const key = clientTunnelKey(domain, port);
+
+  // 编辑模式：只改已保存的配置
+  if (editingClientKey.value) {
+    const dup = savedClientTunnels.value.some(
+      t => t.key === key && t.key !== editingClientKey.value,
+    );
+    if (dup) {
+      appendLog(`[ERROR] 客户端隧道 [${key}] 已存在，请勿重复`, 'error', 'client');
+      showToast('该隧道已存在');
+      return;
+    }
+    const idx = savedClientTunnels.value.findIndex(t => t.key === editingClientKey.value);
+    if (idx !== -1) savedClientTunnels.value[idx] = { key, domain, port };
+    persistClientTunnels();
+    soundManager.playSuccess();
+    appendLog(`[SUCCESS] 客户端隧道配置已更新为 [${domain}:${port}]`, 'success', 'client');
+    showToast('客户端隧道已保存');
+    showClientAddModal.value = false;
+    editingClientKey.value = '';
+    return;
+  }
+
+  // 新增模式：重复直接拦掉，否则先落库再启动（启动失败条目仍保留，可再点启动）
+  if (savedClientTunnels.value.some(t => t.key === key)) {
+    appendLog(`[ERROR] 客户端隧道 [${key}] 已存在，请勿重复添加`, 'error', 'client');
+    showToast('该隧道已存在');
+    return;
+  }
+
   clientSubmitting.value = true;
+  savedClientTunnels.value.push({ key, domain, port });
+  persistClientTunnels();
   try {
     const res = await invoke<string>('start_client_tunnel', { domain, port });
+    soundManager.playSuccess();
     appendLog(`[SUCCESS] ${res}`, 'success', 'client');
     showToast(`客户端隧道已连接 (端口: ${port})`);
-    await refreshClientConnections();
     showClientAddModal.value = false;
   } catch (err: any) {
     appendLog(`[ERROR] 客户端连接失败: ${err}`, 'error', 'client');
     showToast(`${err}`);
   } finally {
+    await refreshClientConnections();
     clientSubmitting.value = false;
   }
 };
 
-// 断开指定的那一条客户端连接 (普通点击音效)
-const handleStopClient = async (conn: ClientTunnelItem) => {
+// 启动列表里某一条已保存的客户端隧道
+const handleStartClient = async (row: SavedClientTunnel) => {
+  soundManager.playClick();
+  try {
+    const res = await invoke<string>('start_client_tunnel', { domain: row.domain, port: row.port });
+    appendLog(`[SUCCESS] ${res}`, 'success', 'client');
+    showToast(`客户端隧道 ${row.domain}:${row.port} 已连接`);
+  } catch (err: any) {
+    appendLog(`[ERROR] 启动客户端隧道失败: ${err}`, 'error', 'client');
+    showToast(`${err}`);
+  } finally {
+    await refreshClientConnections();
+  }
+};
+
+// 断开指定的那一条客户端连接：条目保留在列表里，按钮转为「启动」(普通点击音效)
+const handleStopClient = async (conn: SavedClientTunnel) => {
   soundManager.playClick();
   try {
     const res = await invoke<string>('stop_client_tunnel', {
@@ -2347,10 +2503,26 @@ const handleStopClient = async (conn: ClientTunnelItem) => {
     });
     appendLog(`[INFO] ${res}`, 'warn', 'client');
     showToast(`已断开 ${conn.domain}:${conn.port}`);
-    await refreshClientConnections();
   } catch (err: any) {
     appendLog(`[ERROR] 断开客户端连接失败: ${err}`, 'error', 'client');
+  } finally {
+    await refreshClientConnections();
   }
+};
+
+// 删除保存的客户端隧道：运行中先断开，再从列表里移除
+const handleDeleteClient = async (row: SavedClientTunnel) => {
+  soundManager.playClick();
+  if (isClientRunning(row.key)) {
+    try {
+      await invoke<string>('stop_client_tunnel', { domain: row.domain, port: row.port });
+    } catch {}
+  }
+  savedClientTunnels.value = savedClientTunnels.value.filter(t => t.key !== row.key);
+  persistClientTunnels();
+  appendLog(`[INFO] 已删除客户端隧道 [${row.domain}:${row.port}]`, 'warn', 'client');
+  showToast(`已删除 ${row.domain}:${row.port}`);
+  await refreshClientConnections();
 };
 
 // 安装 cloudflared 流程 (根据系统与架构获取官方直链并下载至应用目录)
@@ -2508,7 +2680,7 @@ onMounted(async () => {
   try {
     const serverKeys = await invoke<string[]>('is_server_running');
     serverRunningNames.value = serverKeys;
-    clientConnections.value = await invoke<ClientTunnelItem[]>('list_client_tunnels');
+    await refreshClientConnections();
     const remoteKeys = await invoke<string[]>('is_remote_running');
     remoteRunning.value = remoteKeys.length > 0;
     const quickKeys = await invoke<string[]>('is_quick_running');
@@ -3897,7 +4069,36 @@ onUnmounted(() => {
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-primary);
   transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* 一行里并排多个操作按钮时的间距 */
+.col-actions .row-action-btn + .row-action-btn {
+  margin-left: 4px;
+}
+
+.row-action-btn.primary {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.row-action-btn.primary:hover {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+}
+
+.row-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.row-action-btn:disabled:hover {
+  background-color: transparent;
+  border-color: var(--border-subtle);
 }
 
 .row-action-btn:hover {

@@ -163,6 +163,13 @@ export interface LangPack {
     col_status: string;
     col_action: string;
     empty: string;
+    refresh_btn: string;
+    btn_start: string;
+    btn_stop: string;
+    btn_edit: string;
+    btn_delete: string;
+    btn_save: string;
+    edit_title: string;
     errors: {
       domain_invalid: string;
       port_invalid: string;

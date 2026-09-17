@@ -124,7 +124,14 @@
     "col_port": "Local Port",
     "col_status": "Status",
     "col_action": "Action",
-    "empty": "No tunnels found"
+    "empty": "No tunnels found",
+    "refresh_btn": "Refresh",
+    "btn_start": "Start",
+    "btn_stop": "Stop",
+    "btn_edit": "Edit",
+    "btn_delete": "Delete",
+    "btn_save": "Save",
+    "edit_title": "Edit client tunnel"
   },
   "misc_tab": {
     "btn_install": "Install cloudflared",
