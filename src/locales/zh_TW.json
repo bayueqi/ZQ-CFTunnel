@@ -131,7 +131,9 @@
     "btn_edit": "編輯",
     "btn_delete": "刪除",
     "btn_save": "儲存",
-    "edit_title": "編輯客戶端隧道"
+    "edit_title": "編輯客戶端隧道",
+    "delete_confirm_title": "確認刪除客戶端隧道",
+    "delete_confirm_msg": "確定要刪除客戶端隧道 \"{target}\" 嗎？刪除後該項目會從清單中移除，執行中的隧道會先被中斷。"
   },
   "misc_tab": {
     "btn_install": "安裝 cloudflared",

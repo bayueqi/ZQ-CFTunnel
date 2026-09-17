@@ -131,7 +131,9 @@
     "btn_edit": "编辑",
     "btn_delete": "删除",
     "btn_save": "保存",
-    "edit_title": "编辑客户端隧道"
+    "edit_title": "编辑客户端隧道",
+    "delete_confirm_title": "确认删除客户端隧道",
+    "delete_confirm_msg": "确定要删除客户端隧道 \"{target}\" 吗？删除后该条目会从列表中移除，运行中的隧道会先被断开。"
   },
   "misc_tab": {
     "btn_install": "安装 cloudflared",

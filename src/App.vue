@@ -699,11 +699,6 @@
           <div class="client-title-row">
             <h3 class="card-title client-title">{{ t.client_tab.title }}</h3>
             <div class="client-title-actions">
-              <div class="status-pill" :class="clientRunningCount > 0 ? 'online' : 'offline'">
-                {{ clientRunningCount > 0
-                  ? `${t.client_tab.status_connected} ${clientRunningCount}`
-                  : t.client_tab.status_disconnected }}
-              </div>
               <button class="fluent-btn small primary" @click="openClientAddModal">
                 <span class="btn-icon">＋</span>
                 {{ t.client_tab.add_btn }}
@@ -712,6 +707,11 @@
                 <span class="btn-icon">🔄</span>
                 {{ t.client_tab.refresh_btn }}
               </button>
+              <div class="status-pill" :class="clientRunningCount > 0 ? 'online' : 'offline'">
+                {{ clientRunningCount > 0
+                  ? `${t.client_tab.status_connected} ${clientRunningCount}`
+                  : t.client_tab.status_disconnected }}
+              </div>
             </div>
           </div>
 
@@ -1079,6 +1079,22 @@
       </div>
     </div>
 
+    <!-- 客户端：删除二次确认弹窗 -->
+    <div v-if="showClientDeleteModal" class="fluent-modal-overlay" @click.self="cancelDeleteClient">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚠️ {{ t.client_tab.delete_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ t.client_tab.delete_confirm_msg.replace('{target}', `${pendingDeleteClient?.domain || ''}:${pendingDeleteClient?.port || ''}`) }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelDeleteClient">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn danger" @click="confirmDeleteClient">{{ t.client_tab.btn_delete }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 临时链接：停止二次确认弹窗 -->
     <div v-if="showQuickStopModal" class="fluent-modal-overlay" @click.self="cancelStopQuick">
       <div class="fluent-modal-dialog">
@@ -1391,7 +1407,10 @@ const reconcileServerRunning = async () => {
 const clientConnections = ref<ClientTunnelItem[]>([]);
 type SavedClientTunnel = { key: string; domain: string; port: string };
 const CLIENT_TUNNELS_STORAGE_KEY = 'client_tunnels_v1';
-const clientTunnelKey = (domain: string, port: string) => `${domain.trim()}:${port.trim()}`;
+// 分隔符必须与 Rust 侧 client_tunnel_key / 浏览器 mock 一致（域名|端口）。
+// 不一致会导致「已保存的配置」与「后端在跑的实例」key 不同，对账时被判成两条不同隧道，
+// 列表里就会同一域名端口出现两行（一行未连接、一行已连接）。
+const clientTunnelKey = (domain: string, port: string) => `${domain.trim()}|${port.trim()}`;
 
 const loadSavedClientTunnels = (): SavedClientTunnel[] => {
   try {
@@ -1399,13 +1418,19 @@ const loadSavedClientTunnels = (): SavedClientTunnel[] => {
     if (!raw) return [];
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return [];
-    return arr
-      .filter((x: any) => x && typeof x.domain === 'string' && typeof x.port === 'string')
-      .map((x: any) => ({
-        key: clientTunnelKey(x.domain, x.port),
-        domain: String(x.domain).trim(),
-        port: String(x.port).trim(),
-      }));
+    // 重新计算 key 并按 key 去重：老版本分隔符不同，对账时可能已经补进过重复条目
+    const out: SavedClientTunnel[] = [];
+    const seen = new Set<string>();
+    for (const x of arr) {
+      if (!x || typeof x.domain !== 'string' || typeof x.port !== 'string') continue;
+      const domain = String(x.domain).trim();
+      const port = String(x.port).trim();
+      const key = clientTunnelKey(domain, port);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ key, domain, port });
+    }
+    return out;
   } catch {
     return [];
   }
@@ -1432,12 +1457,19 @@ const clientRows = computed(() => {
   for (const item of clientConnections.value) {
     if (!known.has(item.key)) {
       rows.push({ key: item.key, domain: item.domain, port: item.port, running: true });
+      known.add(item.key);
     }
   }
-  return rows;
+  // 兜底去重：同一「域名|端口」无论来源如何，界面上只允许出现一行
+  const unique = new Map<string, SavedClientTunnel & { running: boolean }>();
+  for (const r of rows) unique.set(r.key, r);
+  return [...unique.values()];
 });
 
 const showClientAddModal = ref(false);
+// 删除二次确认弹窗：pendingDeleteClient 是等待确认的那一条
+const showClientDeleteModal = ref(false);
+const pendingDeleteClient = ref<SavedClientTunnel | null>(null);
 // 非空表示弹窗处于「编辑」模式，值是正在编辑条目的 key
 const editingClientKey = ref('');
 // 提交中标记，确认按钮据此避免重复提交
@@ -2510,9 +2542,24 @@ const handleStopClient = async (conn: SavedClientTunnel) => {
   }
 };
 
-// 删除保存的客户端隧道：运行中先断开，再从列表里移除
-const handleDeleteClient = async (row: SavedClientTunnel) => {
+// 删除按钮：先弹二次确认，确认后才真正删除
+const handleDeleteClient = (row: SavedClientTunnel) => {
   soundManager.playClick();
+  pendingDeleteClient.value = row;
+  showClientDeleteModal.value = true;
+};
+
+const cancelDeleteClient = () => {
+  showClientDeleteModal.value = false;
+  pendingDeleteClient.value = null;
+};
+
+// 确认删除：运行中的先断开，再从列表里移除（进程与配置一起清掉）
+const confirmDeleteClient = async () => {
+  const row = pendingDeleteClient.value;
+  showClientDeleteModal.value = false;
+  pendingDeleteClient.value = null;
+  if (!row) return;
   if (isClientRunning(row.key)) {
     try {
       await invoke<string>('stop_client_tunnel', { domain: row.domain, port: row.port });
@@ -2605,6 +2652,8 @@ const onKeyDown = (e: KeyboardEvent) => {
       cancelUnbindDnsRoute();
     } else if (showClientAddModal.value) {
       cancelClientAdd();
+    } else if (showClientDeleteModal.value) {
+      cancelDeleteClient();
     } else if (showQuickStopModal.value) {
       cancelStopQuick();
     } else if (showDeleteModal.value) {

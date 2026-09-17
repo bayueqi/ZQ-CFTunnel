@@ -169,6 +169,8 @@ export interface LangPack {
     btn_edit: string;
     btn_delete: string;
     btn_save: string;
+    delete_confirm_title: string;
+    delete_confirm_msg: string;
     edit_title: string;
     errors: {
       domain_invalid: string;

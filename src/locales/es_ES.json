@@ -131,7 +131,9 @@
     "btn_edit": "Editar",
     "btn_delete": "Eliminar",
     "btn_save": "Guardar",
-    "edit_title": "Editar túnel de cliente"
+    "edit_title": "Editar túnel de cliente",
+    "delete_confirm_title": "Eliminar túnel de cliente",
+    "delete_confirm_msg": "¿Eliminar el túnel de cliente \"{target}\"? Se quitará de la lista; si está en ejecución, se desconectará primero."
   },
   "misc_tab": {
     "btn_install": "Instalar cloudflared",

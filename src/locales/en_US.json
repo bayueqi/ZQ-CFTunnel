@@ -131,7 +131,9 @@
     "btn_edit": "Edit",
     "btn_delete": "Delete",
     "btn_save": "Save",
-    "edit_title": "Edit client tunnel"
+    "edit_title": "Edit client tunnel",
+    "delete_confirm_title": "Delete client tunnel",
+    "delete_confirm_msg": "Delete client tunnel \"{target}\"? The entry will be removed from the list; a running tunnel will be disconnected first."
   },
   "misc_tab": {
     "btn_install": "Install cloudflared",

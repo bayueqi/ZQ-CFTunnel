@@ -131,7 +131,9 @@
     "btn_edit": "編集",
     "btn_delete": "削除",
     "btn_save": "保存",
-    "edit_title": "クライアントトンネルを編集"
+    "edit_title": "クライアントトンネルを編集",
+    "delete_confirm_title": "クライアントトンネルの削除",
+    "delete_confirm_msg": "クライアントトンネル \"{target}\" を削除しますか？一覧から削除され、実行中の場合は先に切断されます。"
   },
   "misc_tab": {
     "btn_install": "cloudflared をインストール",
