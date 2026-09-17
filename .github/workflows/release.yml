@@ -39,23 +39,12 @@ jobs:
             target: 'x86_64-unknown-linux-gnu'
             args: '--target x86_64-unknown-linux-gnu'
 
-          # Linux i686 (32 位)
-          - platform: 'ubuntu-22.04'
-            target: 'i686-unknown-linux-gnu'
-            args: '--target i686-unknown-linux-gnu'
-            use-cross: true
-
           # Linux aarch64 (ARM 64 位，如树莓派 4/5、RK3588)
-          - platform: 'ubuntu-22.04'
+          # 用原生 ARM runner 而非 use-cross：cross 容器里找不到 libwebkit2gtk-4.1，
+          # 之前连续 5 次都挂在「build Tauri app」这一步。
+          - platform: 'ubuntu-22.04-arm'
             target: 'aarch64-unknown-linux-gnu'
             args: '--target aarch64-unknown-linux-gnu'
-            use-cross: true
-
-          # Linux armv7 (ARM 32 位 HF，如老款树莓派)
-          - platform: 'ubuntu-22.04'
-            target: 'armv7-unknown-linux-gnueabihf'
-            args: '--target armv7-unknown-linux-gnueabihf'
-            use-cross: true
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -74,7 +63,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: 安装 Linux 系统依赖 (Ubuntu 基础)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-22.04')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
@@ -101,10 +90,9 @@ jobs:
             ### 📦 跨平台多架构轻量级安装包列表：
             - **Windows**: x86_64 (64位), i686 (32位) - 便携版 / MSI 安装包 / NSIS 安装包 (超轻量 ~4MB)
             - **macOS**: Apple Silicon (M1/M2/M3/M4) / Intel - DMG 镜像包
-            - **Linux**: x86_64, i686, aarch64 (ARM64), armv7 (ARM32) - AppImage / DEB 安装包
+            - **Linux**: x86_64, aarch64 (ARM64) - AppImage / DEB 安装包
             
             *(应用启动后可在界面内一键自动检测并在线安装/更新官方 cloudflared 二进制)*
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          useCross: ${{ matrix.use-cross || false }}
