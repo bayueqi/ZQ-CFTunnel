@@ -291,7 +291,7 @@
             </div>
           </div>
 
-          <!-- 运行中的快速隧道列表卡片 -->
+          <!-- 运行中的临时链接列表卡片 -->
           <div class="fluent-card table-card">
             <div class="card-header">
               <h3 class="card-title">{{ t.server_tab.quick_list_title }}</h3>
@@ -2106,7 +2106,7 @@ const handleStartQuick = async () => {
   }
 };
 
-// 刷新快速隧道列表（从后端同步运行状态）
+// 刷新临时链接列表（从后端同步运行状态）
 const refreshQuickTunnels = async () => {
   try {
     const quickKeys = await invoke<string[]>('is_quick_running');
@@ -2123,9 +2123,9 @@ const refreshQuickTunnels = async () => {
       };
     });
     quickTunnels.value = merged;
-    appendLog(`[INFO] 已刷新快速隧道列表，共 ${merged.length} 个运行中`, 'info', 'quick');
+    appendLog(`[INFO] 已刷新临时链接列表，共获取到 ${merged.length} 条隧道`, 'info', 'quick');
   } catch (err: any) {
-    appendLog(`[ERROR] 刷新快速隧道列表失败: ${err}`, 'error', 'quick');
+    appendLog(`[ERROR] 刷新临时链接列表失败: ${err}`, 'error', 'quick');
   }
 };
 
