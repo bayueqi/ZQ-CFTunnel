@@ -191,6 +191,43 @@ fn delete_tunnel(name: String) -> Result<String, String> {
         return Err("隧道名不能为空".to_string());
     }
 
+    // 删除隧道前，先清理该隧道绑定的所有域名（Cloudflare 侧的 CNAME 记录），
+    // 避免留下指向已删除隧道的孤儿域名。找不到 tunnel_id（例如从未绑定过域名、
+    // 或未完成授权登录没有 cert.pem）时不做清理，也不阻断删除隧道本身。
+    let mut dns_cleanup_note = String::new();
+    if let Some(tunnel_id) = find_tunnel_id_by_name(trimmed) {
+        match get_hostnames_for_tunnel(&tunnel_id) {
+            Ok(bindings) => {
+                if bindings.is_empty() {
+                    dns_cleanup_note = "（该隧道无绑定域名）".to_string();
+                } else {
+                    let mut removed = 0usize;
+                    let mut failed = 0usize;
+                    for b in &bindings {
+                        match delete_dns_record_by_id(&b.id) {
+                            Ok(_) => removed += 1,
+                            Err(e) => {
+                                failed += 1;
+                                eprintln!("删除绑定域名 {} 失败: {}", b.name, e);
+                            }
+                        }
+                    }
+                    dns_cleanup_note = format!(
+                        "；已清理绑定域名 {}/{} 条",
+                        removed,
+                        bindings.len()
+                    );
+                    if failed > 0 {
+                        dns_cleanup_note.push_str(&format!("（{} 条失败）", failed));
+                    }
+                }
+            }
+            Err(e) => {
+                dns_cleanup_note = format!("；域名清理跳过（{}）", e);
+            }
+        }
+    }
+
     let mut cmd = create_base_command();
     cmd.args(["tunnel", "delete", trimmed])
         .stdout(Stdio::piped())
@@ -201,7 +238,7 @@ fn delete_tunnel(name: String) -> Result<String, String> {
     let err_str = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        Ok(format!("隧道 {} 已成功删除", trimmed))
+        Ok(format!("隧道 {} 已成功删除{}", trimmed, dns_cleanup_note))
     } else {
         Err(if !err_str.trim().is_empty() { err_str } else { out_str })
     }
@@ -1723,13 +1760,42 @@ fn is_valid_hostname(hostname: &str) -> bool {
 /// 该账号域名下所有指向隧道（*.cfargotunnel.com）的 CNAME 记录，
 /// 返回 `{ 隧道ID: [绑定域名...] }` 的映射，供前端隧道列表展示绑定域名。
 ///
-/// 每条记录带上 Cloudflare 的 dns_record_id，前端据此执行改名/解绑。
-/// 区域记录数可能超过单页上限，按 result_info.total_pages 翻页取全。
-#[tauri::command]
-fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
-    let (api_token, zone_id) = cloudflare_credentials()?;
+/// 通过 `cloudflared tunnel list --output json` 按隧道名查找其 Cloudflare tunnel_id。
+/// 找不到（隧道不存在或列表失败）返回 None，不抛错，供删除前清理域名等场景容错使用。
+fn find_tunnel_id_by_name(name: &str) -> Option<String> {
+    let mut cmd = create_base_command();
+    cmd.args(["tunnel", "list", "--output", "json"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = cmd.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    #[derive(Deserialize)]
+    struct RawTunnel {
+        id: String,
+        name: String,
+    }
+    let raw_list: Vec<RawTunnel> = serde_json::from_str(stdout_str.trim()).ok()?;
+    raw_list
+        .into_iter()
+        .find(|t| t.name == name)
+        .map(|t| t.id)
+}
 
-    let mut map: HashMap<String, Vec<DnsBinding>> = HashMap::new();
+/// 一条指向隧道的 DNS 记录，附带其指向的 tunnel_id（从 CNAME content 解析）。
+#[derive(Debug, Clone)]
+struct RawDnsBinding {
+    id: String,
+    name: String,
+    tunnel_id: String,
+}
+
+/// 分页拉取 Cloudflare 区域内全部指向隧道的 CNAME 记录（含 tunnel_id）。
+fn fetch_all_dns_bindings() -> Result<Vec<RawDnsBinding>, String> {
+    let (api_token, zone_id) = cloudflare_credentials()?;
+    let mut out: Vec<RawDnsBinding> = Vec::new();
     let mut page: u64 = 1;
 
     loop {
@@ -1753,12 +1819,11 @@ fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
                 if name.is_empty() || id.is_empty() {
                     continue;
                 }
-                map.entry(tunnel_id.to_string())
-                    .or_insert_with(Vec::new)
-                    .push(DnsBinding {
-                        id: id.to_string(),
-                        name: name.to_string(),
-                    });
+                out.push(RawDnsBinding {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    tunnel_id: tunnel_id.to_string(),
+                });
             }
         }
 
@@ -1771,6 +1836,54 @@ fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
             break;
         }
         page += 1;
+    }
+
+    Ok(out)
+}
+
+/// 拉取指向指定 tunnel_id 的全部 DNS 绑定记录，供删除隧道时的批量清理复用。
+fn get_hostnames_for_tunnel(tunnel_id: &str) -> Result<Vec<DnsBinding>, String> {
+    let all = fetch_all_dns_bindings()?;
+    let mut bindings: Vec<DnsBinding> = all
+        .into_iter()
+        .filter(|b| b.tunnel_id == tunnel_id)
+        .map(|b| DnsBinding { id: b.id, name: b.name })
+        .collect();
+    bindings.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(bindings)
+}
+
+/// 删除单条 DNS 记录（解除域名与隧道的绑定），供删除隧道时的批量清理复用。
+fn delete_dns_record_by_id(record_id: &str) -> Result<(), String> {
+    let trimmed_id = record_id.trim();
+    if !is_valid_record_id(trimmed_id) {
+        return Err(format!("DNS 记录 ID 格式不正确: {}", trimmed_id));
+    }
+    let (api_token, zone_id) = cloudflare_credentials()?;
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{}/dns_records/{}",
+        zone_id, trimmed_id
+    );
+    let body = cf_api_request("DELETE", &url, &api_token, None)?;
+    let json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
+    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(format!("删除域名失败: {}", extract_cf_error(&body)));
+    }
+    Ok(())
+}
+
+/// 每条记录带上 Cloudflare 的 dns_record_id，前端据此执行改名/解绑。
+/// 区域记录数可能超过单页上限，按 result_info.total_pages 翻页取全。
+#[tauri::command]
+fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
+    let all = fetch_all_dns_bindings()?;
+
+    let mut map: HashMap<String, Vec<DnsBinding>> = HashMap::new();
+    for b in all {
+        map.entry(b.tunnel_id)
+            .or_insert_with(Vec::new)
+            .push(DnsBinding { id: b.id, name: b.name });
     }
 
     // 同一隧道下的域名按字典序排列，避免每次刷新顺序漂移
@@ -1820,25 +1933,7 @@ fn rename_dns_route(record_id: String, hostname: String) -> Result<String, Strin
 /// 删除后该域名立即无法再通过隧道访问。
 #[tauri::command]
 fn delete_dns_route(record_id: String) -> Result<String, String> {
-    let trimmed_id = record_id.trim();
-
-    if !is_valid_record_id(trimmed_id) {
-        return Err("DNS 记录 ID 格式不正确".to_string());
-    }
-
-    let (api_token, zone_id) = cloudflare_credentials()?;
-    let url = format!(
-        "https://api.cloudflare.com/client/v4/zones/{}/dns_records/{}",
-        zone_id, trimmed_id
-    );
-    let body = cf_api_request("DELETE", &url, &api_token, None)?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
-    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
-        return Err(format!("删除域名失败: {}", extract_cf_error(&body)));
-    }
-
+    delete_dns_record_by_id(&record_id)?;
     Ok("域名绑定已删除".to_string())
 }
 
