@@ -36,8 +36,8 @@
     "nav_quick": "临时链接",
     "nav_named": "固定域名",
     "nav_remote": "云端托管",
-    "mode_local": "本地隧道",
-    "mode_remote": "远程隧道",
+    "mode_local": "固定域名",
+    "mode_remote": "云端托管",
     "sub_mode_quick": "临时链接域名",
     "sub_mode_named": "绑定域名 (命名隧道)",
     "quick_port_label": "本地端口:",
@@ -78,7 +78,7 @@
     "status_remote_running": "运行中",
     "status_remote_stopped": "已停止",
     "remote_config_title": "云端配置",
-    "remote_config_empty": "启动远程隧道后自动获取云端配置",
+    "remote_config_empty": "启动云端托管后自动获取云端配置",
     "headers": {
       "id": "隧道 ID",
       "name": "隧道名称",
@@ -154,7 +154,7 @@
   },
   "exit_modal": {
     "title": "退出 CFTunnel",
-    "message": "确定要真正退出程序吗？如果当前有正在运行的服务端、客户端或远程隧道，退出后将立即中断连接。",
+    "message": "确定要真正退出程序吗？如果当前有正在运行的服务端、客户端或云端托管隧道，退出后将立即中断连接。",
     "btn_confirm": "确认退出",
     "btn_cancel": "取消"
   }

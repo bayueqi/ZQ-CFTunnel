@@ -99,7 +99,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         throw new Error(`客户端隧道 [${domain}:${port}] 已在运行，无需重复连接`);
       }
       mockClients.push({ key, domain, port });
-      emitMockLog(`[INFO] 正在连接远程隧道服务: ${domain}...`, 'info', 'client');
+      emitMockLog(`[INFO] 正在连接隧道服务: ${domain}...`, 'info', 'client');
       setTimeout(() => {
         emitMockLog(`[SUCCESS] 客户端反向代理建立成功！本地监听端口: 127.0.0.1:${port}`, 'success', 'client');
       }, 400);

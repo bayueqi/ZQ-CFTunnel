@@ -36,7 +36,7 @@
     "nav_quick": "臨時連結",
     "nav_named": "固定網域",
     "nav_remote": "雲端託管",
-    "mode_local": "本地隧道",
+    "mode_local": "固定域名",
     "mode_remote": "遠端隧道",
     "sub_mode_quick": "臨時連結網域",
     "sub_mode_named": "綁定域名 (命名隧道)",

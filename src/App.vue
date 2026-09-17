@@ -210,7 +210,7 @@
       <main class="fluent-body">
       <!-- 1. 服务端 Tab -->
       <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
-        <!-- ============ 本地隧道视图 ============ -->
+        <!-- ============ 固定域名视图 ============ -->
         <div v-show="serverMode === 'local'" class="server-sub-view">
           <!-- ============ 临时链接（临时域名） ============ -->
           <div v-show="localSubMode === 'quick'" class="server-sub-view">
@@ -396,7 +396,7 @@
               </div>
             </div>
 
-            <!-- 本地隧道主要操作按钮 -->
+            <!-- 固定域名主要操作按钮 -->
             <div class="actions-row center-actions">
               <button class="fluent-btn" @click="handleCreateTunnel" :disabled="isCreatingTunnel">
                 <span class="btn-icon">➕</span>
@@ -422,7 +422,7 @@
             </div>
           </div>
 
-          <!-- 本地隧道列表卡片 -->
+          <!-- 固定域名列表卡片 -->
           <div class="fluent-card table-card">
             <div class="card-header">
               <h3 class="card-title">{{ t.server_tab.local_list_title }}</h3>
@@ -523,7 +523,7 @@
               </button>
             </div>
 
-            <!-- 已绑定域名管理：只列出固定域名（本地）隧道，每条可直接改名 / 解绑 -->
+            <!-- 已绑定域名管理：只列出固定域名的绑定记录，每条可直接改名 / 解绑 -->
             <div class="dns-bound-block">
               <div class="fluent-table-wrapper">
                 <table class="fluent-table dns-bound-table">
@@ -575,7 +575,7 @@
           </div>
         </div>
 
-        <!-- ============ 远程隧道视图 ============ -->
+        <!-- ============ 云端托管视图 ============ -->
         <div v-show="serverMode === 'remote'" class="server-sub-view">
           <!-- Token 输入 + 启动/停止 -->
           <div class="fluent-card form-card">
@@ -622,7 +622,7 @@
             </div>
           </div>
 
-          <!-- 远程隧道列表卡片 -->
+          <!-- 云端托管列表卡片 -->
           <div class="fluent-card table-card">
             <div class="card-header">
               <h3 class="card-title">{{ t.server_tab.remote_list_title }}</h3>
@@ -916,7 +916,7 @@
               <span class="required">*</span>
             </label>
             <div class="input-container">
-              <!-- 本地隧道列表为空时不渲染空的 select（会出现一个空输入格子），
+              <!-- 固定域名列表为空时不渲染空的 select（会出现一个空输入格子），
                    改为一行提示；正常路径由 openDnsAddModal 提前拦截。 -->
               <select
                 v-if="localTunnelList.length > 0"
@@ -1332,7 +1332,7 @@ const clientFormPortHasError = ref(false);
 const dnsRouteNameHasError = ref(false);
 const dnsRouteDomainHasError = ref(false);
 
-// DNS 绑定域名管理（改名 / 解绑），只作用于固定域名（本地）隧道的绑定记录
+// DNS 绑定域名管理（改名 / 解绑），只作用于固定域名的绑定记录
 type DnsBoundRow = {
   recordId: string;
   hostname: string;
@@ -1462,7 +1462,7 @@ const switchServerMode = (mode: 'local' | 'remote') => {
   localStorage.setItem('server_mode', mode);
 };
 
-// 本地隧道二级模式：临时链接(临时域名) / 命名隧道(绑定域名)
+// 固定域名二级模式：临时链接(临时域名) / 命名隧道(绑定域名)
 const localSubMode = ref<'quick' | 'named'>(localStorage.getItem('local_sub_mode') === 'quick' ? 'quick' : 'named');
 
 const switchLocalSubMode = (mode: 'quick' | 'named') => {
@@ -1536,7 +1536,7 @@ const quickTargetLabel = (qt: QuickTunnelItem) => {
   return `${qt.protocol}://127.0.0.1:${qt.port}`;
 };
 
-// 远程隧道
+// 云端托管
 const remoteToken = ref(localStorage.getItem('remote_token') || '');
 const remoteRunning = ref(false);
 const remoteConfigText = ref('');
@@ -1554,7 +1554,7 @@ const localRunningCount = computed(() =>
 );
 const remoteRunningCount = computed(() => (remoteRunning.value ? 1 : 0));
 
-// 「已绑定域名」管理列表：只展开固定域名（本地）隧道，
+// 「已绑定域名」管理列表：只展开固定域名的绑定记录，
 // 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
 // 按隧道聚合：一个隧道一行，其下所有绑定的域名收在 records 里，
 // 避免同一个隧道有 N 个域名就重复出现 N 行隧道名（原表格太乱）。
@@ -1789,7 +1789,7 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
     // 一并与后端对账命名隧道的运行状态（多开后靠这里把已退出的进程同步掉）
     await reconcileServerRunning();
 
-    // 按触发刷新的列表分别统计：固定域名 → 本地隧道，云端托管 → 远程隧道
+    // 按触发刷新的列表分别统计：固定域名列表 / 云端托管
     const localCount = res.filter(x => x.tunnel_type === 'local').length;
     const remoteCount = res.filter(x => x.tunnel_type === 'remote').length;
     const scopeName = scope === 'local' ? '固定域名' : scope === 'remote' ? '云端托管' : '隧道';
@@ -2022,7 +2022,7 @@ const handleStopServer = async (name?: string) => {
 
 // 打开「添加绑定」弹窗（隧道下拉 + 域名输入）
 const openDnsAddModal = () => {
-  // 没有任何固定域名（本地）隧道时无处可绑：直接提示，不弹空下拉框
+  // 没有任何固定域名隧道时无处可绑：直接提示，不弹空下拉框
   if (localTunnelList.value.length === 0) {
     soundManager.playClick();
     appendLog('[WARN] 未发现隧道，请先创建固定域名隧道再绑定域名', 'warn', 'server');
@@ -2030,7 +2030,7 @@ const openDnsAddModal = () => {
     return;
   }
   soundManager.playClick();
-  // 预选第一个本地隧道（若有），域名清空
+  // 预选第一个固定域名隧道（若有），域名清空
   dnsRoute.value.name = localTunnelList.value[0]?.name || '';
   dnsRoute.value.domain = '';
   dnsRouteNameHasError.value = false;
@@ -2178,11 +2178,11 @@ const confirmUnbindDnsRoute = async () => {
   }
 };
 
-// 启动远程隧道 (tunnel run --token，临时运行)
+// 启动云端托管 (tunnel run --token，临时运行)
 const handleStartRemoteTunnel = async () => {
   const token = remoteToken.value.trim();
   if (!token) {
-    appendLog(`[ERROR] 请先粘贴远程隧道 Token`, 'error', 'remote');
+    appendLog(`[ERROR] 请先粘贴云端托管 Token`, 'error', 'remote');
     return;
   }
   localStorage.setItem('remote_token', token);
@@ -2192,22 +2192,22 @@ const handleStartRemoteTunnel = async () => {
     const res = await invoke<string>('start_remote_tunnel', { token });
     remoteRunning.value = true;
     appendLog(`[SUCCESS] ${res}`, 'success', 'remote');
-    showToast('远程隧道已启动');
+    showToast('云端托管已启动');
   } catch (err: any) {
-    appendLog(`[ERROR] 启动远程隧道失败: ${err}`, 'error', 'remote');
+    appendLog(`[ERROR] 启动云端托管失败: ${err}`, 'error', 'remote');
   }
 };
 
-// 停止远程隧道
+// 停止云端托管
 const handleStopRemoteTunnel = async () => {
   soundManager.playClick();
   try {
     const res = await invoke<string>('stop_remote_tunnel');
     remoteRunning.value = false;
     appendLog(`[INFO] ${res}`, 'warn', 'remote');
-    showToast('远程隧道已停止');
+    showToast('云端托管已停止');
   } catch (err: any) {
-    appendLog(`[ERROR] 停止远程隧道失败: ${err}`, 'error', 'remote');
+    appendLog(`[ERROR] 停止云端托管失败: ${err}`, 'error', 'remote');
   }
 };
 
@@ -2652,7 +2652,7 @@ onMounted(async () => {
       showExitConfirmModal.value = true;
     });
 
-    // 监听远程隧道云端 ingress 配置更新
+    // 监听云端托管 ingress 配置更新
     await listen<string>('remote-config-update', (event) => {
       remoteConfigText.value = event.payload;
     });

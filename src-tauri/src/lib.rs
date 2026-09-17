@@ -1313,7 +1313,7 @@ fn start_remote_tunnel(
         if e.kind() == std::io::ErrorKind::NotFound {
             "未找到 cloudflared 程序，请先在「配置」页点击「安装 cloudflared」".to_string()
         } else {
-            format!("启动远程隧道失败: {}", e)
+            format!("启动云端托管失败: {}", e)
         }
     })?;
 
@@ -1366,7 +1366,7 @@ fn start_remote_tunnel(
 
     proc_guard.insert(key, child);
 
-    let start_msg = "已启动远程隧道（tunnel run --token）".to_string();
+    let start_msg = "已启动云端托管（tunnel run --token）".to_string();
     let _ = app.emit(
         "log-message",
         LogPayload {
@@ -1388,14 +1388,14 @@ fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<St
             let _ = app.emit(
                 "log-message",
                 LogPayload {
-                    message: "[INFO] 远程隧道已停止".to_string(),
+                    message: "[INFO] 云端托管已停止".to_string(),
                     level: "warn".to_string(),
                     source: "remote".to_string(),
                 },
             );
-            Ok("远程隧道已停止".to_string())
+            Ok("云端托管已停止".to_string())
         } else {
-            Ok("指定的远程隧道当前未在运行".to_string())
+            Ok("指定的云端托管隧道当前未在运行".to_string())
         }
     } else {
         let count = proc_guard.len();
@@ -1405,15 +1405,15 @@ fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<St
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: format!("[INFO] 已停止全部远程隧道（共 {} 个）", count),
+                message: format!("[INFO] 已停止全部云端托管隧道（共 {} 个）", count),
                 level: "warn".to_string(),
                 source: "remote".to_string(),
             },
         );
         if count > 0 {
-            Ok(format!("已停止全部远程隧道（共 {} 个）", count))
+            Ok(format!("已停止全部云端托管隧道（共 {} 个）", count))
         } else {
-            Ok("当前没有正在运行的远程隧道".to_string())
+            Ok("当前没有正在运行的云端托管隧道".to_string())
         }
     }
 }
