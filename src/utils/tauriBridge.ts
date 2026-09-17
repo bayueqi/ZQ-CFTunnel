@@ -30,6 +30,9 @@ let mockTunnels = [
 type LogListener = (event: { payload: { message: string; level: 'info' | 'warn' | 'error' | 'success'; source: string } }) => void;
 const mockLogListeners: LogListener[] = [];
 
+// 浏览器演示模式下的客户端隧道（支持多开，与 Rust 侧 client_process 语义一致）
+let mockClients: Array<{ key: string; domain: string; port: string }> = [];
+
 export function emitMockLog(message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info', source: string = 'system') {
   mockLogListeners.forEach(listener => {
     listener({
@@ -89,22 +92,39 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       return '服务端隧道已停止' as unknown as T;
 
     case 'start_client_tunnel': {
-      const domain = (args?.domain as string) || 'demo.domain.com';
-      const port = (args?.port as string) || '25566';
+      const domain = ((args?.domain as string) || 'demo.domain.com').trim();
+      const port = ((args?.port as string) || '25566').trim();
+      const key = `${domain}|${port}`;
+      if (mockClients.some(c => c.key === key)) {
+        throw new Error(`客户端隧道 [${domain}:${port}] 已在运行，无需重复连接`);
+      }
+      mockClients.push({ key, domain, port });
       emitMockLog(`[INFO] 正在连接远程隧道服务: ${domain}...`, 'info', 'client');
       setTimeout(() => {
         emitMockLog(`[SUCCESS] 客户端反向代理建立成功！本地监听端口: 127.0.0.1:${port}`, 'success', 'client');
       }, 400);
-      return `客户端隧道已连接至 ${domain} (本地端口: ${port})` as unknown as T;
+      return `已连接客户端隧道 [${domain}] -> 本地监听端口 [${port}]` as unknown as T;
     }
 
-    case 'stop_client_tunnel':
-      emitMockLog('[WARN] 客户端连接已关闭', 'warn', 'client');
-      return '客户端连接已断开' as unknown as T;
+    case 'stop_client_tunnel': {
+      const domain = ((args?.domain as string) || '').trim();
+      const port = ((args?.port as string) || '').trim();
+      const key = `${domain}|${port}`;
+      const idx = mockClients.findIndex(c => c.key === key);
+      if (idx === -1) {
+        return '该客户端隧道当前未在运行' as unknown as T;
+      }
+      mockClients.splice(idx, 1);
+      emitMockLog(`[INFO] 客户端隧道 [${domain}:${port}] 已断开`, 'warn', 'client');
+      return `客户端隧道 [${domain}:${port}] 已断开` as unknown as T;
+    }
+
+    case 'list_client_tunnels':
+      // 客户端支持多开：返回当前所有在跑的桥接进程快照
+      return [...mockClients] as unknown as T;
 
     case 'is_server_running':
-    case 'is_client_running':
-      return false as unknown as T;
+      return [] as unknown as T;
 
     case 'check_cloudflared_version':
       return 'cloudflared version 2024.8.3 (built 2024-08-15-1234 UTC)' as unknown as T;

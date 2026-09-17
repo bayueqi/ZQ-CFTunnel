@@ -100,7 +100,9 @@
       "dns_unbind_confirm_msg": "确定要解除域名 \"{name}\" 与隧道 \"{tunnel}\" 的绑定吗？解除后该域名将立即无法访问，隧道本身不受影响。",
       "quick_stop_confirm_title": "确认停止临时链接",
       "quick_stop_confirm_msg": "确定要停止该临时链接吗？停止后临时域名会立即失效，且无法恢复为同一个域名。"
-    }
+    },
+    "quick_no_address_hint": "无需填写，使用 cloudflared 内置测试服务器",
+    "quick_no_address_label": "目标地址:"
   },
   "client_tab": {
     "domain": "隧道域名:",
@@ -114,7 +116,15 @@
     "errors": {
       "domain_invalid": "请输入有效的隧道域名或主机名格式 (不可包含空格或非法符号)",
       "port_invalid": "本地监听端口必须为 1-65535 的纯数字"
-    }
+    },
+    "title": "客户端连接",
+    "add_btn": "添加",
+    "add_title": "添加客户端连接",
+    "col_domain": "隧道域名",
+    "col_port": "本地端口",
+    "col_status": "状态",
+    "col_action": "操作",
+    "empty": "未发现隧道"
   },
   "misc_tab": {
     "btn_install": "安装 cloudflared",

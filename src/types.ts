@@ -23,6 +23,13 @@ export interface QuickTunnelItem {
   status: 'starting' | 'running';
 }
 
+/** 一条正在运行的客户端隧道（后端 cloudflared access tcp 桥接进程）。 */
+export interface ClientTunnelItem {
+  key: string;
+  domain: string;
+  port: string;
+}
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -59,6 +66,8 @@ export interface LangPack {
     protocol_hello_world: string;
     unix_socket_label: string;
     unix_socket_placeholder: string;
+    quick_no_address_hint: string;
+    quick_no_address_label: string;
     btn_create: string;
     btn_start: string;
     btn_stop: string;
@@ -138,6 +147,7 @@ export interface LangPack {
     };
   };
   client_tab: {
+    title: string;
     domain: string;
     port: string;
     domain_placeholder: string;
@@ -146,6 +156,13 @@ export interface LangPack {
     btn_disconnect: string;
     status_connected: string;
     status_disconnected: string;
+    add_btn: string;
+    add_title: string;
+    col_domain: string;
+    col_port: string;
+    col_status: string;
+    col_action: string;
+    empty: string;
     errors: {
       domain_invalid: string;
       port_invalid: string;

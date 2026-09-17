@@ -100,7 +100,9 @@
       "dns_unbind_confirm_msg": "Unbind hostname \"{name}\" from tunnel \"{tunnel}\"? The hostname will stop working immediately; the tunnel itself is not affected.",
       "quick_stop_confirm_title": "Confirm Stop Quick Link",
       "quick_stop_confirm_msg": "Stop this quick link? Its temporary domain stops working immediately and the same domain cannot be recovered."
-    }
+    },
+    "quick_no_address_hint": "Not required - uses the cloudflared built-in test server",
+    "quick_no_address_label": "Target:"
   },
   "client_tab": {
     "domain": "Tunnel Domain:",
@@ -114,7 +116,15 @@
     "errors": {
       "domain_invalid": "Please enter a valid domain/hostname",
       "port_invalid": "Local port must be a valid number between 1 and 65535"
-    }
+    },
+    "title": "Client Connections",
+    "add_btn": "Add",
+    "add_title": "Add Client Connection",
+    "col_domain": "Hostname",
+    "col_port": "Local Port",
+    "col_status": "Status",
+    "col_action": "Action",
+    "empty": "No tunnels found"
   },
   "misc_tab": {
     "btn_install": "Install cloudflared",

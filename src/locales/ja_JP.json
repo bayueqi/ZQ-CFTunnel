@@ -100,7 +100,9 @@
       "dns_unbind_confirm_msg": "ドメイン \"{name}\" とトンネル \"{tunnel}\" のバインドを解除しますか？解除後このドメインは即座にアクセスできなくなります。トンネル自体には影響しません。",
       "quick_stop_confirm_title": "クイックリンクの停止確認",
       "quick_stop_confirm_msg": "このクイックリンクを停止しますか？停止すると一時ドメインは即座に無効になり、同じドメインには戻せません。"
-    }
+    },
+    "quick_no_address_hint": "入力不要。cloudflared 内蔵のテストサーバーを使用します",
+    "quick_no_address_label": "ターゲット:"
   },
   "client_tab": {
     "domain": "トンネルドメイン:",
@@ -114,7 +116,15 @@
     "errors": {
       "domain_invalid": "有効なドメイン名を入力してください",
       "port_invalid": "ポート番号は 1〜65535 の数字である必要があります"
-    }
+    },
+    "title": "クライアント接続",
+    "add_btn": "追加",
+    "add_title": "クライアント接続を追加",
+    "col_domain": "ホスト名",
+    "col_port": "ローカルポート",
+    "col_status": "状態",
+    "col_action": "操作",
+    "empty": "トンネルが見つかりません"
   },
   "misc_tab": {
     "btn_install": "cloudflared をインストール",

@@ -19,9 +19,30 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 #[derive(Default)]
 pub struct AppState {
     server_process: Arc<Mutex<HashMap<String, Child>>>,
-    client_process: Arc<Mutex<Option<Child>>>,
+    /// 客户端隧道支持多开：key 为 `域名|本地端口`，可同时桥接多条隧道。
+    client_process: Arc<Mutex<HashMap<String, ClientTunnelProc>>>,
     remote_process: Arc<Mutex<HashMap<String, Child>>>,
     quick_process: Arc<Mutex<HashMap<String, Child>>>,
+}
+
+/// 一条正在运行的客户端隧道（`cloudflared access tcp` 桥接进程）。
+struct ClientTunnelProc {
+    domain: String,
+    port: String,
+    child: Child,
+}
+
+/// 回传前端的客户端隧道状态（不含进程句柄）。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClientTunnelState {
+    pub key: String,
+    pub domain: String,
+    pub port: String,
+}
+
+/// 客户端隧道进程表 key：同一「域名 + 本地端口」视为同一条桥接。
+fn client_tunnel_key(domain: &str, port: &str) -> String {
+    format!("{}|{}", domain.trim(), port.trim())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -545,10 +566,16 @@ fn start_client_tunnel(
         return Err("本地监听端口必须为 1-65535 的纯数字".to_string());
     }
 
+    let key = client_tunnel_key(domain_trimmed, port_trimmed);
+
     let mut proc_guard = state.client_process.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut child) = *proc_guard {
-        let _ = child.kill();
-        *proc_guard = None;
+    // 先剔除已自行退出的实例，避免「进程早没了却还占着 key」
+    proc_guard.retain(|_k, p| matches!(p.child.try_wait(), Ok(None)));
+    if proc_guard.contains_key(&key) {
+        return Err(format!(
+            "客户端隧道 [{}:{}] 已在运行，无需重复连接",
+            domain_trimmed, port_trimmed
+        ));
     }
 
     let url_arg = format!("tcp://127.0.0.1:{}", port_trimmed);
@@ -609,7 +636,14 @@ fn start_client_tunnel(
         });
     }
 
-    *proc_guard = Some(child);
+    proc_guard.insert(
+        key,
+        ClientTunnelProc {
+            domain: domain_trimmed.to_string(),
+            port: port_trimmed.to_string(),
+            child,
+        },
+    );
 
     let start_msg = format!("已连接客户端隧道 [{}] -> 本地监听端口 [{}]", domain_trimmed, port_trimmed);
     let _ = app.emit(
@@ -625,22 +659,31 @@ fn start_client_tunnel(
 }
 
 #[tauri::command]
-fn stop_client_tunnel(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+fn stop_client_tunnel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    domain: String,
+    port: String,
+) -> Result<String, String> {
+    let key = client_tunnel_key(&domain, &port);
     let mut proc_guard = state.client_process.lock().map_err(|e| e.to_string())?;
-    if let Some(mut child) = proc_guard.take() {
-        let _ = child.kill();
-        let msg = "[INFO] 客户端连接已断开".to_string();
+    if let Some(mut entry) = proc_guard.remove(&key) {
+        let _ = entry.child.kill();
+        let msg = format!(
+            "客户端隧道 [{}:{}] 已断开",
+            entry.domain, entry.port
+        );
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: msg.clone(),
+                message: format!("[INFO] {}", msg),
                 level: "warn".to_string(),
                 source: "client".to_string(),
             },
         );
-        Ok("客户端连接已断开".to_string())
+        Ok(msg)
     } else {
-        Ok("当前没有正在运行的客户端连接".to_string())
+        Ok("该客户端隧道当前未在运行".to_string())
     }
 }
 
@@ -660,22 +703,21 @@ fn is_server_running(state: State<'_, AppState>) -> Vec<String> {
 }
 
 #[tauri::command]
-fn is_client_running(state: State<'_, AppState>) -> bool {
+fn list_client_tunnels(state: State<'_, AppState>) -> Vec<ClientTunnelState> {
+    let mut list = Vec::new();
     if let Ok(mut guard) = state.client_process.lock() {
-        if let Some(ref mut child) = *guard {
-            match child.try_wait() {
-                Ok(None) => true,
-                _ => {
-                    *guard = None;
-                    false
-                }
-            }
-        } else {
-            false
+        // 顺带回收已退出的进程，前端拿到的永远是真的在跑的实例
+        guard.retain(|_k, p| matches!(p.child.try_wait(), Ok(None)));
+        for (key, p) in guard.iter() {
+            list.push(ClientTunnelState {
+                key: key.clone(),
+                domain: p.domain.clone(),
+                port: p.port.clone(),
+            });
         }
-    } else {
-        false
     }
+    list.sort_by(|a, b| a.key.cmp(&b.key));
+    list
 }
 
 #[tauri::command]
@@ -1159,8 +1201,8 @@ fn exit_app(app: AppHandle, state: State<'_, AppState>) {
         }
     }
     if let Ok(mut guard) = state.client_process.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
+        for (_, mut entry) in guard.drain() {
+            let _ = entry.child.kill();
         }
     }
     if let Ok(mut guard) = state.remote_process.lock() {
@@ -2052,7 +2094,7 @@ pub fn run() {
             start_client_tunnel,
             stop_client_tunnel,
             is_server_running,
-            is_client_running,
+            list_client_tunnels,
             check_cloudflared_version,
             update_cloudflared,
             download_and_install_cloudflared,

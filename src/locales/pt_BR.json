@@ -100,7 +100,9 @@
       "dns_unbind_confirm_msg": "Desvincular o domínio \"{name}\" do túnel \"{tunnel}\"? O domínio deixará de funcionar imediatamente; o túnel não será afetado.",
       "quick_stop_confirm_title": "Confirmar parada do link temporal",
       "quick_stop_confirm_msg": "Parar este link temporal? O domínio temporário deixa de funcionar imediatamente e o mesmo domínio não pode ser recuperado."
-    }
+    },
+    "quick_no_address_hint": "Não é necessário: usa o servidor de teste integrado do cloudflared",
+    "quick_no_address_label": "Destino:"
   },
   "client_tab": {
     "domain": "Domínio do Túnel:",
@@ -114,7 +116,15 @@
     "errors": {
       "domain_invalid": "Insira um domínio ou nome de host válido",
       "port_invalid": "A porta local deve ser um número válido entre 1 e 65535"
-    }
+    },
+    "title": "Conexões de cliente",
+    "add_btn": "Adicionar",
+    "add_title": "Adicionar conexão de cliente",
+    "col_domain": "Domínio",
+    "col_port": "Porta local",
+    "col_status": "Status",
+    "col_action": "Ação",
+    "empty": "Nenhum túnel encontrado"
   },
   "misc_tab": {
     "btn_install": "Instalar cloudflared",
