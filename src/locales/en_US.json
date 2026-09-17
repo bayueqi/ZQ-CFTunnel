@@ -38,14 +38,14 @@
     "nav_remote": "Cloud Hosted",
     "mode_local": "Local Tunnels",
     "mode_remote": "Remote Tunnels",
-    "sub_mode_quick": "Temp Domain (Quick Tunnel)",
+    "sub_mode_quick": "Quick Link Domain",
     "sub_mode_named": "Custom Domain (Named Tunnel)",
     "quick_port_label": "Local Port:",
     "quick_port_placeholder": "e.g. 5244 (1-65535)",
     "btn_generate_quick": "Generate",
-    "btn_stop_quick": "Stop Quick Tunnel",
+    "btn_stop_quick": "Stop Quick Link",
     "quick_url_title": "Temp Link",
-    "quick_url_empty": "Start the quick tunnel to get a temporary domain",
+    "quick_url_empty": "Start the quick link to get a temporary domain",
     "btn_open": "Open",
     "click_to_copy": "Click to copy",
     "quick_list_title": "Tunnels",
@@ -98,8 +98,8 @@
       "dns_domain_invalid": "Please enter a valid domain (e.g. mc.example.com)",
       "dns_unbind_confirm_title": "Confirm Unbind",
       "dns_unbind_confirm_msg": "Unbind hostname \"{name}\" from tunnel \"{tunnel}\"? The hostname will stop working immediately; the tunnel itself is not affected.",
-      "quick_stop_confirm_title": "Confirm Stop Temporary Tunnel",
-      "quick_stop_confirm_msg": "Stop this temporary tunnel? Its temporary domain stops working immediately and the same domain cannot be recovered."
+      "quick_stop_confirm_title": "Confirm Stop Quick Link",
+      "quick_stop_confirm_msg": "Stop this quick link? Its temporary domain stops working immediately and the same domain cannot be recovered."
     }
   },
   "client_tab": {

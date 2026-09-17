@@ -38,14 +38,14 @@
     "nav_remote": "Hospedado na Nuvem",
     "mode_local": "Túneis Locais",
     "mode_remote": "Túneis Remotos",
-    "sub_mode_quick": "Domínio Temporário (Túnel Rápido)",
+    "sub_mode_quick": "Domínio do link temporal",
     "sub_mode_named": "Domínio Próprio (Túnel Nomeado)",
     "quick_port_label": "Porta Local:",
     "quick_port_placeholder": "ex: 5244 (1-65535)",
     "btn_generate_quick": "Gerar",
-    "btn_stop_quick": "Parar Túnel Rápido",
+    "btn_stop_quick": "Parar link temporal",
     "quick_url_title": "Link Temporário",
-    "quick_url_empty": "Inicie o túnel rápido para obter um domínio temporário",
+    "quick_url_empty": "Inicie o link temporal para obter um domínio temporário",
     "btn_open": "Abrir",
     "click_to_copy": "Clique para copiar",
     "quick_list_title": "Túneis",
@@ -98,8 +98,8 @@
       "dns_domain_invalid": "Insira um domínio válido (ex: mc.example.com)",
       "dns_unbind_confirm_title": "Confirmar Desvinculação",
       "dns_unbind_confirm_msg": "Desvincular o domínio \"{name}\" do túnel \"{tunnel}\"? O domínio deixará de funcionar imediatamente; o túnel não será afetado.",
-      "quick_stop_confirm_title": "Confirmar parada do túnel temporário",
-      "quick_stop_confirm_msg": "Parar este túnel temporário? O domínio temporário deixa de funcionar imediatamente e o mesmo domínio não pode ser recuperado."
+      "quick_stop_confirm_title": "Confirmar parada do link temporal",
+      "quick_stop_confirm_msg": "Parar este link temporal? O domínio temporário deixa de funcionar imediatamente e o mesmo domínio não pode ser recuperado."
     }
   },
   "client_tab": {

@@ -1409,7 +1409,7 @@ fn try_extract_quick_url(line: &str) -> Option<String> {
     }
 }
 
-/// 快速隧道（Quick Tunnel）：`cloudflared tunnel --url <协议>://127.0.0.1:<端口>`
+/// 临时链接（Quick Tunnel）：`cloudflared tunnel --url <协议>://127.0.0.1:<端口>`
 /// 免登录、免凭证、免绑定域名，Cloudflare 自动分配一个临时 trycloudflare.com 域名。
 /// 支持协议与命名隧道一致：http/https/tcp/ssh/rdp/smb 需端口；
 /// unix/unix+tls 需套接字路径（--url unix:/path/to/socket）；
@@ -1474,7 +1474,7 @@ fn start_quick_tunnel(
         if e.kind() == std::io::ErrorKind::NotFound {
             "未找到 cloudflared 程序，请先点击「安装 cloudflared」".to_string()
         } else {
-            format!("启动快速隧道失败: {}", e)
+            format!("启动临时链接失败: {}", e)
         }
     })?;
 
@@ -1547,7 +1547,7 @@ fn start_quick_tunnel(
     } else {
         format!("{}://127.0.0.1:{}", protocol_trimmed, port_trimmed)
     };
-    let start_msg = format!("已启动快速隧道 [{}]（临时域名生成中...）", start_desc);
+    let start_msg = format!("已启动临时链接 [{}]（临时域名生成中...）", start_desc);
     let _ = app.emit(
         "log-message",
         LogPayload {
@@ -1569,14 +1569,14 @@ fn stop_quick_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<Str
             let _ = app.emit(
                 "log-message",
                 LogPayload {
-                    message: format!("[INFO] 快速隧道 [{}] 已停止，临时域名已失效", k),
+                    message: format!("[INFO] 临时链接 [{}] 已停止，临时域名已失效", k),
                     level: "warn".to_string(),
                     source: "quick".to_string(),
                 },
             );
-            Ok(format!("快速隧道 [{}] 已停止", k))
+            Ok(format!("临时链接 [{}] 已停止", k))
         } else {
-            Ok("指定的快速隧道当前未在运行".to_string())
+            Ok("指定的临时链接当前未在运行".to_string())
         }
     } else {
         let count = proc_guard.len();
@@ -1586,15 +1586,15 @@ fn stop_quick_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<Str
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: format!("[INFO] 已停止全部快速隧道（共 {} 个），临时域名已失效", count),
+                message: format!("[INFO] 已停止全部临时链接（共 {} 个），临时域名已失效", count),
                 level: "warn".to_string(),
                 source: "quick".to_string(),
             },
         );
         if count > 0 {
-            Ok(format!("已停止全部快速隧道（共 {} 个）", count))
+            Ok(format!("已停止全部临时链接（共 {} 个）", count))
         } else {
-            Ok("当前没有正在运行的快速隧道".to_string())
+            Ok("当前没有正在运行的临时链接".to_string())
         }
     }
 }

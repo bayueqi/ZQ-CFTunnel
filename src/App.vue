@@ -213,7 +213,7 @@
       <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
         <!-- ============ 本地隧道视图 ============ -->
         <div v-show="serverMode === 'local'" class="server-sub-view">
-          <!-- ============ 快速隧道（临时链接 / 临时域名） ============ -->
+          <!-- ============ 临时链接（临时域名） ============ -->
           <div v-show="localSubMode === 'quick'" class="server-sub-view">
           <!-- 输入表单卡片 -->
           <div class="fluent-card form-card">
@@ -1025,7 +1025,7 @@
       </div>
     </div>
 
-    <!-- 临时隧道：停止二次确认弹窗 -->
+    <!-- 临时链接：停止二次确认弹窗 -->
     <div v-if="showQuickStopModal" class="fluent-modal-overlay" @click.self="cancelStopQuick">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
@@ -1345,7 +1345,7 @@ const switchServerMode = (mode: 'local' | 'remote') => {
   localStorage.setItem('server_mode', mode);
 };
 
-// 本地隧道二级模式：快速隧道(临时域名) / 命名隧道(绑定域名)
+// 本地隧道二级模式：临时链接(临时域名) / 命名隧道(绑定域名)
 const localSubMode = ref<'quick' | 'named'>(localStorage.getItem('local_sub_mode') === 'quick' ? 'quick' : 'named');
 
 const switchLocalSubMode = (mode: 'quick' | 'named') => {
@@ -1353,7 +1353,7 @@ const switchLocalSubMode = (mode: 'quick' | 'named') => {
   localStorage.setItem('local_sub_mode', mode);
 };
 
-// 快速隧道（临时域名）状态
+// 临时链接（临时域名）状态
 const quickConfig = ref({
   port: localStorage.getItem('quick_port') || '5244',
   protocol: localStorage.getItem('quick_protocol') || 'http',
@@ -1363,7 +1363,7 @@ const quickTunnels = ref<QuickTunnelItem[]>([]);
 const quickRunning = computed(() => quickTunnels.value.length > 0);
 const quickPortHasError = ref(false);
 
-// 停止临时隧道：二次确认弹窗（记录待停止的 key）
+// 停止临时链接：二次确认弹窗（记录待停止的 key）
 const showQuickStopModal = ref(false);
 const quickStopKey = ref('');
 const quickStopTarget = computed(
@@ -1376,7 +1376,7 @@ const onQuickPortInput = () => {
   localStorage.setItem('quick_port', val);
 };
 
-// 快速隧道：hello_world / unix / unix+tls 无需端口，其余协议需要端口
+// 临时链接：hello_world / unix / unix+tls 无需端口，其余协议需要端口
 const needsQuickPort = computed(() => {
   const p = quickConfig.value.protocol;
   return p !== 'hello_world' && p !== 'unix' && p !== 'unix+tls';
@@ -1390,7 +1390,7 @@ const canStartQuick = computed(() => {
   return !quickPortHasError.value && !!quickConfig.value.port.trim();
 });
 
-// 解析后端返回的快速隧道 key → 协议与端口/套接字
+// 解析后端返回的临时链接 key → 协议与端口/套接字
 // key 格式：`协议://127.0.0.1:端口` / `unix:路径` / `unix+tls:路径` / `hello_world`
 const parseQuickKey = (key: string): { protocol: string; port: string } => {
   const m = key.match(/^([a-z0-9]+):\/\/[^:]+:(\d+)$/i);
@@ -1401,7 +1401,7 @@ const parseQuickKey = (key: string): { protocol: string; port: string } => {
   return { protocol: 'http', port: '' };
 };
 
-// 快速隧道目标描述：hello_world / unix / unix+tls 与普通协议显示格式不同
+// 临时链接目标描述：hello_world / unix / unix+tls 与普通协议显示格式不同
 const quickTargetLabel = (qt: QuickTunnelItem) => {
   if (qt.protocol === 'hello_world') return 'hello_world 内置测试服务器';
   if (qt.protocol === 'unix' || qt.protocol === 'unix+tls') return `${qt.protocol}:${qt.port}`;
@@ -2067,7 +2067,7 @@ const handleStopRemoteTunnel = async () => {
   }
 };
 
-// 启动快速隧道（临时域名）
+// 启动临时链接（临时域名）
 const handleStartQuick = async () => {
   const port = quickConfig.value.port.trim();
   const protocol = quickConfig.value.protocol;
@@ -2100,9 +2100,9 @@ const handleStartQuick = async () => {
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
     quickTunnels.value.push({ key, protocol, port: displayPort, url: '', status: 'starting' });
     appendLog(`[SUCCESS] ${res}`, 'success', 'quick');
-    showToast('快速隧道已启动，临时域名生成中...');
+    showToast('临时链接已启动，临时域名生成中...');
   } catch (err: any) {
-    appendLog(`[ERROR] 启动快速隧道失败: ${err}`, 'error', 'quick');
+    appendLog(`[ERROR] 启动临时链接失败: ${err}`, 'error', 'quick');
   }
 };
 
@@ -2141,7 +2141,7 @@ const cancelStopQuick = () => {
   quickStopKey.value = '';
 };
 
-// 确认停止指定快速隧道（按 key）
+// 确认停止指定临时链接（按 key）
 const confirmStopQuick = async () => {
   const key = quickStopKey.value;
   if (!key) return;
@@ -2151,13 +2151,13 @@ const confirmStopQuick = async () => {
     const res = await invoke<string>('stop_quick_tunnel', { key });
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
     appendLog(`[INFO] ${res}`, 'warn', 'quick');
-    showToast('快速隧道已停止');
+    showToast('临时链接已停止');
   } catch (err: any) {
-    appendLog(`[ERROR] 停止快速隧道失败: ${err}`, 'error', 'quick');
+    appendLog(`[ERROR] 停止临时链接失败: ${err}`, 'error', 'quick');
   }
 };
 
-// 复制快速隧道临时链接（点击临时域名触发）
+// 复制临时链接临时链接（点击临时域名触发）
 const copyQuickUrl = async (url: string) => {
   try {
     await navigator.clipboard.writeText(url);
@@ -2378,7 +2378,7 @@ onMounted(async () => {
       remoteConfigText.value = event.payload;
     });
 
-    // 监听快速隧道临时域名分配
+    // 监听临时链接临时域名分配
     await listen<{ key: string; url: string }>('quick-tunnel-url', (event) => {
       const { key, url } = event.payload;
       const item = quickTunnels.value.find(t => t.key === key);
@@ -3795,7 +3795,7 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* 快速隧道（临时域名）结果展示 */
+/* 临时链接（临时域名）结果展示 */
 .quick-url-box {
   margin-top: 14px;
   padding: 14px;

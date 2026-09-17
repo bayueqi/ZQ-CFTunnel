@@ -38,14 +38,14 @@
     "nav_remote": "云端托管",
     "mode_local": "本地隧道",
     "mode_remote": "远程隧道",
-    "sub_mode_quick": "临时域名 (快速隧道)",
+    "sub_mode_quick": "临时链接域名",
     "sub_mode_named": "绑定域名 (命名隧道)",
     "quick_port_label": "本地端口:",
     "quick_port_placeholder": "例如: 5244 (1-65535)",
     "btn_generate_quick": "生成",
-    "btn_stop_quick": "停止快速隧道",
+    "btn_stop_quick": "停止临时链接",
     "quick_url_title": "临时链接",
-    "quick_url_empty": "启动快速隧道后，这里会显示临时域名",
+    "quick_url_empty": "启动临时链接后，这里会显示临时域名",
     "btn_open": "打开",
     "click_to_copy": "点击复制",
     "quick_list_title": "隧道列表",
@@ -98,8 +98,8 @@
       "dns_domain_invalid": "请输入有效的域名格式 (例如: mc.example.com)",
       "dns_unbind_confirm_title": "确认解除绑定",
       "dns_unbind_confirm_msg": "确定要解除域名 \"{name}\" 与隧道 \"{tunnel}\" 的绑定吗？解除后该域名将立即无法访问，隧道本身不受影响。",
-      "quick_stop_confirm_title": "确认停止临时隧道",
-      "quick_stop_confirm_msg": "确定要停止该临时隧道吗？停止后临时域名会立即失效，且无法恢复为同一个域名。"
+      "quick_stop_confirm_title": "确认停止临时链接",
+      "quick_stop_confirm_msg": "确定要停止该临时链接吗？停止后临时域名会立即失效，且无法恢复为同一个域名。"
     }
   },
   "client_tab": {
