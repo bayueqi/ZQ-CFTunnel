@@ -3610,14 +3610,17 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  /* 这里必须给一个显式下限，不能写 min-height:0 / auto：
-     CSS 规定 overflow 不是 visible 的元素，其 flex 自动最小尺寸为 0，
-     于是窗口一矮这张卡会被一路压扁（实测 580 高时只剩 36px），
-     里面 min-height:100px 的表格框随即溢出卡片被 overflow 切掉 ——
-     看起来正是"隧道列表内容被挤压看不到了"。
-     196px = 标题(33) + 表格框下限(100) + 按钮行(35) + 卡片内边距(28)。
-     压缩止步于此，再矮就交给外层 .tab-view 滚动，数据行不会被吃掉。 */
-  min-height: 196px;
+/* 这里必须给一个显式下限，不能写 min-height:0 / auto：
+   CSS 规定 overflow 不是 visible 的元素，其 flex 自动最小尺寸为 0，
+   于是窗口一矮这张卡会被一路压扁（实测 580 高时只剩 36px），
+   里面 min-height:100px 的表格框随即溢出卡片被 overflow 切掉 ——
+   看起来正是"隧道列表内容被挤压看不到了"。
+   261px = 标题(36) + 表格框下限(152=150+2边框) + 按钮行(35+10margin)
+           + 卡片上下内边距(28)。实测（真实 Chromium 渲染）：
+           min-height 低于 261 时刷新/删除按钮被 overflow:hidden 裁掉
+   —— 740 窗口卡片分到 226px，按钮整体不可见；800 窗口也裁 17px。
+   压缩止步于此，再矮就交给外层 .tab-view 滚动，按钮行永远完整。 */
+  min-height: 261px;
   overflow: hidden;
 }
 
