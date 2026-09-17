@@ -934,7 +934,6 @@
                 v-model="dnsRoute.name"
                 class="fluent-input fluent-select"
               >
-                <option value="" disabled></option>
                 <option
                   v-for="tn in localTunnelList"
                   :key="tn.id"
