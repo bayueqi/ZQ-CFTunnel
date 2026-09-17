@@ -506,7 +506,7 @@
                   </tr>
                   <tr v-if="localTunnelList.length === 0">
                     <td colspan="8" class="empty-table">
-                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现本地隧道' }}
+                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
                 </tbody>
@@ -682,7 +682,7 @@
                   </tr>
                   <tr v-if="remoteTunnelList.length === 0">
                     <td colspan="6" class="empty-table">
-                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现远程隧道' }}
+                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
                 </tbody>
@@ -934,7 +934,7 @@
                 v-model="dnsRoute.name"
                 class="fluent-input fluent-select"
               >
-                <option value="" disabled>{{ t.server_tab.dns_tunnel_name_placeholder }}</option>
+                <option value="" disabled></option>
                 <option
                   v-for="tn in localTunnelList"
                   :key="tn.id"

@@ -87,7 +87,7 @@ pub fn get_cloudflared_executable() -> PathBuf {
 
 fn create_base_command() -> Command {
     let program = get_cloudflared_executable();
-    let mut cmd = Command::new(program);
+    let cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd

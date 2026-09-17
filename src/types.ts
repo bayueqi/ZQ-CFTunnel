@@ -93,7 +93,6 @@ export interface LangPack {
     type_remote: string;
     dns_section: string;
     dns_tunnel_name: string;
-    dns_tunnel_name_placeholder: string;
     dns_domain: string;
     dns_domain_placeholder: string;
     btn_route_dns: string;
