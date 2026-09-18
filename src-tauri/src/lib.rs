@@ -577,6 +577,14 @@ fn start_client_tunnel(
             domain_trimmed, port_trimmed
         ));
     }
+    // --url 指向的是 cloudflared 在本机要「监听」的地址，一个端口只能被一条隧道占用。
+    // 两条隧道用同一端口时，后启动的那条会 bind 失败并立刻退出，所以这里提前拦下。
+    if let Some(holder) = proc_guard.values().find(|p| p.port == port_trimmed) {
+        return Err(format!(
+            "本地端口 [{}] 已被隧道 [{}] 占用，请为当前隧道换一个本地端口",
+            port_trimmed, holder.domain
+        ));
+    }
 
     let url_arg = format!("tcp://127.0.0.1:{}", port_trimmed);
     let mut cmd = create_base_command();
@@ -634,6 +642,25 @@ fn start_client_tunnel(
                 );
             }
         });
+    }
+
+    // spawn 成功不代表隧道可用：监听本机端口的动作发生在 cloudflared 进程内部。
+    // 这里等最多 600ms 看进程是否已经退出（端口被别的程序占用、域名无效等都会这样），
+    // 一旦退出就直接返回失败，避免界面显示「已连接」而后端其实没有可用进程。
+    for _ in 0..12 {
+        thread::sleep(std::time::Duration::from_millis(50));
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                // 给 stderr 读取线程留点时间，把 cloudflared 的原始报错刷到控制台
+                thread::sleep(std::time::Duration::from_millis(120));
+                return Err(format!(
+                    "客户端隧道 [{}:{}] 启动后立即退出，请检查本地端口 [{}] 是否已被其它程序占用、或隧道域名是否正确（详细报错见控制台日志）",
+                    domain_trimmed, port_trimmed, port_trimmed
+                ));
+            }
+            Ok(None) => {}
+            Err(_) => break,
+        }
     }
 
     proc_guard.insert(

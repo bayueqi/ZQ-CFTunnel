@@ -2057,7 +2057,7 @@ const openDnsAddModal = () => {
   // 没有任何固定域名隧道时无处可绑：直接提示，不弹空下拉框
   if (localTunnelList.value.length === 0) {
     soundManager.playClick();
-    appendLog('[WARN] 未发现隧道，请先创建固定域名隧道再绑定域名', 'warn', 'server');
+    appendLog('[ERROR] 未发现隧道，请先创建固定域名隧道再绑定域名', 'error', 'server');
     showToast(t.value.server_tab.quick_list_empty);
     return;
   }
