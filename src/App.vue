@@ -904,7 +904,7 @@
 
     <!-- DNS 绑定域名：改名弹窗（只改 DNS 记录名，不动隧道 ingress） -->
     <!-- DNS 路由绑定：添加绑定弹窗（隧道下拉 + 域名输入） -->
-    <div v-if="showDnsAddModal" class="fluent-modal-overlay" @click.self="cancelDnsAdd">
+    <div v-if="showDnsAddModal" class="fluent-modal-overlay">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
           <h3 class="modal-title">🏷️ {{ t.server_tab.dns_add_title }}</h3>
@@ -1016,7 +1016,7 @@
     </div>
 
     <!-- 客户端：新增 / 编辑隧道配置弹窗（配置持久保存，是否启动由列表里的按钮控制） -->
-    <div v-if="showClientAddModal" class="fluent-modal-overlay" @click.self="cancelClientAdd">
+    <div v-if="showClientAddModal" class="fluent-modal-overlay">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
           <h3 class="modal-title">
@@ -2485,29 +2485,19 @@ const confirmClientAdd = async () => {
     return;
   }
 
-  // 新增模式：重复直接拦掉，否则先落库再启动（启动失败条目仍保留，可再点启动）
+  // 新增模式：重复直接拦掉，只落库保存，不自动启动（由用户点行内「启动」再连）
   if (savedClientTunnels.value.some(t => t.key === key)) {
     appendLog(`[ERROR] 客户端隧道 [${key}] 已存在，请勿重复添加`, 'error', 'client');
     showToast('该隧道已存在');
     return;
   }
 
-  clientSubmitting.value = true;
   savedClientTunnels.value.push({ key, domain, port });
   persistClientTunnels();
-  try {
-    const res = await invoke<string>('start_client_tunnel', { domain, port });
-    soundManager.playSuccess();
-    appendLog(`[SUCCESS] ${res}`, 'success', 'client');
-    showToast(`客户端隧道已连接 (端口: ${port})`);
-    showClientAddModal.value = false;
-  } catch (err: any) {
-    appendLog(`[ERROR] 客户端连接失败: ${err}`, 'error', 'client');
-    showToast(`${err}`);
-  } finally {
-    await refreshClientConnections();
-    clientSubmitting.value = false;
-  }
+  soundManager.playSuccess();
+  appendLog(`[SUCCESS] 客户端隧道配置已保存 [${domain}:${port}]`, 'success', 'client');
+  showToast('已保存，点「启动」后连接');
+  showClientAddModal.value = false;
 };
 
 // 启动列表里某一条已保存的客户端隧道
