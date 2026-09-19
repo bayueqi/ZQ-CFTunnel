@@ -577,48 +577,76 @@
 
         <!-- ============ 云端托管视图 ============ -->
         <div v-show="serverMode === 'remote'" class="server-sub-view">
-          <!-- Token 输入 + 启动/停止 -->
-          <div class="fluent-card form-card">
-            <h3 class="card-title">{{ t.server_tab.remote_token_label }}</h3>
-            <div class="form-grid">
-              <div class="fluent-form-group">
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="remoteToken"
-                    :placeholder="t.server_tab.remote_token_placeholder"
-                    class="fluent-input"
-                  />
+          <!-- 已添加的云端托管隧道：一个 Token 一条隧道，可同时运行多条 -->
+          <div class="fluent-card form-card remote-card">
+            <div class="client-title-row">
+              <h3 class="card-title client-title">{{ t.server_tab.nav_remote }}</h3>
+              <div class="client-title-actions">
+                <button class="fluent-btn small primary" @click="openRemoteAddModal">
+                  <span class="btn-icon">＋</span>
+                  {{ t.server_tab.remote_add_btn }}
+                </button>
+                <button class="fluent-btn small" @click="refreshRemoteTunnels(true)">
+                  <span class="btn-icon">🔄</span>
+                  {{ t.server_tab.btn_refresh }}
+                </button>
+                <div class="status-pill" :class="remoteRunningKeys.length > 0 ? 'online' : 'offline'">
+                  {{ remoteRunningKeys.length > 0
+                    ? `${t.server_tab.status_remote_running} (${remoteRunningKeys.length})`
+                    : t.server_tab.status_remote_stopped }}
                 </div>
               </div>
             </div>
 
-            <div class="actions-row center-actions">
-              <button
-                v-if="!remoteRunning"
-                class="fluent-btn primary"
-                @click="handleStartRemoteTunnel"
-                :disabled="!remoteToken.trim()"
-              >
-                <span class="btn-icon">▶</span>
-                {{ t.server_tab.btn_start_remote }}
-              </button>
-
-              <button
-                v-else
-                class="fluent-btn danger"
-                @click="handleStopRemoteTunnel"
-              >
-                <span class="btn-icon">⏹</span>
-                {{ t.server_tab.btn_stop_remote }}
-              </button>
-
-              <div class="status-pill" :class="remoteRunning ? 'online' : 'offline'">
-                <span class="pill-dot"></span>
-                {{ remoteRunning
-                  ? `${t.server_tab.status_remote_running} (${remoteRunningCount})`
-                  : t.server_tab.status_remote_stopped }}
-              </div>
+            <!-- 一条隧道一行：配置持久保存，停止只是断进程，条目保留，可随时再启动 -->
+            <div class="fluent-table-wrapper client-table-wrapper">
+              <table class="fluent-table">
+                <thead>
+                  <tr>
+                    <th class="col-name">{{ t.server_tab.remote_col_tunnel }}</th>
+                    <th class="col-status">{{ t.server_tab.remote_col_status }}</th>
+                    <th class="col-actions">{{ t.server_tab.remote_col_action }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in remoteRows" :key="r.key">
+                    <td class="col-name font-bold mono" :title="r.tooltip">{{ r.label }}</td>
+                    <td class="col-status">
+                      <span class="tunnel-status" :class="{ online: r.running }">
+                        {{ r.running ? t.server_tab.status_remote_running : t.server_tab.status_remote_stopped }}
+                      </span>
+                    </td>
+                    <td class="col-actions">
+                      <button
+                        class="row-action-btn"
+                        :class="r.running ? 'danger' : 'primary'"
+                        :title="r.running ? t.server_tab.btn_stop_remote : t.server_tab.btn_start_remote"
+                        @click.stop="r.running ? handleStopRemoteTunnel(r) : handleStartRemoteTunnel(r)"
+                      >
+                        {{ r.running ? '⏹' : '▶' }}
+                      </button>
+                      <button
+                        class="row-action-btn"
+                        :title="t.server_tab.remote_btn_edit"
+                        :disabled="r.running"
+                        @click.stop="openRemoteEditModal(r)"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        class="row-action-btn danger"
+                        :title="t.server_tab.remote_btn_delete"
+                        @click.stop="handleDeleteRemote(r)"
+                      >
+                        🗑
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="remoteRows.length === 0">
+                    <td colspan="3" class="empty-table">{{ t.server_tab.remote_empty }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -682,11 +710,21 @@
             </div>
           </div>
 
-          <!-- 云端 ingress 配置卡片 -->
+          <!-- 云端 ingress 配置卡片：按隧道分组，一条隧道一块，多条并行也分得清 -->
           <div class="fluent-card form-card remote-config-card">
             <h3 class="card-title">{{ t.server_tab.remote_config_title }}</h3>
             <div class="remote-config-body">
-              <pre v-if="remoteConfigText">{{ remoteConfigText }}</pre>
+              <template v-if="remoteConfigGroups.length">
+                <div
+                  v-for="g in remoteConfigGroups"
+                  :key="g.key"
+                  class="remote-config-group"
+                >
+                  <div class="remote-config-group-title" :title="g.tooltip">{{ g.label }}</div>
+                  <pre v-if="g.config">{{ g.config }}</pre>
+                  <div v-else class="remote-config-empty">{{ t.server_tab.remote_config_empty }}</div>
+                </div>
+              </template>
               <div v-else class="remote-config-empty">{{ t.server_tab.remote_config_empty }}</div>
             </div>
           </div>
@@ -1091,6 +1129,64 @@
         <div class="modal-footer">
           <button class="fluent-btn" @click="cancelDeleteClient">{{ t.exit_modal.btn_cancel }}</button>
           <button class="fluent-btn danger" @click="confirmDeleteClient">{{ t.client_tab.btn_delete }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 云端托管：新增 / 编辑隧道弹窗（配置持久保存，启动由列表里的 ▶ 控制） -->
+    <div v-if="showRemoteAddModal" class="fluent-modal-overlay">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">
+            {{ editingRemoteKey ? `✎ ${t.server_tab.remote_edit_title}` : `☁ ${t.server_tab.remote_add_title}` }}
+          </h3>
+        </div>
+        <div class="modal-body">
+          <div class="fluent-form-group">
+            <label class="form-label">
+              {{ t.server_tab.remote_token_label }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="remoteFormToken"
+                :placeholder="t.server_tab.remote_token_placeholder"
+                class="fluent-input"
+                @keydown.enter="confirmRemoteAdd"
+              />
+            </div>
+            <div v-if="remoteFormError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ remoteFormError }}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelRemoteAdd">{{ t.exit_modal.btn_cancel }}</button>
+          <button
+            class="fluent-btn primary"
+            @click="confirmRemoteAdd"
+            :disabled="!canSubmitRemoteAdd"
+          >
+            {{ t.server_tab.btn_save }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 云端托管：删除二次确认弹窗 -->
+    <div v-if="showRemoteDeleteModal" class="fluent-modal-overlay" @click.self="cancelDeleteRemote">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚠️ {{ t.server_tab.remote_delete_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ t.server_tab.remote_delete_confirm_msg.replace('{target}', pendingDeleteRemote?.label || '') }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="cancelDeleteRemote">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn danger" @click="confirmDeleteRemote">{{ t.server_tab.remote_btn_delete }}</button>
         </div>
       </div>
     </div>
@@ -1568,10 +1664,125 @@ const quickTargetLabel = (qt: QuickTunnelItem) => {
   return `${qt.protocol}://127.0.0.1:${qt.port}`;
 };
 
-// 云端托管
-const remoteToken = ref(localStorage.getItem('remote_token') || '');
-const remoteRunning = ref(false);
-const remoteConfigText = ref('');
+// 云端托管支持多开：一个 Token 一条隧道，配置持久保存，运行状态与后端对账。
+// key 必须与 Rust 侧一致（token 前 16 字符），否则对账时认不出是同一段隧道。
+type SavedRemoteTunnel = { key: string; token: string; label: string; tooltip: string };
+const REMOTE_TUNNELS_STORAGE_KEY = 'remote_tunnels_v1';
+
+// 与 Rust 侧 extract_token 保持一致：整串就是 token，或从 service install 命令里挑出 eyJ 开头那段
+const extractRemoteToken = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('eyJ')) return trimmed;
+  return trimmed.split(/\s+/).find(s => s.startsWith('eyJ')) || '';
+};
+
+// 与 Rust 侧保持一致：进程表 key 就是完整 token。
+// 不能用 token 前缀：同一账号下不同隧道的 token 前缀完全相同（payload 都是账号 + 隧道 ID 的 JSON，
+// base64 后前 16 字符一致），截前缀会让两条隧道撞成同一个 key，后启动的会把先启动的顶掉。
+const remoteTunnelKey = (token: string) => token;
+
+// cloudflared 的 token 本身就是 base64 的 JSON（{"a":账号, "t":隧道ID, "s":密钥}）。
+// 解出来能拿到真正的 tunnelID，用它做列表标识才分得清是哪条隧道。
+const decodeRemoteToken = (token: string): { tunnelId: string; accountTag: string } => {
+  try {
+    const b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+    const obj = JSON.parse(atob(b64 + pad));
+    return { tunnelId: String(obj.t || ''), accountTag: String(obj.a || '') };
+  } catch {
+    return { tunnelId: '', accountTag: '' };
+  }
+};
+
+const remoteLabelOf = (token: string) => {
+  const { tunnelId } = decodeRemoteToken(token);
+  return tunnelId ? tunnelId.slice(0, 8) : token.slice(0, 16);
+};
+
+const remoteTooltipOf = (token: string) => {
+  const { tunnelId, accountTag } = decodeRemoteToken(token);
+  return tunnelId
+    ? `隧道 ID: ${tunnelId}${accountTag ? `\n账号: ${accountTag}` : ''}`
+    : `Token 前缀: ${token.slice(0, 24)}…`;
+};
+
+// 每条隧道的 ingress 配置，key 与 remoteRows 一致
+const remoteConfigs = ref<Record<string, string>>({});
+
+const loadSavedRemoteTunnels = (): SavedRemoteTunnel[] => {
+  const out: SavedRemoteTunnel[] = [];
+  const seen = new Set<string>();
+  const push = (raw: unknown) => {
+    const token = extractRemoteToken(typeof raw === 'string' ? raw : '');
+    if (!token) return;
+    const key = remoteTunnelKey(token);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ key, token, label: remoteLabelOf(token), tooltip: remoteTooltipOf(token) });
+  };
+  try {
+    const arr = JSON.parse(localStorage.getItem(REMOTE_TUNNELS_STORAGE_KEY) || '[]');
+    if (Array.isArray(arr)) {
+      arr.forEach(x => push(x && typeof x === 'object' ? (x as any).token : x));
+    }
+  } catch {}
+  // 旧版本只存单个 remote_token：迁进列表后删掉旧键，避免每次启动又冒出来
+  const legacy = localStorage.getItem('remote_token') || '';
+  const before = out.length;
+  push(legacy);
+  if (out.length > before) {
+    localStorage.setItem(REMOTE_TUNNELS_STORAGE_KEY, JSON.stringify(out.map(({ token }) => ({ token }))));
+  }
+  if (legacy.trim()) localStorage.removeItem('remote_token');
+  return out;
+};
+
+const savedRemoteTunnels = ref<SavedRemoteTunnel[]>(loadSavedRemoteTunnels());
+const persistRemoteTunnels = () => {
+  localStorage.setItem(
+    REMOTE_TUNNELS_STORAGE_KEY,
+    JSON.stringify(savedRemoteTunnels.value.map(({ token }) => ({ token }))),
+  );
+};
+
+// 后端此刻真正在跑的云端托管隧道 key
+const remoteRunningKeys = ref<string[]>([]);
+const isRemoteRunning = (key: string) => remoteRunningKeys.value.includes(key);
+
+// 表格行 = 已保存的配置 ∪ 后端正在跑的实例
+const remoteRows = computed(() => {
+  const rows: Array<SavedRemoteTunnel & { running: boolean }> = savedRemoteTunnels.value.map(r => ({
+    ...r,
+    running: isRemoteRunning(r.key),
+  }));
+  const known = new Set(rows.map(r => r.key));
+  for (const key of remoteRunningKeys.value) {
+    if (!known.has(key)) {
+      // key 就是完整 token：后端在跑但本地没保存过的（外部启动等）也照样显示
+      rows.push({ key, token: key, label: remoteLabelOf(key), tooltip: remoteTooltipOf(key), running: true });
+      known.add(key);
+    }
+  }
+  return rows;
+});
+
+// 配置卡片按隧道分组：只显示在跑的或已拿到配置的，避免一堆空块
+const remoteConfigGroups = computed(() =>
+  remoteRows.value
+    .filter(r => r.running || remoteConfigs.value[r.key])
+    .map(r => ({ key: r.key, label: r.label, tooltip: r.tooltip, config: remoteConfigs.value[r.key] || '' })),
+);
+
+const showRemoteAddModal = ref(false);
+const showRemoteDeleteModal = ref(false);
+const editingRemoteKey = ref('');
+const remoteFormToken = ref('');
+const remoteFormError = ref('');
+const pendingDeleteRemote = ref<SavedRemoteTunnel | null>(null);
+const canSubmitRemoteAdd = computed(
+  () => !remoteFormError.value && !!extractRemoteToken(remoteFormToken.value),
+);
 
 // 隧道列表与选中项
 const tunnelList = ref<TunnelInfo[]>([]);
@@ -1584,7 +1795,6 @@ const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_ty
 const localRunningCount = computed(() =>
   localTunnelList.value.filter(x => isTunnelRunning(x.name)).length,
 );
-const remoteRunningCount = computed(() => (remoteRunning.value ? 1 : 0));
 
 // 「已绑定域名」管理列表：只展开固定域名的绑定记录，
 // 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
@@ -2210,37 +2420,135 @@ const confirmUnbindDnsRoute = async () => {
   }
 };
 
-// 启动云端托管 (tunnel run --token，临时运行)
-const handleStartRemoteTunnel = async () => {
-  const token = remoteToken.value.trim();
-  if (!token) {
-    appendLog(`[ERROR] 请先粘贴云端托管 Token`, 'error', 'remote');
-    return;
-  }
-  localStorage.setItem('remote_token', token);
-  remoteConfigText.value = '';
-  soundManager.playSuccess();
+// 与后端对账云端托管隧道：后端用 try_wait() 回收已退出的进程，返回真实在跑的快照
+const refreshRemoteTunnels = async (withLog = false) => {
   try {
-    const res = await invoke<string>('start_remote_tunnel', { token });
-    remoteRunning.value = true;
-    appendLog(`[SUCCESS] ${res}`, 'success', 'remote');
-    showToast('云端托管已启动');
+    const list = await invoke<{ key: string }[]>('list_remote_tunnels');
+    remoteRunningKeys.value = list.map(x => x.key);
+    if (withLog) {
+      appendLog(
+        `[INFO] 已刷新云端托管隧道列表，共获取到 ${remoteRunningKeys.value.length} 条隧道`,
+        'info',
+        'remote',
+      );
+    }
   } catch (err: any) {
-    appendLog(`[ERROR] 启动云端托管失败: ${err}`, 'error', 'remote');
+    if (withLog) appendLog(`[ERROR] 刷新云端托管隧道列表失败: ${err}`, 'error', 'remote');
   }
 };
 
-// 停止云端托管
-const handleStopRemoteTunnel = async () => {
+// 启动指定的那一条云端托管隧道（tunnel run --token，一条 token 一个进程）
+const handleStartRemoteTunnel = async (row: SavedRemoteTunnel) => {
+  if (row.running || !row.token) return;
+  soundManager.playSuccess();
+  try {
+    const res = await invoke<string>('start_remote_tunnel', { token: row.token });
+    appendLog(`[SUCCESS] ${res}`, 'success', 'remote');
+    showToast(`云端托管已启动 (${row.label})`);
+    await refreshRemoteTunnels();
+  } catch (err: any) {
+    appendLog(`[ERROR] 启动云端托管失败: ${err}`, 'error', 'remote');
+    showToast(`${err}`);
+  }
+};
+
+// 停止指定的那一条云端托管隧道（只停进程，条目保留）
+const handleStopRemoteTunnel = async (row: SavedRemoteTunnel) => {
   soundManager.playClick();
   try {
-    const res = await invoke<string>('stop_remote_tunnel');
-    remoteRunning.value = false;
+    const res = await invoke<string>('stop_remote_tunnel', { key: row.key });
     appendLog(`[INFO] ${res}`, 'warn', 'remote');
-    showToast('云端托管已停止');
+    showToast(`云端托管已停止 (${row.label})`);
+    delete remoteConfigs.value[row.key];
+    await refreshRemoteTunnels();
   } catch (err: any) {
     appendLog(`[ERROR] 停止云端托管失败: ${err}`, 'error', 'remote');
   }
+};
+
+// 打开「添加云端托管隧道」弹窗
+const openRemoteAddModal = () => {
+  soundManager.playClick();
+  editingRemoteKey.value = '';
+  remoteFormToken.value = '';
+  remoteFormError.value = '';
+  showRemoteAddModal.value = true;
+};
+
+// 编辑已有条目（运行中按钮置灰，避免改了配置跟正在跑的进程不一致）
+const openRemoteEditModal = (row: SavedRemoteTunnel) => {
+  soundManager.playClick();
+  editingRemoteKey.value = row.key;
+  remoteFormToken.value = row.token;
+  remoteFormError.value = '';
+  showRemoteAddModal.value = true;
+};
+
+const cancelRemoteAdd = () => {
+  showRemoteAddModal.value = false;
+  remoteFormError.value = '';
+};
+
+// 保存新增 / 编辑：只落库，不自动启动（用户点行内「▶」才连）
+const confirmRemoteAdd = () => {
+  const token = extractRemoteToken(remoteFormToken.value);
+  if (!token) {
+    remoteFormError.value = t.value.server_tab.remote_token_invalid;
+    return;
+  }
+  const key = remoteTunnelKey(token);
+  const item: SavedRemoteTunnel = {
+    key,
+    token,
+    label: remoteLabelOf(token),
+    tooltip: remoteTooltipOf(token),
+  };
+  if (editingRemoteKey.value) {
+    const idx = savedRemoteTunnels.value.findIndex(x => x.key === editingRemoteKey.value);
+    if (idx !== -1) savedRemoteTunnels.value[idx] = item;
+  } else {
+    if (savedRemoteTunnels.value.some(x => x.key === key)) {
+      remoteFormError.value = t.value.server_tab.remote_token_dup;
+      return;
+    }
+    savedRemoteTunnels.value.push(item);
+  }
+  persistRemoteTunnels();
+  editingRemoteKey.value = '';
+  remoteFormError.value = '';
+  showRemoteAddModal.value = false;
+  appendLog(`[INFO] 已保存云端托管隧道 [${item.label}]，点「▶」后连接`, 'info', 'remote');
+  showToast('已保存，点「▶」启动');
+};
+
+// 删除保存的云端托管隧道：运行中先断开，再从列表里移除
+const handleDeleteRemote = (row: SavedRemoteTunnel) => {
+  soundManager.playClick();
+  pendingDeleteRemote.value = row;
+  showRemoteDeleteModal.value = true;
+};
+
+const cancelDeleteRemote = () => {
+  showRemoteDeleteModal.value = false;
+  pendingDeleteRemote.value = null;
+};
+
+const confirmDeleteRemote = async () => {
+  const row = pendingDeleteRemote.value;
+  pendingDeleteRemote.value = null;
+  showRemoteDeleteModal.value = false;
+  if (!row) return;
+  if (isRemoteRunning(row.key)) {
+    try {
+      await invoke<string>('stop_remote_tunnel', { key: row.key });
+    } catch {}
+  }
+  savedRemoteTunnels.value = savedRemoteTunnels.value.filter(x => x.key !== row.key);
+  persistRemoteTunnels();
+  delete remoteConfigs.value[row.key];
+  appendLog(`[INFO] 已删除云端托管隧道 [${row.label}]`, 'warn', 'remote');
+  showToast(`已删除 ${row.label}`);
+  await refreshRemoteTunnels();
 };
 
 // 启动临时链接（临时域名）
@@ -2644,6 +2952,10 @@ const onKeyDown = (e: KeyboardEvent) => {
       cancelClientAdd();
     } else if (showClientDeleteModal.value) {
       cancelDeleteClient();
+    } else if (showRemoteAddModal.value) {
+      cancelRemoteAdd();
+    } else if (showRemoteDeleteModal.value) {
+      cancelDeleteRemote();
     } else if (showQuickStopModal.value) {
       cancelStopQuick();
     } else if (showDeleteModal.value) {
@@ -2691,9 +3003,14 @@ onMounted(async () => {
       showExitConfirmModal.value = true;
     });
 
-    // 监听云端托管 ingress 配置更新
-    await listen<string>('remote-config-update', (event) => {
-      remoteConfigText.value = event.payload;
+    // 监听云端托管 ingress 配置更新（负载带隧道 key，多条隧道各自分组显示）
+    await listen<{ key: string; config: string }>('remote-config-update', (event) => {
+      const payload = event.payload || ({} as { key?: string; config?: string });
+      const key = payload.key || '';
+      if (!key) return;
+      remoteConfigs.value[key] = payload.config || '';
+      // 能拉到配置说明这条隧道确实活着，顺手把运行状态补上
+      if (!remoteRunningKeys.value.includes(key)) remoteRunningKeys.value.push(key);
     });
 
     // 监听临时链接临时域名分配
@@ -2720,8 +3037,7 @@ onMounted(async () => {
     const serverKeys = await invoke<string[]>('is_server_running');
     serverRunningNames.value = serverKeys;
     await refreshClientConnections();
-    const remoteKeys = await invoke<string[]>('is_remote_running');
-    remoteRunning.value = remoteKeys.length > 0;
+    await refreshRemoteTunnels();
     const quickKeys = await invoke<string[]>('is_quick_running');
     quickTunnels.value = quickKeys.map(key => {
       const { protocol, port } = parseQuickKey(key);
@@ -3492,6 +3808,16 @@ onUnmounted(() => {
   padding-bottom: 10px;
 }
 
+/* 云端托管列表卡片：与客户端列表保持同一套版式 */
+.remote-card {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 .client-title-row {
   display: flex;
   align-items: center;
@@ -3729,6 +4055,24 @@ onUnmounted(() => {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 12px;
+  /* 多条云端隧道并行时配置会很长，这里封顶 + 内部滚动，避免卡片无限长高 */
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* 配置按隧道分组：每条隧道一块，块间用细线分隔，避免多条隧道时糊成一片 */
+.remote-config-group + .remote-config-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.remote-config-group-title {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
 }
 
 .remote-config-body pre {

@@ -123,6 +123,19 @@ export interface LangPack {
     status_remote_stopped: string;
     remote_config_title: string;
     remote_config_empty: string;
+    remote_add_btn: string;
+    remote_add_title: string;
+    remote_edit_title: string;
+    remote_col_tunnel: string;
+    remote_col_status: string;
+    remote_col_action: string;
+    remote_empty: string;
+    remote_btn_edit: string;
+    remote_btn_delete: string;
+    remote_delete_confirm_title: string;
+    remote_delete_confirm_msg: string;
+    remote_token_invalid: string;
+    remote_token_dup: string;
     headers: {
       id: string;
       name: string;

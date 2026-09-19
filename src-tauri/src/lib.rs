@@ -45,6 +45,20 @@ fn client_tunnel_key(domain: &str, port: &str) -> String {
     format!("{}|{}", domain.trim(), port.trim())
 }
 
+/// 回传前端的云端托管隧道状态（key 为 token 前 16 字符，与进程表 key 一致）。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteTunnelState {
+    pub key: String,
+}
+
+/// 某条云端托管隧道拉取到的 ingress 配置，随 key 一起下发。
+/// 多条隧道并行时前端据此把配置分组显示，避免糊成一片分不清是哪条隧道。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteConfigUpdate {
+    pub key: String,
+    pub config: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TunnelInfo {
     pub id: String,
@@ -1321,12 +1335,12 @@ fn start_remote_tunnel(
     let token_trimmed = extract_token(&token)?;
 
     let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
-    // 同一 token 重复启动时，先停掉旧实例（用 token 前 16 字符作为 key）
-    let key = if token_trimmed.len() > 16 {
-        token_trimmed[..16].to_string()
-    } else {
-        token_trimmed.clone()
-    };
+    // 进程表 key 用「完整 token」，不能用前缀：
+    // 同一账号下不同隧道的 token 前缀完全相同（payload 都是账号 + 隧道 ID 的 JSON，
+    // base64 后前 16 字符一致），截前缀会让两条隧道撞成同一个 key，
+    // 后启动的那条会把先启动的直接 kill 掉 —— 云端托管多开就彻底失效。
+    // token 只在进程表内部与前端之间传递，不写日志、不上界面。
+    let key = token_trimmed.clone();
     if let Some(mut old) = proc_guard.remove(&key) {
         let _ = old.kill();
     }
@@ -1365,6 +1379,8 @@ fn start_remote_tunnel(
     }
 
     let app_clone2 = app.clone();
+    // 事件必须带上「是哪条隧道的配置」：闭包 move 走副本，key 本身后面还要写进进程表
+    let key_for_config = key.clone();
     if let Some(err) = stderr {
         thread::spawn(move || {
             let reader = BufReader::new(err);
@@ -1377,7 +1393,13 @@ fn start_remote_tunnel(
                     "info"
                 };
                 if let Some(ingress_text) = extract_ingress_from_log(&line) {
-                    let _ = app_clone2.emit("remote-config-update", ingress_text);
+                    let _ = app_clone2.emit(
+                        "remote-config-update",
+                        RemoteConfigUpdate {
+                            key: key_for_config.clone(),
+                            config: ingress_text,
+                        },
+                    );
                 }
                 let _ = app_clone2.emit(
                     "log-message",
@@ -1457,6 +1479,24 @@ fn is_remote_running(state: State<'_, AppState>) -> Vec<String> {
     }
     keys.sort();
     keys
+}
+
+/// 列出当前真正在跑的云端托管隧道（key = token 前 16 字符）。
+/// 与客户端列表同样先 try_wait() 回收已退出的进程，避免前端拿到假状态。
+#[tauri::command]
+fn list_remote_tunnels(state: State<'_, AppState>) -> Vec<RemoteTunnelState> {
+    let mut keys = Vec::new();
+    if let Ok(mut guard) = state.remote_process.lock() {
+        guard.retain(|_k, child| match child.try_wait() {
+            Ok(None) => true,
+            _ => false,
+        });
+        keys = guard.keys().cloned().collect();
+    }
+    keys.sort();
+    keys.into_iter()
+        .map(|key| RemoteTunnelState { key })
+        .collect()
 }
 
 /// 从一行日志中尝试提取 trycloudflare.com 临时域名。
@@ -2137,6 +2177,7 @@ pub fn run() {
             start_remote_tunnel,
             stop_remote_tunnel,
             is_remote_running,
+            list_remote_tunnels,
             start_quick_tunnel,
             stop_quick_tunnel,
             is_quick_running,
