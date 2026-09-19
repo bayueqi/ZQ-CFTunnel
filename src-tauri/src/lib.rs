@@ -45,7 +45,7 @@ fn client_tunnel_key(domain: &str, port: &str) -> String {
     format!("{}|{}", domain.trim(), port.trim())
 }
 
-/// 回传前端的云端托管隧道状态（key 为 token 前 16 字符，与进程表 key 一致）。
+/// 回传前端的云端托管隧道状态（key 为隧道 ID，与进程表 key 一致）。
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RemoteTunnelState {
     pub key: String,
@@ -121,8 +121,9 @@ fn app_data_dir() -> PathBuf {
 
 /// WebView2 用户数据目录：`<软件目录>\data\webview`。
 ///
-/// 界面里的语言 / 主题 / 端口 / 客户端隧道列表 / 云端托管 token 都保存在
-/// 这个目录下的 localStorage 里，删掉它等于恢复出厂设置。
+/// 界面里的语言 / 主题 / 端口 / 客户端隧道列表都保存在这个目录下的
+/// localStorage 里，删掉它等于恢复出厂设置。
+/// （云端托管的隧道 Token 不落盘：每次启动都从 cert.pem 现取。）
 fn webview_data_dir() -> PathBuf {
     app_data_dir().join("webview")
 }
@@ -1477,27 +1478,79 @@ fn extract_ingress_from_log(line: &str) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+/// 用隧道 ID 或名称换取该隧道的运行 Token（`cloudflared tunnel token <x>`）。
+///
+/// Token 存在 Cloudflare 云端，靠 cert.pem 的账号级授权就能随时换出来，
+/// 所以界面完全不需要用户手填 Token，也就不必把 Token 明文写进 localStorage。
+/// 注意：create_base_command 只在软件目录下确实有 cert.pem 时才设置
+/// TUNNEL_ORIGIN_CERT，所以这里必须先确认证书存在，否则 cloudflared 会直接报错。
+fn tunnel_token_of(id_or_name: &str) -> Result<String, String> {
+    let target = id_or_name.trim();
+    if target.is_empty() {
+        return Err("隧道 ID 不能为空".to_string());
+    }
+    if !origin_cert_path().exists() {
+        return Err(
+            "未找到 Cloudflare 授权证书，请先在「配置」页点击「Cloudflared 授权登录」".to_string(),
+        );
+    }
+
+    let mut cmd = create_base_command();
+    cmd.args(["tunnel", "token", target])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = cmd.output().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "未找到 cloudflared 程序，请先在「配置」页点击「安装 cloudflared」".to_string()
+        } else {
+            format!("获取隧道 Token 失败: {}", e)
+        }
+    })?;
+
+    if !output.status.success() {
+        let err_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let out_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let reason = if !err_str.is_empty() { err_str } else { out_str };
+        return Err(format!("无法获取隧道 [{}] 的 Token: {}", target, reason));
+    }
+
+    extract_token(&String::from_utf8_lossy(&output.stdout))
+        .map_err(|_| format!("隧道 [{}] 未返回有效 Token", target))
+}
+
+/// 按隧道 ID 启动云端托管：先现取 Token，再 `tunnel run --token`。
+///
+/// 进程表 key 用「隧道 ID」而不是 Token：Token 是每次现取的运行口令，
+/// 而隧道 ID 是前端隧道列表里的稳定标识，只有拿 ID 做 key，
+/// 前端才能把「正在跑的进程」和「列表里的那一行」对上号。
 #[tauri::command]
-fn start_remote_tunnel(
+fn start_remote_tunnel_by_id(
     app: AppHandle,
     state: State<'_, AppState>,
-    token: String,
+    tunnel_id: String,
+    tunnel_name: String,
 ) -> Result<String, String> {
-    let token_trimmed = extract_token(&token)?;
+    let key = tunnel_id.trim().to_string();
+    if key.is_empty() {
+        return Err("隧道 ID 不能为空".to_string());
+    }
+    let display = if tunnel_name.trim().is_empty() {
+        key.clone()
+    } else {
+        tunnel_name.trim().to_string()
+    };
+
+    // Token 只在本次启动里现取现用：不落盘、不写日志、不上界面
+    let token = tunnel_token_of(&display)?;
 
     let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
-    // 进程表 key 用「完整 token」，不能用前缀：
-    // 同一账号下不同隧道的 token 前缀完全相同（payload 都是账号 + 隧道 ID 的 JSON，
-    // base64 后前 16 字符一致），截前缀会让两条隧道撞成同一个 key，
-    // 后启动的那条会把先启动的直接 kill 掉 —— 云端托管多开就彻底失效。
-    // token 只在进程表内部与前端之间传递，不写日志、不上界面。
-    let key = token_trimmed.clone();
     if let Some(mut old) = proc_guard.remove(&key) {
         let _ = old.kill();
     }
 
     let mut cmd = create_base_command();
-    cmd.args(["tunnel", "run", "--token", &token_trimmed])
+    cmd.args(["tunnel", "run", "--token", &token])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -1566,7 +1619,7 @@ fn start_remote_tunnel(
 
     proc_guard.insert(key, child);
 
-    let start_msg = "已启动云端托管（tunnel run --token）".to_string();
+    let start_msg = format!("已启动云端托管 [{}]", display);
     let _ = app.emit(
         "log-message",
         LogPayload {
@@ -1632,7 +1685,7 @@ fn is_remote_running(state: State<'_, AppState>) -> Vec<String> {
     keys
 }
 
-/// 列出当前真正在跑的云端托管隧道（key = token 前 16 字符）。
+/// 列出当前真正在跑的云端托管隧道（key = 隧道 ID）。
 /// 与客户端列表同样先 try_wait() 回收已退出的进程，避免前端拿到假状态。
 #[tauri::command]
 fn list_remote_tunnels(state: State<'_, AppState>) -> Vec<RemoteTunnelState> {
@@ -2342,7 +2395,7 @@ pub fn run() {
             toggle_maximize_window,
             close_window,
             is_window_maximized,
-            start_remote_tunnel,
+            start_remote_tunnel_by_id,
             stop_remote_tunnel,
             is_remote_running,
             list_remote_tunnels,

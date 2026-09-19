@@ -12,18 +12,22 @@ export const isTauriEnvironment = (): boolean => {
 };
 
 // 浏览器演示模式下的内存隧道数据
+// tunnel_type 必须有：界面按它把隧道分到「固定域名」和「云端托管」两个列表，
+// 漏了这个字段两个列表在网页演示里都会是空的。
 let mockTunnels = [
   {
     id: 'f83a21b4-49c0-4e2a-b7e1-893d11b0e91a',
     name: 'mc-server',
     created: '2026-08-20 14:32:10',
     connections: '4x Connections (HKG, NRT, SJC, LAX)',
+    tunnel_type: 'local',
   },
   {
     id: '7a19c53e-1082-4411-9a77-4402ebcf8821',
     name: 'web-demo',
     created: '2026-08-28 09:15:00',
     connections: '2x Connections (HKG, NRT)',
+    tunnel_type: 'remote',
   },
 ];
 
@@ -33,8 +37,12 @@ const mockLogListeners: LogListener[] = [];
 // 浏览器演示模式下的客户端隧道（支持多开，与 Rust 侧 client_process 语义一致）
 let mockClients: Array<{ key: string; domain: string; port: string }> = [];
 
-// 浏览器演示模式下的云端托管隧道（支持多开，与 Rust 侧 remote_process 语义一致：key = 完整 token）
+// 浏览器演示模式下的云端托管隧道（支持多开，与 Rust 侧 remote_process 语义一致：key = 隧道 ID）
 let mockRemotes: Array<{ key: string }> = [];
+
+// 演示模式下模拟后端下发的 ingress 配置（桌面端由 cloudflared 日志解析后推送）
+type RemoteConfigListener = (event: { payload: { key: string; config: string } }) => void;
+const mockRemoteConfigListeners: RemoteConfigListener[] = [];
 
 export function emitMockLog(message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info', source: string = 'system') {
   mockLogListeners.forEach(listener => {
@@ -66,9 +74,11 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         name,
         created: new Date().toISOString().replace('T', ' ').substr(0, 19),
         connections: 'Inactive',
+        // 本机新建的隧道带凭据文件，属于「固定域名」那一类
+        tunnel_type: 'local',
       };
       mockTunnels.unshift(newTunnel);
-      emitMockLog(`[SUCCESS] 隧道 [${name}] 创建成功！凭证已保存至 ~/.cloudflared/${newTunnel.id}.json`, 'success', 'server');
+      emitMockLog(`[SUCCESS] 隧道 [${name}] 创建成功！凭证已保存至 <安装目录>\\data\\cloudflared\\${newTunnel.id}.json`, 'success', 'server');
       return `隧道 [${name}] 创建成功 (ID: ${newTunnel.id})` as unknown as T;
     }
 
@@ -126,18 +136,26 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       // 客户端支持多开：返回当前所有在跑的桥接进程快照
       return [...mockClients] as unknown as T;
 
-    case 'start_remote_tunnel': {
-      const token = ((args?.token as string) || '').trim();
-      if (!token) throw new Error('请先提供云端托管 Token');
-      if (mockRemotes.some(r => r.key === token)) {
-        throw new Error('该云端托管隧道已在运行，无需重复启动');
+    case 'start_remote_tunnel_by_id': {
+      const tunnelId = ((args?.tunnelId as string) || '').trim();
+      const tunnelName = ((args?.tunnelName as string) || tunnelId).trim();
+      if (!tunnelId) throw new Error('缺少隧道 ID，无法启动云端托管');
+      if (mockRemotes.some(r => r.key === tunnelId)) {
+        throw new Error(`云端托管隧道 [${tunnelName}] 已在运行，无需重复启动`);
       }
-      mockRemotes.push({ key: token });
-      emitMockLog('[INFO] 正在通过 Token 与 Cloudflare 边缘建立多路复用连接 (QUIC/HTTP3)...', 'info', 'remote');
+      mockRemotes.push({ key: tunnelId });
+      emitMockLog(`[INFO] 正在用 cert.pem 为隧道 [${tunnelName}] 换取运行 Token...`, 'info', 'remote');
       setTimeout(() => {
-        emitMockLog('[SUCCESS] 云端托管隧道已连接至 4 个边缘路由节点 (HKG, NRT, SJC, LAX)', 'success', 'remote');
-      }, 500);
-      return `云端托管隧道已启动 (Token 前缀: ${token.slice(0, 16)})` as unknown as T;
+        emitMockLog(`[SUCCESS] 云端托管隧道 [${tunnelName}] 已连接至 4 个边缘路由节点 (HKG, NRT, SJC, LAX)`, 'success', 'remote');
+        // 桌面端这份配置来自 cloudflared 日志，演示模式直接造一份，否则配置卡片是空的
+        mockRemoteConfigListeners.forEach(l => l({
+          payload: {
+            key: tunnelId,
+            config: `${tunnelName}.example.com  →  http://localhost:25565\n(默认)  →  http_status:404`,
+          },
+        }));
+      }, 600);
+      return `已启动云端托管 [${tunnelName}]` as unknown as T;
     }
 
     case 'stop_remote_tunnel': {
@@ -147,12 +165,12 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         return '该云端托管隧道当前未在运行' as unknown as T;
       }
       mockRemotes.splice(idx, 1);
-      emitMockLog(`[INFO] 云端托管隧道 [${key.slice(0, 16)}] 已停止`, 'warn', 'remote');
-      return '云端托管隧道已停止' as unknown as T;
+      emitMockLog('[INFO] 云端托管已停止', 'warn', 'remote');
+      return '云端托管已停止' as unknown as T;
     }
 
     case 'list_remote_tunnels':
-      // 云端托管支持多开：返回当前所有在跑的进程快照（key 为完整 token）
+      // 云端托管支持多开：返回当前所有在跑的进程快照（key 为隧道 ID）
       return mockRemotes.map(r => ({ key: r.key })) as unknown as T;
 
     case 'is_remote_running':
@@ -228,6 +246,14 @@ export async function safeListen<T>(event: string, handler: EventCallback<T>): P
   // 网页端 mock 事件分发
   if (event === 'log-message') {
     mockLogListeners.push(handler as unknown as LogListener);
+  }
+
+  if (event === 'remote-config-update') {
+    mockRemoteConfigListeners.push(handler as unknown as RemoteConfigListener);
+    return () => {
+      const idx = mockRemoteConfigListeners.indexOf(handler as unknown as RemoteConfigListener);
+      if (idx !== -1) mockRemoteConfigListeners.splice(idx, 1);
+    };
   }
 
   return () => {
