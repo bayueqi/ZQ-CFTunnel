@@ -1665,8 +1665,11 @@ const quickTargetLabel = (qt: QuickTunnelItem) => {
 };
 
 // 云端托管支持多开：一个 Token 一条隧道，配置持久保存，运行状态与后端对账。
-// key 必须与 Rust 侧一致（token 前 16 字符），否则对账时认不出是同一段隧道。
+// key 必须与 Rust 侧一致（完整 token），否则对账时认不出是同一段隧道。
 type SavedRemoteTunnel = { key: string; token: string; label: string; tooltip: string };
+// 表格行 = 持久化配置 ∪ 后端对账出的实时运行状态。
+// running 只活在行上，不写进 localStorage，所以不能并进 SavedRemoteTunnel。
+type RemoteTunnelRow = SavedRemoteTunnel & { running: boolean };
 const REMOTE_TUNNELS_STORAGE_KEY = 'remote_tunnels_v1';
 
 // 与 Rust 侧 extract_token 保持一致：整串就是 token，或从 service install 命令里挑出 eyJ 开头那段
@@ -1752,7 +1755,7 @@ const isRemoteRunning = (key: string) => remoteRunningKeys.value.includes(key);
 
 // 表格行 = 已保存的配置 ∪ 后端正在跑的实例
 const remoteRows = computed(() => {
-  const rows: Array<SavedRemoteTunnel & { running: boolean }> = savedRemoteTunnels.value.map(r => ({
+  const rows: RemoteTunnelRow[] = savedRemoteTunnels.value.map(r => ({
     ...r,
     running: isRemoteRunning(r.key),
   }));
@@ -2438,7 +2441,7 @@ const refreshRemoteTunnels = async (withLog = false) => {
 };
 
 // 启动指定的那一条云端托管隧道（tunnel run --token，一条 token 一个进程）
-const handleStartRemoteTunnel = async (row: SavedRemoteTunnel) => {
+const handleStartRemoteTunnel = async (row: RemoteTunnelRow) => {
   if (row.running || !row.token) return;
   soundManager.playSuccess();
   try {
@@ -2453,7 +2456,7 @@ const handleStartRemoteTunnel = async (row: SavedRemoteTunnel) => {
 };
 
 // 停止指定的那一条云端托管隧道（只停进程，条目保留）
-const handleStopRemoteTunnel = async (row: SavedRemoteTunnel) => {
+const handleStopRemoteTunnel = async (row: RemoteTunnelRow) => {
   soundManager.playClick();
   try {
     const res = await invoke<string>('stop_remote_tunnel', { key: row.key });

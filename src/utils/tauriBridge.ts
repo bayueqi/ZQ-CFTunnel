@@ -33,6 +33,9 @@ const mockLogListeners: LogListener[] = [];
 // 浏览器演示模式下的客户端隧道（支持多开，与 Rust 侧 client_process 语义一致）
 let mockClients: Array<{ key: string; domain: string; port: string }> = [];
 
+// 浏览器演示模式下的云端托管隧道（支持多开，与 Rust 侧 remote_process 语义一致：key = 完整 token）
+let mockRemotes: Array<{ key: string }> = [];
+
 export function emitMockLog(message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info', source: string = 'system') {
   mockLogListeners.forEach(listener => {
     listener({
@@ -122,6 +125,38 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
     case 'list_client_tunnels':
       // 客户端支持多开：返回当前所有在跑的桥接进程快照
       return [...mockClients] as unknown as T;
+
+    case 'start_remote_tunnel': {
+      const token = ((args?.token as string) || '').trim();
+      if (!token) throw new Error('请先提供云端托管 Token');
+      if (mockRemotes.some(r => r.key === token)) {
+        throw new Error('该云端托管隧道已在运行，无需重复启动');
+      }
+      mockRemotes.push({ key: token });
+      emitMockLog('[INFO] 正在通过 Token 与 Cloudflare 边缘建立多路复用连接 (QUIC/HTTP3)...', 'info', 'remote');
+      setTimeout(() => {
+        emitMockLog('[SUCCESS] 云端托管隧道已连接至 4 个边缘路由节点 (HKG, NRT, SJC, LAX)', 'success', 'remote');
+      }, 500);
+      return `云端托管隧道已启动 (Token 前缀: ${token.slice(0, 16)})` as unknown as T;
+    }
+
+    case 'stop_remote_tunnel': {
+      const key = ((args?.key as string) || '').trim();
+      const idx = mockRemotes.findIndex(r => r.key === key);
+      if (idx === -1) {
+        return '该云端托管隧道当前未在运行' as unknown as T;
+      }
+      mockRemotes.splice(idx, 1);
+      emitMockLog(`[INFO] 云端托管隧道 [${key.slice(0, 16)}] 已停止`, 'warn', 'remote');
+      return '云端托管隧道已停止' as unknown as T;
+    }
+
+    case 'list_remote_tunnels':
+      // 云端托管支持多开：返回当前所有在跑的进程快照（key 为完整 token）
+      return mockRemotes.map(r => ({ key: r.key })) as unknown as T;
+
+    case 'is_remote_running':
+      return mockRemotes.map(r => r.key) as unknown as T;
 
     case 'is_server_running':
       return [] as unknown as T;
