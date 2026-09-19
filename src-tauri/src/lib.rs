@@ -146,7 +146,7 @@ pub struct QuickUrlPayload {
     pub url: String,
 }
 
-// ==================== 便携化：所有数据都放在软件目录下 ====================
+// ============ 数据存放：界面数据在软件目录，cloudflared 凭证用默认目录 ============
 //
 // 布局（<软件目录> = 可执行文件所在目录，比如 D:\CFTunnel）：
 //
@@ -154,10 +154,12 @@ pub struct QuickUrlPayload {
 //   <软件目录>\uninstall.exe         卸载器
 //   <软件目录>\cloudflared.exe       自动下载的 cloudflared（不再跟着「启动时的工作目录」乱跑）
 //   <软件目录>\data\webview\         WebView2 用户数据目录：界面设置、隧道列表、token 全在这里的 localStorage
-//   <软件目录>\data\cloudflared\     cloudflared 凭证：cert.pem（授权登录）+ <隧道ID>.json（隧道密钥）
+//   %USERPROFILE%\.cloudflared\      cloudflared 凭证：cert.pem（授权登录）+ <隧道ID>.json（隧道密钥）
 //
 // 用可执行文件所在目录而不是「当前工作目录」，是为了无论从资源管理器、快捷方式还是
 // 其它程序启动，数据都落在同一个地方。
+// 而凭证特意**不**放进软件目录：安装目录会被覆盖安装 / 卸载整目录清空（2026-09-19 真实事故），
+// 详见 default_cloudflared_dir 的注释。
 
 /// 软件安装目录：可执行文件所在目录，取不到时退回当前工作目录。
 fn app_dir() -> PathBuf {
@@ -309,6 +311,50 @@ fn tidy_cloudflared_error(stderr: &str) -> String {
         }
     }
     parts.join(" ")
+}
+
+/// 整理 cloudflared 原始输出里的**一行**，用于逐行转发到控制台。
+///
+/// 与 `tidy_cloudflared_error` 是同一套整理逻辑，区别在于调用场景：
+/// 这里是「每读一行就转发一行」，所以
+///   · 空行返回 None —— 直接丢掉，否则控制台会出现「只有标签、没有正文」的空行；
+///   · JSON 行只取 `message` —— 否则同一行里会**再出现一次层级信息**
+///     （`{"level":"error","message":"…"}` 送进去，左边已经有 `[ERROR]` 标签了），
+///     还白搭一长串 `originCertPath` / `time` 之类的无关字段。
+fn tidy_cloudflared_line(line: &str) -> Option<String> {
+    let text = tidy_cloudflared_error(line);
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+/// 判断 cloudflared 一行输出该配哪个级别标签。
+///
+/// 优先读 JSON 形态里的 `level` 字段：关键词猜测会把 `{"level":"info",…,"error":null}`
+/// 这类**只是带了个 error 字段**的普通日志误判成错误，于是好好的 info 行被挂上 `[ERROR]`。
+/// 只有非 JSON 行（cloudflared 纯文本格式形如 `2026-…Z ERR …`）才退回关键词判断。
+fn cloudflared_line_level(line: &str) -> &'static str {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) {
+        if let Some(lv) = v.get("level").and_then(|x| x.as_str()) {
+            let lv = lv.to_ascii_lowercase();
+            return if lv.starts_with("err") || lv == "fatal" || lv == "critical" {
+                "error"
+            } else if lv.starts_with("warn") {
+                "warn"
+            } else {
+                "info"
+            };
+        }
+    }
+    if line.contains("ERR") || line.contains("error") {
+        "error"
+    } else if line.contains("WRN") || line.contains("warn") {
+        "warn"
+    } else {
+        "info"
+    }
 }
 
 #[tauri::command]
@@ -661,14 +707,17 @@ fn start_server_tunnel(
         thread::spawn(move || {
             let reader = BufReader::new(out);
             for line in reader.lines().flatten() {
-                let _ = app_clone1.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line,
-                        level: "info".to_string(),
-                        source: "server".to_string(),
-                    },
-                );
+                // 逐行整理后再转发：丢掉空行、JSON 行只留 message（见 tidy_cloudflared_line）
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_clone1.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: "info".to_string(),
+                            source: "server".to_string(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -678,21 +727,16 @@ fn start_server_tunnel(
         thread::spawn(move || {
             let reader = BufReader::new(err);
             for line in reader.lines().flatten() {
-                let level = if line.contains("ERR") || line.contains("error") {
-                    "error"
-                } else if line.contains("WRN") || line.contains("warn") {
-                    "warn"
-                } else {
-                    "info"
-                };
-                let _ = app_clone2.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line,
-                        level: level.to_string(),
-                        source: "server".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_clone2.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: cloudflared_line_level(&line).to_string(),
+                            source: "server".to_string(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -824,14 +868,16 @@ fn start_client_tunnel(
         thread::spawn(move || {
             let reader = BufReader::new(out);
             for line in reader.lines().flatten() {
-                let _ = app_clone1.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line,
-                        level: "info".to_string(),
-                        source: "client".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_clone1.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: "info".to_string(),
+                            source: "client".to_string(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -841,21 +887,16 @@ fn start_client_tunnel(
         thread::spawn(move || {
             let reader = BufReader::new(err);
             for line in reader.lines().flatten() {
-                let level = if line.contains("ERR") || line.contains("error") {
-                    "error"
-                } else if line.contains("WRN") || line.contains("warn") {
-                    "warn"
-                } else {
-                    "info"
-                };
-                let _ = app_clone2.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line,
-                        level: level.to_string(),
-                        source: "client".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_clone2.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: cloudflared_line_level(&line).to_string(),
+                            source: "client".to_string(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -1350,14 +1391,16 @@ fn login_cloudflared(app: AppHandle) -> Result<String, String> {
         thread::spawn(move || {
             let reader = BufReader::new(out);
             for line in reader.lines().flatten() {
-                let _ = app_c1.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line.clone(),
-                        level: "info".to_string(),
-                        source: "misc".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_c1.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: "info".to_string(),
+                            source: "misc".to_string(),
+                        },
+                    );
+                }
                 if let Some((message, level)) = watch_login_line(&line, &watch_c1) {
                     let _ = app_c1.emit(
                         "log-message",
@@ -1378,14 +1421,16 @@ fn login_cloudflared(app: AppHandle) -> Result<String, String> {
         thread::spawn(move || {
             let reader = BufReader::new(err);
             for line in reader.lines().flatten() {
-                let _ = app_c2.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line.clone(),
-                        level: "info".to_string(),
-                        source: "misc".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_c2.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: cloudflared_line_level(&line).to_string(),
+                            source: "misc".to_string(),
+                        },
+                    );
+                }
                 if let Some((message, level)) = watch_login_line(&line, &watch_c2) {
                     let _ = app_c2.emit(
                         "log-message",
@@ -1624,14 +1669,16 @@ fn start_remote_tunnel_by_id(
         thread::spawn(move || {
             let reader = BufReader::new(out);
             for line in reader.lines().flatten() {
-                let _ = app_clone1.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line,
-                        level: "info".to_string(),
-                        source: "remote".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_clone1.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: "info".to_string(),
+                            source: "remote".to_string(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -1643,13 +1690,7 @@ fn start_remote_tunnel_by_id(
         thread::spawn(move || {
             let reader = BufReader::new(err);
             for line in reader.lines().flatten() {
-                let level = if line.contains("ERR") || line.contains("error") {
-                    "error"
-                } else if line.contains("WRN") || line.contains("warn") {
-                    "warn"
-                } else {
-                    "info"
-                };
+                // 抓 ingress 必须喂**原始行**（配置就在那行 JSON 里），所以在整理之前做
                 if let Some(ingress_text) = extract_ingress_from_log(&line) {
                     let _ = app_clone2.emit(
                         "remote-config-update",
@@ -1659,14 +1700,16 @@ fn start_remote_tunnel_by_id(
                         },
                     );
                 }
-                let _ = app_clone2.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line,
-                        level: level.to_string(),
-                        source: "remote".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_clone2.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: cloudflared_line_level(&line).to_string(),
+                            source: "remote".to_string(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -1868,14 +1911,16 @@ fn start_quick_tunnel(
         thread::spawn(move || {
             let reader = BufReader::new(out);
             for line in reader.lines().flatten() {
-                let _ = app_emit.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line.clone(),
-                        level: "info".to_string(),
-                        source: "quick".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_emit.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: "info".to_string(),
+                            source: "quick".to_string(),
+                        },
+                    );
+                }
                 if let Some(url) = try_extract_quick_url(&line) {
                     let _ = app_emit.emit(
                         "quick-tunnel-url",
@@ -1892,21 +1937,16 @@ fn start_quick_tunnel(
         thread::spawn(move || {
             let reader = BufReader::new(err);
             for line in reader.lines().flatten() {
-                let level = if line.contains("ERR") || line.contains("error") {
-                    "error"
-                } else if line.contains("WRN") || line.contains("warn") {
-                    "warn"
-                } else {
-                    "info"
-                };
-                let _ = app_emit2.emit(
-                    "log-message",
-                    LogPayload {
-                        message: line.clone(),
-                        level: level.to_string(),
-                        source: "quick".to_string(),
-                    },
-                );
+                if let Some(text) = tidy_cloudflared_line(&line) {
+                    let _ = app_emit2.emit(
+                        "log-message",
+                        LogPayload {
+                            message: text,
+                            level: cloudflared_line_level(&line).to_string(),
+                            source: "quick".to_string(),
+                        },
+                    );
+                }
                 // cloudflared 的 quick tunnel 域名实际从 stderr 输出，需在此处抓取
                 if let Some(url) = try_extract_quick_url(&line) {
                     let _ = app_emit2.emit(

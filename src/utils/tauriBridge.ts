@@ -78,7 +78,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         tunnel_type: 'local',
       };
       mockTunnels.unshift(newTunnel);
-      emitMockLog(`[SUCCESS] 隧道 [${name}] 创建成功！凭证已保存至 <安装目录>\\data\\cloudflared\\${newTunnel.id}.json`, 'success', 'server');
+      emitMockLog(`[SUCCESS] 隧道 [${name}] 创建成功！凭证已保存至 %USERPROFILE%\\.cloudflared\\${newTunnel.id}.json`, 'success', 'server');
       return `隧道 [${name}] 创建成功 (ID: ${newTunnel.id})` as unknown as T;
     }
 
@@ -228,7 +228,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       const interval = setInterval(() => {
         progress += 25;
         if (progress <= 100) {
-          emitMockLog(`[DOWNLOAD] 下载进度: ${progress}% / 100%`, 'info', 'misc');
+          emitMockLog(`[下载进度] ${progress}% / 100%`, 'info', 'misc');
         } else {
           clearInterval(interval);
           emitMockLog(`[SUCCESS] ${filename} 下载完成并已放置在应用目录，已具备执行权限！`, 'success', 'misc');
@@ -249,8 +249,8 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       return 'OK' as unknown as T;
 
     case 'open_cloudflared_config_dir':
-      emitMockLog('[INFO] 模拟打开本地配置目录: <安装目录>\\data\\cloudflared', 'info', 'misc');
-      return '<安装目录>\\data\\cloudflared' as unknown as T;
+      emitMockLog('[INFO] 模拟打开本地配置目录: %USERPROFILE%\\.cloudflared', 'info', 'misc');
+      return '%USERPROFILE%\\.cloudflared' as unknown as T;
 
     case 'minimize_window':
     case 'toggle_maximize_window':

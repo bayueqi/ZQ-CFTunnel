@@ -1996,7 +1996,7 @@ const openUrl = async (url: string) => {
   }
 };
 
-// 打开软件目录下的凭证目录（<安装目录>\data\cloudflared）
+// 打开 cloudflared 的默认凭证目录（%USERPROFILE%\.cloudflared）
 const handleOpenConfigDir = async () => {
   try {
     const dir = await invoke<string>('open_cloudflared_config_dir');
