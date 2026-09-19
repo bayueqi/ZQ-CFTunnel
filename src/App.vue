@@ -440,7 +440,6 @@
                     <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
                     <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
                     <th class="col-status">{{ t.server_tab.headers.status }}</th>
-                    <th class="col-actions">{{ t.server_tab.headers.actions }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -476,19 +475,9 @@
                         {{ isTunnelRunning(tunnel.name) ? t.server_tab.status_running : t.server_tab.status_not_running }}
                       </span>
                     </td>
-                    <td class="col-actions">
-                      <button
-                        class="row-action-btn"
-                        :title="isTunnelRunning(tunnel.name) ? t.server_tab.btn_stop : t.server_tab.btn_start"
-                        @click.stop="isTunnelRunning(tunnel.name) ? handleStopServer(tunnel.name) : handleRowStart(tunnel)"
-                      >
-                        <span v-if="isTunnelRunning(tunnel.name)" class="icon-square"></span>
-                        <span v-else class="icon-triangle"></span>
-                      </button>
-                    </td>
                   </tr>
                   <tr v-if="localTunnelList.length === 0">
-                    <td colspan="8" class="empty-table">
+                    <td colspan="7" class="empty-table">
                       {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
@@ -666,14 +655,6 @@
                       >
                         <span v-if="isRemoteRunning(tunnel.id)" class="icon-square"></span>
                         <span v-else class="icon-triangle"></span>
-                      </button>
-                      <!-- 每行也给一个删除入口，省得先选中再点顶部按钮 -->
-                      <button
-                        class="row-action-btn danger"
-                        :title="t.server_tab.btn_delete"
-                        @click.stop="promptDeleteRemoteTunnel(tunnel)"
-                      >
-                        🗑
                       </button>
                     </td>
                   </tr>
@@ -2185,40 +2166,6 @@ const saveTunnelCfg = (name: string) => {
       }),
     );
   } catch {}
-};
-
-// 列表行内「启动」：按该隧道记住的配置启动；没有记录时只把名字填进表单，让用户确认协议/端口
-// （不用表单里别的隧道的端口硬启动，避免端口配错却毫无提示）
-const handleRowStart = async (tunnel: TunnelInfo) => {
-  const name = tunnel.name.trim();
-  const saved = loadTunnelCfg(name);
-
-  if (!saved) {
-    serverConfig.value.name = name;
-    onServerNameInput();
-    appendLog(`[WARN] 隧道 [${name}] 还没有启动记录，已填入表单，请确认协议/端口后点「${t.value.server_tab.btn_start}」`, 'warn', 'server');
-    showToast(`请确认 [${name}] 的协议/端口`);
-    return;
-  }
-
-  soundManager.playSuccess();
-  try {
-    // 启动成功的日志由 Rust 侧统一广播（lib.rs start_server_tunnel），这里不再重复打印
-    await invoke<string>('start_server_tunnel', {
-      name,
-      port: saved.port,
-      protocol: saved.protocol,
-      unixSocket: saved.unixSocket,
-    });
-    markServerRunning(name);
-    localStorage.setItem('server_tunnel_name', name);
-    localStorage.setItem('server_port', saved.port);
-    localStorage.setItem('server_protocol', saved.protocol);
-    localStorage.setItem('server_unix_socket', saved.unixSocket);
-    showToast(`隧道 [${name}] 已启动 (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`);
-  } catch (err: any) {
-    appendLog(`[ERROR] 启动隧道 [${name}] 失败: ${err}`, 'error', 'server');
-  }
 };
 
 // 启动服务端隧道 (触发 playSuccess 音效)
