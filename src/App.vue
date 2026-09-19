@@ -1538,7 +1538,8 @@ const serverMode = ref<'local' | 'remote'>(localStorage.getItem('server_mode') =
 const switchServerMode = (mode: 'local' | 'remote') => {
   serverMode.value = mode;
   localStorage.setItem('server_mode', mode);
-  // 切到云端托管时顺手拉一次云端配置：走 API 读取，隧道没跑起来也能看到规则
+  // 切到云端托管时取云端配置：走 API 读取，隧道没跑起来也能看到规则。
+  // 这里**不**强刷 —— 缓存没过期就直接用，否则每次切视图都会重拉全部隧道，白白卡一下。
   if (mode === 'remote') void refreshRemoteConfigs();
 };
 
@@ -1652,47 +1653,102 @@ const remoteConfigs = ref<Record<string, TunnelCloudInfo>>({});
 const errorText = (e: unknown): string =>
   typeof e === 'string' ? e : String((e as Error)?.message ?? e);
 
-// 把隧道列表里每一条在 Cloudflare 侧的三块配置都拉回来。
+// 拉一条隧道的云端配置：已发布应用程序路由 + 主机名路由 + CIDR 路由。
 // 三块分别容错：某一块失败只在那块里显示「读取失败」，另外两块照常显示 ——
 // 否则主机名路由缺权限（403）会把已经拿到的已发布应用程序路由一起遮掉。
-const refreshRemoteConfigs = async () => {
+const fetchOneTunnelConfig = async (
+  tn: TunnelInfo
+): Promise<readonly [string, TunnelCloudInfo]> => {
+  const [cfgRes, routeRes] = await Promise.allSettled([
+    invoke<{ rules: TunnelIngressRule[] }>('fetch_tunnel_config', {
+      tunnelId: tn.id,
+    }),
+    invoke<TunnelRouteSet>('fetch_tunnel_routes', { tunnelId: tn.id }),
+  ]);
+  const info: TunnelCloudInfo = {
+    rules: cfgRes.status === 'fulfilled' ? cfgRes.value.rules : [],
+    ingressError: cfgRes.status === 'rejected' ? errorText(cfgRes.reason) : '',
+    // 演示模式（浏览器里跑）可能返回 null，这里兜一层，别让整条刷新链炸掉
+    hostnameRoutes: routeRes.status === 'fulfilled' ? routeRes.value?.hostname_routes ?? [] : [],
+    cidrRoutes: routeRes.status === 'fulfilled' ? routeRes.value?.cidr_routes ?? [] : [],
+    hostnameError:
+      routeRes.status === 'fulfilled'
+        ? routeRes.value?.hostname_error || ''
+        : errorText(routeRes.reason),
+    cidrError:
+      routeRes.status === 'fulfilled'
+        ? routeRes.value?.cidr_error || ''
+        : errorText(routeRes.reason),
+  };
+  return [tn.id, info] as const;
+};
+
+// 云端配置的缓存：**切视图不该打网络请求**。
+//
+// 每拉一轮要对每条隧道发 2 个 IPC，每个 IPC 背后是一次阻塞式 HTTPS，实测单次约 340ms 且
+// 不复用连接 —— 6 条隧道就是 12 个请求。原先切到「云端托管」必然重拉一遍，
+// 于是「从云端托管切到固定域名 / 临时链接」永远卡在等待里（隧道全删光就不卡，正是这个原因）。
+//
+// 三条规矩：
+//   * TTL 内且隧道集合没变 → 直接用缓存，0 次 IPC，切视图瞬时完成
+//   * 已有在途请求 → 等它落地，连点也不会堆出一串
+//   * force（手动点刷新 / 启停隧道）才强制重拉
+const REMOTE_CONFIG_TTL_MS = 60_000;
+// 一轮并发几条隧道：每条要发 2 个 HTTPS（每次还都新建连接），一次全铺开容易被限流
+const REMOTE_CONFIG_CONCURRENCY = 3;
+let remoteConfigsFetchedAt = 0;
+let remoteConfigsSignature = '';
+let remoteConfigsInFlight: Promise<void> | null = null;
+
+// 隧道集合的指纹：增删隧道后配置会变，缓存必须跟着失效
+const tunnelSetSignature = (items: TunnelInfo[]) => items.map(t => t.id).sort().join(',');
+
+// 让缓存立即失效，下次读取时重拉（隧道增删、启停之后调用）
+const invalidateRemoteConfigs = () => {
+  remoteConfigsFetchedAt = 0;
+};
+
+const refreshRemoteConfigs = async (opts: { force?: boolean } = {}): Promise<void> => {
   const items = remoteTunnelList.value;
   if (!items.length) {
     remoteConfigs.value = {};
+    remoteConfigsFetchedAt = 0;
+    remoteConfigsSignature = '';
     return;
   }
-  const entries = await Promise.all(
-    items.map(async (tn) => {
-      const [cfgRes, routeRes] = await Promise.allSettled([
-        invoke<{ rules: TunnelIngressRule[] }>('fetch_tunnel_config', {
-          tunnelId: tn.id,
-        }),
-        invoke<TunnelRouteSet>('fetch_tunnel_routes', { tunnelId: tn.id }),
-      ]);
-      const info: TunnelCloudInfo = {
-        rules: cfgRes.status === 'fulfilled' ? cfgRes.value.rules : [],
-        ingressError: cfgRes.status === 'rejected' ? errorText(cfgRes.reason) : '',
-        // 演示模式（浏览器里跑）可能返回 null，这里兜一层，别让整条刷新链炸掉
-        hostnameRoutes:
-          routeRes.status === 'fulfilled' ? routeRes.value?.hostname_routes ?? [] : [],
-        cidrRoutes: routeRes.status === 'fulfilled' ? routeRes.value?.cidr_routes ?? [] : [],
-        hostnameError:
-          routeRes.status === 'fulfilled'
-            ? routeRes.value?.hostname_error || ''
-            : errorText(routeRes.reason),
-        cidrError:
-          routeRes.status === 'fulfilled'
-            ? routeRes.value?.cidr_error || ''
-            : errorText(routeRes.reason),
-      };
-      return [tn.id, info] as const;
-    }),
-  );
-  const next: Record<string, TunnelCloudInfo> = {};
-  for (const entry of entries) {
-    if (entry) next[entry[0]] = entry[1];
+  const signature = tunnelSetSignature(items);
+  const cacheValid =
+    !opts.force &&
+    remoteConfigsSignature === signature &&
+    remoteConfigsFetchedAt > 0 &&
+    Date.now() - remoteConfigsFetchedAt < REMOTE_CONFIG_TTL_MS;
+  if (cacheValid) return;
+  // 已经有一轮在路上：先等它，别叠加请求
+  if (remoteConfigsInFlight) {
+    await remoteConfigsInFlight;
+    // 强刷时那一轮可能基于旧的隧道集合，落地后按最新签名再来一次
+    if (opts.force) await refreshRemoteConfigs(opts);
+    return;
   }
-  remoteConfigs.value = next;
+
+  // 用局部 job 承接，别直接 return 那个可变的模块级引用：
+  // 它在 finally 里会被置回 null，TS 无法窄化 `Promise<void> | null`
+  const job: Promise<void> = (async () => {
+    const next: Record<string, TunnelCloudInfo> = {};
+    // 分批串行：每批 REMOTE_CONFIG_CONCURRENCY 条隧道并发，避免一次铺开 2N 个请求
+    for (let i = 0; i < items.length; i += REMOTE_CONFIG_CONCURRENCY) {
+      const batch = items.slice(i, i + REMOTE_CONFIG_CONCURRENCY);
+      const done = await Promise.all(batch.map(fetchOneTunnelConfig));
+      for (const [id, info] of done) next[id] = info;
+    }
+    remoteConfigs.value = next;
+    remoteConfigsFetchedAt = Date.now();
+    remoteConfigsSignature = signature;
+  })().finally(() => {
+    remoteConfigsInFlight = null;
+  });
+  remoteConfigsInFlight = job;
+  return job;
 };
 
 // 规则渲染成「匹配目标 → 源站」的文本行。hostname 为空即 ingress 末尾的兜底规则，
@@ -2049,8 +2105,9 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
     // 顺手把云端隧道进程也对账一次，否则「运行中」状态会一直停在旧值上。
     if (scope !== 'local') {
       await refreshRemoteTunnels();
-      // 云端 ingress 配置改走 API 读取：隧道不跑起来也能看到
-      await refreshRemoteConfigs();
+      // 云端 ingress 配置改走 API 读取：隧道不跑起来也能看到。
+      // 这是用户手动点的刷新，强刷拿最新值，不吃缓存
+      await refreshRemoteConfigs({ force: true });
     }
 
     // 按触发刷新的列表分别统计：固定域名列表 / 云端托管
@@ -2476,7 +2533,8 @@ const handleStartRemoteTunnel = async (tunnel: TunnelInfo) => {
     });
     showToast(`云端托管已启动 (${tunnel.name})`);
     await refreshRemoteTunnels();
-    void refreshRemoteConfigs();
+    // 隧道刚起来，配置可能已经变了，强刷一次
+    void refreshRemoteConfigs({ force: true });
   } catch (err: any) {
     appendLog(`[ERROR] 启动云端托管失败: ${err}`, 'error', 'remote');
     showToast(`${err}`);
@@ -2491,6 +2549,8 @@ const handleStopRemoteTunnel = async (tunnel: TunnelInfo) => {
     await invoke<string>('stop_remote_tunnel', { key: tunnel.id, tunnelName: tunnel.name });
     showToast(`服务端隧道 [${tunnel.name}] 已停止`);
     delete remoteConfigs.value[tunnel.id];
+    // 这一条的缓存已经清掉，把整轮缓存判失效，下次切到云端托管会重新补齐
+    invalidateRemoteConfigs();
     await refreshRemoteTunnels();
   } catch (err: any) {
     appendLog(`[ERROR] 停止云端托管失败: ${err}`, 'error', 'remote');

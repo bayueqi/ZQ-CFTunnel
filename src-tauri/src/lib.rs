@@ -357,8 +357,42 @@ fn cloudflared_line_level(line: &str) -> &'static str {
     }
 }
 
+/// 把「会阻塞」的命令体丢到专门的阻塞线程池里执行。
+///
+/// 为什么必须这么做：Tauri 的**同步**命令（没写 `async` 的）是**在主线程上**跑的
+/// （官方文档原话：“Commands without the *async* keyword are executed on the main thread”），
+/// 而主线程就是窗口的消息循环 —— 一旦它被网卡住或被子进程拖住，界面就不重绘、点击也不响应。
+/// 本文件里这些命令干的正是这种活：`ureq` 阻塞式 HTTPS（每次还都是全新连接，实测单次约 340ms）、
+/// `cloudflared` 子进程调用（`cmd.output()` 要等它退出）。
+///
+/// 症状就是「切个视图卡一下」：点「云端托管」会触发 3×隧道数 次 API 读，6 条隧道就是 18 次，
+/// 串行压在主线程上 ≈ 6 秒不动，这期间点「固定域名 / 临时链接」自然必卡。
+///
+/// 所以凡是会阻塞的命令，一律写成 `async fn` 再包一层：
+/// ```ignore
+/// #[tauri::command]
+/// async fn foo(id: String) -> Result<Bar, String> {
+///     run_blocking("读取 xxx", move || read_foo(id)).await
+/// }
+/// ```
+/// 阻塞逻辑留在同步的 `read_foo` 里，主线程只负责等结果。
+async fn run_blocking<T, F>(what: &str, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("{}的任务异常退出: {}", what, e))?
+}
+
 #[tauri::command]
-fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
+async fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
+    run_blocking("读取隧道列表", read_list_tunnels).await
+}
+
+/// `list_tunnels` 的实现：同步调 `cloudflared tunnel list`，**必须**跑在阻塞线程池里。
+fn read_list_tunnels() -> Result<Vec<TunnelInfo>, String> {
     let mut cmd = create_base_command();
     cmd.args(["tunnel", "list", "--output", "json"])
         .stdout(Stdio::piped())
@@ -2173,7 +2207,12 @@ fn is_valid_tunnel_id(id: &str) -> bool {
 /// 凭证直接复用 cert.pem 里的 apiToken（`cloudflared tunnel route dns` 用的就是它），
 /// 实测该 token 具备读写隧道配置的权限，因此界面无需让用户另外填 API Token。
 #[tauri::command]
-fn fetch_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
+async fn fetch_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
+    run_blocking("读取云端配置", move || read_tunnel_config(tunnel_id)).await
+}
+
+/// `fetch_tunnel_config` 的实现：同步发阻塞式 HTTPS，**必须**跑在阻塞线程池里。
+fn read_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
     let id = tunnel_id.trim();
     if !is_valid_tunnel_id(id) {
         return Err("隧道 ID 格式不正确".to_string());
@@ -2246,7 +2285,13 @@ fn fetch_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
 /// 任一块失败只把原因写进对应的 `*_error`，不让整条命令失败 —— 否则一个 403
 /// 会把已经拿到的 ingress 配置一起遮掉（token 缺少 Cloudflare One Networks 权限时就会这样）。
 #[tauri::command]
-fn fetch_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
+async fn fetch_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
+    run_blocking("读取隧道路由", move || read_tunnel_routes(tunnel_id)).await
+}
+
+/// `fetch_tunnel_routes` 的实现：一次要发**两次**阻塞式 HTTPS（主机名 + CIDR），
+/// **必须**跑在阻塞线程池里。
+fn read_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
     let id = tunnel_id.trim();
     if !is_valid_tunnel_id(id) {
         return Err("隧道 ID 格式不正确".to_string());
@@ -2502,7 +2547,13 @@ fn delete_dns_record_by_id(record_id: &str) -> Result<(), String> {
 /// 每条记录带上 Cloudflare 的 dns_record_id，前端据此执行改名/解绑。
 /// 区域记录数可能超过单页上限，按 result_info.total_pages 翻页取全。
 #[tauri::command]
-fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
+async fn get_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
+    run_blocking("读取域名绑定", read_tunnel_hostnames).await
+}
+
+/// `get_tunnel_hostnames` 的实现：同步查 Cloudflare API（`fetch_all_dns_bindings`），
+/// **必须**跑在阻塞线程池里。
+fn read_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
     let all = fetch_all_dns_bindings()?;
 
     let mut map: HashMap<String, Vec<DnsBinding>> = HashMap::new();
