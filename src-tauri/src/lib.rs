@@ -59,6 +59,29 @@ pub struct RemoteConfigUpdate {
     pub config: String,
 }
 
+/// 云端 ingress 里的一条转发规则（只读展示用）。
+///
+/// `hostname` / `path` 可能同时为空：那就是 ingress 末尾的兜底规则（catch-all），
+/// 前端据此显示成「(默认)」。`path` 非空表示该规则只匹配特定路径。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TunnelIngressRule {
+    pub hostname: String,
+    pub path: String,
+    pub service: String,
+}
+
+/// 一条隧道的云端配置快照。
+///
+/// `source` 是 Cloudflare 标注的配置来源：`cloudflare` = 云端托管（在面板/API 改），
+/// `local` = 本地托管（cloudflared 用本机 config.yml 跑起来后上报的）。
+/// `version` 每次写入都会递增，可用来判断「刚改的有没有生效」。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TunnelConfig {
+    pub source: String,
+    pub version: u64,
+    pub rules: Vec<TunnelIngressRule>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TunnelInfo {
     pub id: String,
@@ -205,6 +228,42 @@ fn sync_legacy_cloudflared_files() {
     }
 }
 
+/// 清理用户主目录下遗留的 `~/.cloudflared`。
+///
+/// 旧版软件会把 cert.pem / `<隧道ID>.json` 写进用户主目录（根因见 create_base_command 注释）。
+/// 现在凭证一律落在软件目录，用户主目录那份就只是「软件以前留下的副本」，留着既是垃圾、
+/// 也容易被误认为软件还在依赖它，所以在启动时清掉。
+///
+/// 安全边界：只有当旧目录里的**每个文件**都能在软件目录找到同名同大小的副本时才删除。
+/// 只要有一个文件对不上（用户自己跑 `cloudflared login` 生成的、或存在子目录），
+/// 就原样保留 —— 宁可留下垃圾，也不误删用户数据。
+fn cleanup_user_cloudflared_dir() {
+    let legacy = legacy_cloudflared_dir();
+    if !legacy.is_dir() {
+        return;
+    }
+    let target = cloudflared_data_dir();
+    let entries = match fs::read_dir(&legacy) {
+        Ok(e) => e.flatten().collect::<Vec<_>>(),
+        Err(_) => return,
+    };
+    for entry in &entries {
+        let path = entry.path();
+        if !path.is_file() {
+            return;
+        }
+        let counterpart = target.join(entry.file_name());
+        let same = match (fs::metadata(&path), fs::metadata(&counterpart)) {
+            (Ok(a), Ok(b)) => a.len() == b.len(),
+            _ => false,
+        };
+        if !same {
+            return;
+        }
+    }
+    let _ = fs::remove_dir_all(&legacy);
+}
+
 /// 首次启动时把旧版 WebView2 数据目录（`%LOCALAPPDATA%\<identifier>`）整体搬到软件目录，
 /// 否则用户会看到隧道列表和 token 全部「消失」。
 fn migrate_legacy_webview_profile() {
@@ -258,14 +317,28 @@ fn create_base_command() -> Command {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    // 让 cloudflared 从软件目录读 cert.pem（配合 sync_legacy_cloudflared_files 已经把旧凭证拷过来）。
-    // 实测结论（cloudflared 2026.9.0）：TUNNEL_ORIGIN_CERT 指向不存在的路径时，需要证书的命令会
-    // 直接失败且**不会**回退到 ~/.cloudflared，所以只在证书确实存在时才设置这个变量；
-    // 没有证书时保持不设置，让 cloudflared 走它自己的默认搜索路径。
-    let cert = cloudflared_data_dir().join("cert.pem");
-    if cert.exists() {
-        cmd.env("TUNNEL_ORIGIN_CERT", &cert);
+    // —— 便携化第一道锁：改写 cloudflared 的「家目录」——
+    // cloudflared 没被指定路径时会去找 `~/.cloudflared`。实测（2026.9.0）：只要设置 HOME，
+    // 它就会把 `~` 当成 HOME 指向的目录（USERPROFILE 一并设置做双保险）。
+    // 这样一来它的 ~/.cloudflared 落在 <软件目录>\data\.cloudflared，
+    // 而不是用户主目录下的 C:\Users\<你>\.cloudflared。
+    let data_dir = app_data_dir();
+    let _ = fs::create_dir_all(&data_dir);
+    if let Some(dir) = data_dir.to_str() {
+        cmd.env("HOME", dir);
+        cmd.env("USERPROFILE", dir);
     }
+
+    // —— 便携化第二道锁：把证书路径钉死在软件目录 ——
+    // **无论 cert.pem 是否已存在都必须设置**，这是关键：
+    //   · `cloudflared tunnel login` 会把 cert.pem 写到这个路径；
+    //   · `cloudflared tunnel create` 会「跟着 cert.pem 所在目录」写 <隧道ID>.json
+    //     （cloudflared 原话：chose this file based on where your origin certificate was found）。
+    // 旧实现只在证书已存在时才设置，于是「第一次点授权登录」时 cert.pem 还不存在，
+    // cloudflared 便回退到 ~/.cloudflared，把凭证写进了用户主目录 —— 便携化就此破功。
+    let cert_dir = cloudflared_data_dir();
+    let _ = fs::create_dir_all(&cert_dir);
+    cmd.env("TUNNEL_ORIGIN_CERT", cert_dir.join("cert.pem"));
 
     cmd
 }
@@ -411,8 +484,12 @@ fn delete_tunnel(name: String) -> Result<String, String> {
         }
     }
 
+    // 一律带 `--force` 强删：只要云端还有任意一个 cloudflared 副本连着这条隧道
+    // （可能是别的机器、也可能是本机没被软件纳管的进程），
+    // 不带 -f 的删除会被 Cloudflare 以 `code: 1022 This tunnel has active connections` 拒绝。
+    // 用户点删除的意图很明确，这里不再区分「有没有服务在跑」。
     let mut cmd = create_base_command();
-    cmd.args(["tunnel", "delete", trimmed])
+    cmd.args(["tunnel", "delete", "-f", trimmed])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -1633,22 +1710,35 @@ fn start_remote_tunnel_by_id(
 }
 
 #[tauri::command]
-fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<String>) -> Result<String, String> {
+fn stop_remote_tunnel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    key: Option<String>,
+    tunnel_name: Option<String>,
+) -> Result<String, String> {
     let mut proc_guard = state.remote_process.lock().map_err(|e| e.to_string())?;
     if let Some(k) = key.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
         if let Some(mut child) = proc_guard.remove(k) {
             let _ = child.kill();
+            // 进程表的 key 是隧道 ID，日志里显示 ID 用户看不懂，所以用前端传来的隧道名，
+            // 没传就退回 ID（正常路径前端一定会传）。
+            let display = tunnel_name
+                .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(k);
+            let msg = format!("服务端隧道 [{}] 已停止", display);
             let _ = app.emit(
                 "log-message",
                 LogPayload {
-                    message: "[INFO] 云端托管已停止".to_string(),
+                    message: format!("[INFO] {}", msg),
                     level: "warn".to_string(),
                     source: "remote".to_string(),
                 },
             );
-            Ok("云端托管已停止".to_string())
+            Ok(msg)
         } else {
-            Ok("指定的云端托管隧道当前未在运行".to_string())
+            Ok("指定的服务端隧道当前未在运行".to_string())
         }
     } else {
         let count = proc_guard.len();
@@ -1658,15 +1748,15 @@ fn stop_remote_tunnel(app: AppHandle, state: State<'_, AppState>, key: Option<St
         let _ = app.emit(
             "log-message",
             LogPayload {
-                message: format!("[INFO] 已停止全部云端托管隧道（共 {} 个）", count),
+                message: format!("[INFO] 已停止全部服务端隧道（共 {} 个）", count),
                 level: "warn".to_string(),
                 source: "remote".to_string(),
             },
         );
         if count > 0 {
-            Ok(format!("已停止全部云端托管隧道（共 {} 个）", count))
+            Ok(format!("已停止全部服务端隧道（共 {} 个）", count))
         } else {
-            Ok("当前没有正在运行的云端托管隧道".to_string())
+            Ok("当前没有正在运行的服务端隧道".to_string())
         }
     }
 }
@@ -1934,6 +2024,29 @@ fn is_quick_running(state: State<'_, AppState>) -> Vec<String> {
 /// （`cloudflared tunnel route dns` 正是用它创建记录），因此读写删除都可用。
 /// 注意：证书只授权单个区域，其它区域的记录既看不到也改不了。
 fn cloudflare_credentials() -> Result<(String, String), String> {
+    let json = read_origin_cert_json()?;
+
+    let api_token = cert_json_str(&json, &["apiToken", "t"], "API Token")?;
+    let zone_id = cert_json_str(&json, &["zoneID"], "zoneID")?;
+
+    Ok((api_token, zone_id))
+}
+
+/// 从 cert.pem 解出 `(apiToken, accountID)`。
+///
+/// 隧道相关接口（列表 / 配置 / 删除）都是**账号级**路径 `/accounts/{account_id}/cfd_tunnel`，
+/// 用不上 zoneID，所以单独提供一个取 accountID 的入口。
+fn cloudflare_account_credentials() -> Result<(String, String), String> {
+    let json = read_origin_cert_json()?;
+
+    let api_token = cert_json_str(&json, &["apiToken", "t"], "API Token")?;
+    let account_id = cert_json_str(&json, &["accountID"], "accountID")?;
+
+    Ok((api_token, account_id))
+}
+
+/// 解析 cert.pem ：PEM 头尾之间的正文是 base64 编码的 JSON。
+fn read_origin_cert_json() -> Result<serde_json::Value, String> {
     let cert_path = origin_cert_path();
 
     let raw = fs::read_to_string(&cert_path)
@@ -1946,22 +2059,15 @@ fn cloudflare_credentials() -> Result<(String, String), String> {
         .collect::<Vec<_>>()
         .join("");
     let decoded = base64_decode(&b64).map_err(|e| format!("cert.pem 解析失败: {}", e))?;
-    let json: serde_json::Value =
-        serde_json::from_str(&decoded).map_err(|e| format!("cert.pem 内容解析失败: {}", e))?;
+    serde_json::from_str(&decoded).map_err(|e| format!("cert.pem 内容解析失败: {}", e))
+}
 
-    let api_token = json
-        .get("apiToken")
-        .or_else(|| json.get("t"))
-        .and_then(|v| v.as_str())
-        .ok_or("cert.pem 中未找到 API Token")?
-        .to_string();
-    let zone_id = json
-        .get("zoneID")
-        .and_then(|v| v.as_str())
-        .ok_or("cert.pem 中未找到 zoneID")?
-        .to_string();
-
-    Ok((api_token, zone_id))
+/// 按候选键名依次取字符串字段，取不到时给出统一格式的可读错误。
+fn cert_json_str(json: &serde_json::Value, keys: &[&str], label: &str) -> Result<String, String> {
+    keys.iter()
+        .find_map(|k| json.get(*k).and_then(|v| v.as_str()))
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("cert.pem 中未找到 {}", label))
 }
 
 /// 从 Cloudflare API 的错误响应体中提取可读信息（形如 `[81044] Record does not exist.`）。
@@ -2029,6 +2135,84 @@ fn cf_api_request(
         }
         Err(e) => Err(format!("Cloudflare API 请求失败: {}", e)),
     }
+}
+
+/// 校验 Cloudflare 隧道 ID（标准 UUID：8-4-4-4-12 十六进制）。
+///
+/// 该 ID 会被直接拼进请求 URL，必须严格校验以防路径注入。
+fn is_valid_tunnel_id(id: &str) -> bool {
+    let parts: Vec<&str> = id.split('-').collect();
+    parts.len() == 5
+        && [8usize, 4, 4, 4, 12]
+            .iter()
+            .zip(parts.iter())
+            .all(|(want, got)| got.len() == *want && got.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// 读取某条隧道的云端 ingress 配置（只读）。
+///
+/// 走 Cloudflare REST API 而不是解析 cloudflared 的运行日志：**隧道不必处于运行状态也能看**，
+/// 而且能顺带拿到 `source`（local / cloudflare）与版本号。
+/// 凭证直接复用 cert.pem 里的 apiToken（`cloudflared tunnel route dns` 用的就是它），
+/// 实测该 token 具备读写隧道配置的权限，因此界面无需让用户另外填 API Token。
+#[tauri::command]
+fn fetch_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
+    let id = tunnel_id.trim();
+    if !is_valid_tunnel_id(id) {
+        return Err("隧道 ID 格式不正确".to_string());
+    }
+
+    let (api_token, account_id) = cloudflare_account_credentials()?;
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel/{}/configurations",
+        account_id, id
+    );
+    let body = cf_api_request("GET", &url, &api_token, None)?;
+    let json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
+    let result = json
+        .get("result")
+        .ok_or_else(|| "Cloudflare 未返回该隧道的配置".to_string())?;
+
+    let source = result
+        .get("source")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let version = result.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    let mut rules: Vec<TunnelIngressRule> = Vec::new();
+    if let Some(ingress) = result
+        .get("config")
+        .and_then(|c| c.get("ingress"))
+        .and_then(|v| v.as_array())
+    {
+        for rule in ingress {
+            rules.push(TunnelIngressRule {
+                hostname: rule
+                    .get("hostname")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                path: rule
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                service: rule
+                    .get("service")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            });
+        }
+    }
+
+    Ok(TunnelConfig {
+        source,
+        version,
+        rules,
+    })
 }
 
 /// 校验 Cloudflare DNS 记录 ID（32 位十六进制）。
@@ -2293,6 +2477,9 @@ pub fn run() {
             // 便携化：把旧位置（~/.cloudflared）的授权凭证补拷到软件目录。
             // 只复制缺失文件、不移动不删除，失败也不阻断启动。
             sync_legacy_cloudflared_files();
+            // 便携化：凭证都进软件目录后，用户主目录那份遗留副本就没用了，顺手清掉。
+            // 只在「每个文件都与软件目录一致」时才删，绝不误删用户自己维护的数据。
+            cleanup_user_cloudflared_dir();
             // 便携化：首次启动把旧的 WebView2 数据目录整体搬到软件目录，避免隧道列表/token 变空。
             migrate_legacy_webview_profile();
 
@@ -2376,6 +2563,7 @@ pub fn run() {
             list_tunnels,
             create_tunnel,
             delete_tunnel,
+            fetch_tunnel_config,
             route_dns_tunnel,
             start_server_tunnel,
             stop_server_tunnel,

@@ -591,6 +591,15 @@
                   <span class="btn-icon">🔄</span>
                   {{ t.server_tab.btn_refresh }}
                 </button>
+                <!-- 删除按钮就放在刷新旁边，作用于列表里选中的那条隧道，点开先弹确认框 -->
+                <button
+                  class="fluent-btn small danger-outline"
+                  @click="promptDeleteRemoteTunnel()"
+                  :disabled="!selectedRemoteTunnel"
+                >
+                  <span class="btn-icon">🗑️</span>
+                  {{ t.server_tab.btn_delete }}
+                </button>
                 <div class="status-pill" :class="remoteRunningCount > 0 ? 'online' : 'offline'">
                   {{ remoteRunningCount > 0
                     ? `${t.server_tab.status_remote_running} (${remoteRunningCount})`
@@ -614,7 +623,12 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="tunnel in remoteTunnelList" :key="tunnel.id">
+                  <tr
+                    v-for="tunnel in remoteTunnelList"
+                    :key="tunnel.id"
+                    :class="{ selected: selectedRemoteTunnel?.id === tunnel.id }"
+                    @click="selectedRemoteTunnel = tunnel"
+                  >
                     <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
                     <td class="col-name font-bold">{{ tunnel.name }}</td>
                     <td class="col-type">
@@ -653,6 +667,14 @@
                         <span v-if="isRemoteRunning(tunnel.id)" class="icon-square"></span>
                         <span v-else class="icon-triangle"></span>
                       </button>
+                      <!-- 每行也给一个删除入口，省得先选中再点顶部按钮 -->
+                      <button
+                        class="row-action-btn danger"
+                        :title="t.server_tab.btn_delete"
+                        @click.stop="promptDeleteRemoteTunnel(tunnel)"
+                      >
+                        🗑
+                      </button>
                     </td>
                   </tr>
                   <tr v-if="remoteTunnelList.length === 0">
@@ -675,7 +697,16 @@
                   :key="g.key"
                   class="remote-config-group"
                 >
-                  <div class="remote-config-group-title" :title="g.tooltip">{{ g.name }}</div>
+                  <div class="remote-config-group-title" :title="g.tooltip">
+                    <span class="remote-config-group-name">{{ g.name }}</span>
+                    <!-- 配置改走 Cloudflare API 读取后能拿到 source 与版本号：
+                         版本号每次写入递增，可用来确认「刚改的有没有生效」 -->
+                    <span v-if="g.source || g.version" class="remote-config-meta">
+                      <span v-if="g.source === 'cloudflare'">{{ t.server_tab.config_src_cloudflare }}</span>
+                      <span v-else-if="g.source === 'local'">{{ t.server_tab.config_src_local }}</span>
+                      <span v-if="g.version">v{{ g.version }}</span>
+                    </span>
+                  </div>
                   <!-- 在跑但云端还没吐出任何规则时不占位提示：空着也不显示那句「启动后自动获取」 -->
                   <pre v-if="g.config">{{ g.config }}</pre>
                 </div>
@@ -769,7 +800,7 @@
         <div class="fluent-card action-tiles-card">
           <div class="tile-grid">
             <!-- 1. 安装 cloudflared 按钮 -->
-            <button class="tile-btn highlight-tile" @click="handleInstallCloudflared" :disabled="isDownloadingCloudflared">
+            <button class="tile-btn" @click="handleInstallCloudflared" :disabled="isDownloadingCloudflared">
               <span class="tile-icon">📦</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_install || '安装 cloudflared' }}</span>
@@ -778,7 +809,7 @@
             </button>
 
             <!-- 2. 打开本地配置文件目录 -->
-            <button class="tile-btn highlight-folder-tile" @click="handleOpenConfigDir">
+            <button class="tile-btn" @click="handleOpenConfigDir">
               <span class="tile-icon">📂</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_open_config_dir || '打开本地配置文件目录' }}</span>
@@ -879,18 +910,24 @@
       </div>
     </footer>
 
-    <!-- Win11 确认删除隧道模态弹窗 -->
+    <!-- Win11 确认删除隧道模态弹窗（固定域名隧道 / 云端托管隧道共用） -->
     <div v-if="showDeleteModal" class="fluent-modal-overlay" @click.self="cancelDelete">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">⚠️ {{ t.server_tab.errors.delete_confirm_title }}</h3>
+          <h3 class="modal-title">
+            ⚠️ {{ pendingDelete?.scope === 'remote'
+              ? t.server_tab.remote_delete_confirm_title
+              : t.server_tab.errors.delete_confirm_title }}
+          </h3>
         </div>
         <div class="modal-body">
-          <p>{{ t.server_tab.errors.delete_confirm_msg.replace('{name}', selectedTunnel?.name || '') }}</p>
+          <p>{{ deleteConfirmMessage }}</p>
+          <!-- 删除一律走 cloudflared tunnel delete -f：不管有没有服务在跑 / 还有没有活动连接 -->
+          <p class="modal-danger-hint">{{ t.server_tab.delete_force_hint }}</p>
         </div>
         <div class="modal-footer">
           <button class="fluent-btn" @click="cancelDelete">{{ t.exit_modal.btn_cancel }}</button>
-          <button class="fluent-btn danger" @click="confirmDeleteTunnel">确认删除</button>
+          <button class="fluent-btn danger" @click="confirmDeleteTunnel">{{ t.server_tab.btn_delete }}</button>
         </div>
       </div>
     </div>
@@ -1485,6 +1522,8 @@ const serverMode = ref<'local' | 'remote'>(localStorage.getItem('server_mode') =
 const switchServerMode = (mode: 'local' | 'remote') => {
   serverMode.value = mode;
   localStorage.setItem('server_mode', mode);
+  // 切到云端托管时顺手拉一次云端配置：走 API 读取，隧道没跑起来也能看到规则
+  if (mode === 'remote') void refreshRemoteConfigs();
 };
 
 // 固定域名二级模式：临时链接(临时域名) / 命名隧道(绑定域名)
@@ -1567,25 +1606,79 @@ const remoteRunningKeys = ref<string[]>([]);
 const isRemoteRunning = (tunnelId: string) => remoteRunningKeys.value.includes(tunnelId);
 const remoteRunningCount = computed(() => remoteRunningKeys.value.length);
 
-// 每条隧道的 ingress 配置，key = 隧道 ID（与后端 remote-config-update 事件一致）
-const remoteConfigs = ref<Record<string, string>>({});
+// 云端 ingress 规则（只读）。
+// 数据来自 Cloudflare API 而不是 cloudflared 的运行日志 —— 隧道没跑起来也能看到配置，
+// 还能拿到 source（local / cloudflare）与版本号。
+type TunnelIngressRule = { hostname: string; path: string; service: string };
+type TunnelConfigInfo = { source: string; version: number; rules: TunnelIngressRule[] };
+const remoteConfigs = ref<Record<string, TunnelConfigInfo>>({});
+
+// 把隧道列表里每一条在 Cloudflare 侧的配置拉回来；单条失败就跳过，不打扰用户
+// （例如刚创建、云上还没有任何 ingress 规则时会拿不到内容）。
+const refreshRemoteConfigs = async () => {
+  const items = remoteTunnelList.value;
+  if (!items.length) {
+    remoteConfigs.value = {};
+    return;
+  }
+  const entries = await Promise.all(
+    items.map(async (tn) => {
+      try {
+        const cfg = await invoke<TunnelConfigInfo>('fetch_tunnel_config', { tunnelId: tn.id });
+        return [tn.id, cfg] as const;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const next: Record<string, TunnelConfigInfo> = {};
+  for (const entry of entries) {
+    if (entry) next[entry[0]] = entry[1];
+  }
+  remoteConfigs.value = next;
+};
+
+// 规则渲染成「匹配目标 → 源站」的文本行。hostname 为空即 ingress 末尾的兜底规则，
+// 显示成「(默认)」；带 path 的规则把 path 缀在域名后面一起显示。
+const formatIngressRules = (cfg?: TunnelConfigInfo) => {
+  if (!cfg || !cfg.rules.length) return '';
+  return cfg.rules
+    .map(r => {
+      const target = r.path ? `${r.hostname || '(默认)'}${r.path}` : r.hostname || '(默认)';
+      return `${target}  →  ${r.service}`;
+    })
+    .join('\n');
+};
 
 // 配置卡片按隧道分组：标题用隧道名称，隧道 ID 只放进 tooltip，
 // 否则一列 8e1b8616 / 511e2469 根本分不清是哪条隧道。
 const remoteConfigGroups = computed(() => {
   const groups = remoteTunnelList.value
-    .filter(tn => isRemoteRunning(tn.id) || remoteConfigs.value[tn.id])
-    .map(tn => ({
-      key: tn.id,
-      name: tn.name || tn.id,
-      tooltip: `隧道 ID: ${tn.id}`,
-      config: remoteConfigs.value[tn.id] || '',
-    }));
+    .filter(tn => (remoteConfigs.value[tn.id]?.rules.length ?? 0) > 0)
+    .map(tn => {
+      const cfg = remoteConfigs.value[tn.id];
+      return {
+        key: tn.id,
+        name: tn.name || tn.id,
+        tooltip: `隧道 ID: ${tn.id}`,
+        config: formatIngressRules(cfg),
+        source: cfg.source,
+        version: cfg.version,
+      };
+    });
   // 后端在跑但隧道列表里还没有的（刚启动就刷新失败等）：按 ID 兜底显示
   const known = new Set(groups.map(g => g.key));
   for (const key of remoteRunningKeys.value) {
     if (known.has(key)) continue;
-    groups.push({ key, name: key, tooltip: `隧道 ID: ${key}`, config: remoteConfigs.value[key] || '' });
+    const cfg = remoteConfigs.value[key];
+    groups.push({
+      key,
+      name: key,
+      tooltip: `隧道 ID: ${key}`,
+      config: formatIngressRules(cfg),
+      source: cfg?.source || '',
+      version: cfg?.version || 0,
+    });
   }
   return groups;
 });
@@ -1596,6 +1689,9 @@ const selectedTunnel = ref<TunnelInfo | null>(null);
 
 const localTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'local'));
 const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'remote'));
+
+// 云端托管列表里被选中的那一行：顶部「删除」按钮作用于它（每行另有独立的 🗑 入口）
+const selectedRemoteTunnel = ref<TunnelInfo | null>(null);
 
 // 服务端三类隧道状态胶囊的「运行中 (数量)」统计
 const localRunningCount = computed(() =>
@@ -1661,6 +1757,21 @@ const stopConsoleResize = () => {
 
 // 弹窗与 Toast
 const showDeleteModal = ref(false);
+
+// 待删除的隧道。固定域名隧道（local）与云端托管隧道（remote）共用同一个确认弹窗，
+// scope 决定删除后刷新哪张列表、以及要不要先停掉本机正在跑的那个进程。
+const pendingDelete = ref<{ id: string; name: string; scope: 'local' | 'remote' } | null>(null);
+
+// 确认弹窗里的正文：本地与云端用的是两套文案，占位符也不一样（{name} / {target}）
+const deleteConfirmMessage = computed(() => {
+  const name = pendingDelete.value?.name || '';
+  const tpl =
+    pendingDelete.value?.scope === 'remote'
+      ? t.value.server_tab.remote_delete_confirm_msg
+      : t.value.server_tab.errors.delete_confirm_msg;
+  return String(tpl).replace('{name}', name).replace('{target}', name);
+});
+
 const showExitConfirmModal = ref(false);
 const toastMessage = ref('');
 const consoleBodyRef = ref<HTMLDivElement | null>(null);
@@ -1839,7 +1950,11 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
 
     // 云端托管列表的刷新按钮只有 handleRefreshTunnels 这一个入口，
     // 顺手把云端隧道进程也对账一次，否则「运行中」状态会一直停在旧值上。
-    if (scope !== 'local') await refreshRemoteTunnels();
+    if (scope !== 'local') {
+      await refreshRemoteTunnels();
+      // 云端 ingress 配置改走 API 读取：隧道不跑起来也能看到，还能拿到 source 与版本号
+      await refreshRemoteConfigs();
+    }
 
     // 按触发刷新的列表分别统计：固定域名列表 / 云端托管
     const localCount = res.filter(x => x.tunnel_type === 'local').length;
@@ -1934,7 +2049,8 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
 
   soundManager.playSuccess();
   try {
-    const res = await invoke<string>('start_server_tunnel', {
+    // 启动成功的日志由 Rust 侧统一广播（lib.rs start_server_tunnel），这里不再重复打印
+    await invoke<string>('start_server_tunnel', {
       name,
       port: saved.port,
       protocol: saved.protocol,
@@ -1945,7 +2061,6 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
     localStorage.setItem('server_port', saved.port);
     localStorage.setItem('server_protocol', saved.protocol);
     localStorage.setItem('server_unix_socket', saved.unixSocket);
-    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
     showToast(`隧道 [${name}] 已启动 (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动隧道 [${name}] 失败: ${err}`, 'error', 'server');
@@ -1984,7 +2099,7 @@ const handleStartServer = async () => {
       } catch {}
     }
 
-    const res = await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
+    await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
     localStorage.setItem('server_tunnel_name', name);
     localStorage.setItem('server_port', port);
     localStorage.setItem('server_protocol', protocol);
@@ -1992,7 +2107,6 @@ const handleStartServer = async () => {
     // 记住该隧道的源站配置（供列表行内启动按钮复用），并本地标记为运行中
     saveTunnelCfg(name);
     markServerRunning(name);
-    appendLog(`[SUCCESS] ${res}`, 'success', 'server');
     showToast(`隧道 [${name}] 已启动 (${describeServerTarget(protocol, port, unixSocket)})`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
@@ -2037,14 +2151,13 @@ watch(
           return;
         }
 
-        const res = await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
+        await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
         localStorage.setItem('server_tunnel_name', name);
         localStorage.setItem('server_port', port);
         localStorage.setItem('server_protocol', protocol);
         localStorage.setItem('server_unix_socket', unixSocket);
         saveTunnelCfg(name);
         markServerRunning(name);
-        appendLog(`[SUCCESS] ${res}`, 'success', 'server');
         showToast(`隧道 [${name}] 已切换 (${describeServerTarget(protocol, port, unixSocket)})`);
       } catch (err: any) {
         appendLog(`[ERROR] 切换协议失败: ${err}`, 'error', 'server');
@@ -2063,9 +2176,9 @@ const handleStopServer = async (name?: string) => {
   }
   soundManager.playClick();
   try {
-    const res = await invoke<string>('stop_server_tunnel', { name: target });
+    // 停止成功的日志由 Rust 侧统一广播，这里不再重复打印
+    await invoke<string>('stop_server_tunnel', { name: target });
     markServerStopped(target);
-    appendLog(`[INFO] ${res}`, 'warn', 'server');
     showToast(`隧道 [${target}] 已停止`);
   } catch (err: any) {
     appendLog(`[ERROR] 停止隧道 [${target}] 失败: ${err}`, 'error', 'server');
@@ -2235,6 +2348,13 @@ const refreshRemoteTunnels = async (withLog = false) => {
   try {
     const list = await invoke<{ key: string }[]>('list_remote_tunnels');
     remoteRunningKeys.value = list.map(x => x.key);
+    // 选中的那条已经被删掉 / 列表里不存在了，就把选中态清掉，避免顶部删除按钮指向幽灵
+    if (
+      selectedRemoteTunnel.value &&
+      !remoteTunnelList.value.some(x => x.id === selectedRemoteTunnel.value?.id)
+    ) {
+      selectedRemoteTunnel.value = null;
+    }
     if (withLog) {
       appendLog(
         `[INFO] 已刷新云端托管隧道列表，共获取到 ${remoteRunningKeys.value.length} 条隧道`,
@@ -2252,13 +2372,14 @@ const handleStartRemoteTunnel = async (tunnel: TunnelInfo) => {
   if (isRemoteRunning(tunnel.id)) return;
   soundManager.playSuccess();
   try {
-    const res = await invoke<string>('start_remote_tunnel_by_id', {
+    // 启动成功的日志由 Rust 侧统一广播，这里不再重复打印
+    await invoke<string>('start_remote_tunnel_by_id', {
       tunnelId: tunnel.id,
       tunnelName: tunnel.name,
     });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'remote');
     showToast(`云端托管已启动 (${tunnel.name})`);
     await refreshRemoteTunnels();
+    void refreshRemoteConfigs();
   } catch (err: any) {
     appendLog(`[ERROR] 启动云端托管失败: ${err}`, 'error', 'remote');
     showToast(`${err}`);
@@ -2269,9 +2390,9 @@ const handleStartRemoteTunnel = async (tunnel: TunnelInfo) => {
 const handleStopRemoteTunnel = async (tunnel: TunnelInfo) => {
   soundManager.playClick();
   try {
-    const res = await invoke<string>('stop_remote_tunnel', { key: tunnel.id });
-    appendLog(`[INFO] ${res}`, 'warn', 'remote');
-    showToast(`云端托管已停止 (${tunnel.name})`);
+    // 隧道名一并传给后端：停止日志里显示隧道名，而不是那串 UUID
+    await invoke<string>('stop_remote_tunnel', { key: tunnel.id, tunnelName: tunnel.name });
+    showToast(`服务端隧道 [${tunnel.name}] 已停止`);
     delete remoteConfigs.value[tunnel.id];
     await refreshRemoteTunnels();
   } catch (err: any) {
@@ -2304,14 +2425,14 @@ const handleStartQuick = async () => {
       : `${protocol}://127.0.0.1:${port}`;
   const displayPort = (protocol === 'unix' || protocol === 'unix+tls') ? unixSocket : port;
   try {
-    const res = await invoke<string>('start_quick_tunnel', { port, protocol, unixSocket });
+    // 启动成功的日志由 Rust 侧统一广播，这里不再重复打印
+    await invoke<string>('start_quick_tunnel', { port, protocol, unixSocket });
     localStorage.setItem('quick_port', port);
     localStorage.setItem('quick_protocol', protocol);
     localStorage.setItem('quick_unix_socket', unixSocket);
     // 移除同 key 的旧条目，新增一条「启动中」状态的条目
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
     quickTunnels.value.push({ key, protocol, port: displayPort, url: '', status: 'starting' });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'quick');
     showToast('临时链接已启动，临时域名生成中...');
   } catch (err: any) {
     appendLog(`[ERROR] 启动临时链接失败: ${err}`, 'error', 'quick');
@@ -2360,9 +2481,9 @@ const confirmStopQuick = async () => {
   showQuickStopModal.value = false;
   quickStopKey.value = '';
   try {
-    const res = await invoke<string>('stop_quick_tunnel', { key });
+    // 停止成功的日志由 Rust 侧统一广播（含「临时域名已失效」），这里不再重复打印
+    await invoke<string>('stop_quick_tunnel', { key });
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
-    appendLog(`[INFO] ${res}`, 'warn', 'quick');
     showToast('临时链接已停止');
   } catch (err: any) {
     appendLog(`[ERROR] 停止临时链接失败: ${err}`, 'error', 'quick');
@@ -2389,31 +2510,69 @@ const copyHostname = async (hostname: string) => {
   }
 };
 
-// 删除隧道确认流程
+// 删除隧道确认流程（固定域名隧道 / 云端托管隧道共用）
 const promptDeleteTunnel = () => {
   if (!selectedTunnel.value) {
     showToast(t.value.server_tab.errors.no_selection);
     return;
   }
+  pendingDelete.value = {
+    id: selectedTunnel.value.id,
+    name: selectedTunnel.value.name,
+    scope: 'local',
+  };
+  showDeleteModal.value = true;
+};
+
+// 云端托管列表的删除入口：顶部按钮不带参数（作用于选中行），行内 🗑 直接把 tunnel 传进来
+const promptDeleteRemoteTunnel = (tunnel?: TunnelInfo) => {
+  const target = tunnel ?? selectedRemoteTunnel.value;
+  if (!target) {
+    showToast(t.value.server_tab.errors.no_selection);
+    return;
+  }
+  soundManager.playClick();
+  selectedRemoteTunnel.value = target;
+  pendingDelete.value = { id: target.id, name: target.name, scope: 'remote' };
   showDeleteModal.value = true;
 };
 
 const cancelDelete = () => {
   showDeleteModal.value = false;
+  pendingDelete.value = null;
 };
 
 const confirmDeleteTunnel = async () => {
-  if (!selectedTunnel.value) return;
-  const tunnelName = selectedTunnel.value.name;
+  const target = pendingDelete.value;
+  if (!target) return;
   showDeleteModal.value = false;
+  pendingDelete.value = null;
 
-  appendLog(`[INFO] 正在删除隧道 [${tunnelName}]...`, 'info', 'server');
+  // 先停掉本机正在跑的那个进程：强制删除只是把隧道从 Cloudflare 侧摘掉，
+  // 本机进程不主动停会一直重连报错，日志里刷屏。
   try {
-    const res = await invoke<string>('delete_tunnel', { name: tunnelName });
+    if (target.scope === 'remote') {
+      if (isRemoteRunning(target.id)) {
+        await invoke<string>('stop_remote_tunnel', { key: target.id, tunnelName: target.name });
+        remoteRunningKeys.value = remoteRunningKeys.value.filter(k => k !== target.id);
+      }
+    } else if (isTunnelRunning(target.name)) {
+      await invoke<string>('stop_server_tunnel', { name: target.name });
+      markServerStopped(target.name);
+    }
+  } catch {
+    // 停不掉也不影响强制删除，继续往下走
+  }
+
+  appendLog(`[INFO] 正在强制删除隧道 [${target.name}]...`, 'info', 'server');
+  try {
+    const res = await invoke<string>('delete_tunnel', { name: target.name });
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(`隧道 [${tunnelName}] 已删除`);
-    selectedTunnel.value = null;
-    await handleRefreshTunnels();
+    showToast(`隧道 [${target.name}] 已删除`);
+    if (selectedTunnel.value?.id === target.id) selectedTunnel.value = null;
+    if (selectedRemoteTunnel.value?.id === target.id) selectedRemoteTunnel.value = null;
+    delete remoteConfigs.value[target.id];
+    await handleRefreshTunnels(target.scope === 'remote' ? 'remote' : 'local');
   } catch (err: any) {
     appendLog(`[ERROR] 删除隧道失败: ${err}`, 'error', 'server');
   }
@@ -2540,8 +2699,8 @@ const confirmClientAdd = async () => {
 const handleStartClient = async (row: SavedClientTunnel) => {
   soundManager.playClick();
   try {
-    const res = await invoke<string>('start_client_tunnel', { domain: row.domain, port: row.port });
-    appendLog(`[SUCCESS] ${res}`, 'success', 'client');
+    // 启动成功的日志由 Rust 侧统一广播，这里不再重复打印
+    await invoke<string>('start_client_tunnel', { domain: row.domain, port: row.port });
     showToast(`客户端隧道 ${row.domain}:${row.port} 已连接`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动客户端隧道失败: ${err}`, 'error', 'client');
@@ -2555,11 +2714,11 @@ const handleStartClient = async (row: SavedClientTunnel) => {
 const handleStopClient = async (conn: SavedClientTunnel) => {
   soundManager.playClick();
   try {
-    const res = await invoke<string>('stop_client_tunnel', {
+    // 断开成功的日志由 Rust 侧统一广播，这里不再重复打印
+    await invoke<string>('stop_client_tunnel', {
       domain: conn.domain,
       port: conn.port,
     });
-    appendLog(`[INFO] ${res}`, 'warn', 'client');
     showToast(`已断开 ${conn.domain}:${conn.port}`);
   } catch (err: any) {
     appendLog(`[ERROR] 断开客户端连接失败: ${err}`, 'error', 'client');
@@ -2727,13 +2886,11 @@ onMounted(async () => {
       showExitConfirmModal.value = true;
     });
 
-    // 监听云端托管 ingress 配置更新（负载带隧道 key，多条隧道各自分组显示）
+    // cloudflared 每次加载配置都会广播这个事件。配置内容现在统一走 Cloudflare API 读，
+    // 所以这里只借它判断「这条隧道确实活着」，顺手把运行状态补上。
     await listen<{ key: string; config: string }>('remote-config-update', (event) => {
-      const payload = event.payload || ({} as { key?: string; config?: string });
-      const key = payload.key || '';
+      const key = event.payload?.key || '';
       if (!key) return;
-      remoteConfigs.value[key] = payload.config || '';
-      // 能拉到配置说明这条隧道确实活着，顺手把运行状态补上
       if (!remoteRunningKeys.value.includes(key)) remoteRunningKeys.value.push(key);
     });
 
@@ -3728,6 +3885,14 @@ onUnmounted(() => {
   word-break: break-all;
 }
 
+/* 删除确认弹窗里的「强制删除」说明：明确告诉用户即使隧道在跑也会被删掉 */
+.modal-danger-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--danger-color);
+}
+
 /* 服务端子视图状态圆点（侧边栏下边栏使用） */
 .mode-dot {
   width: 8px;
@@ -3800,10 +3965,30 @@ onUnmounted(() => {
 
 /* 分组标题现在是隧道名称（隧道 ID 只留在 tooltip 里），所以不再用等宽字体 */
 .remote-config-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 6px;
+}
+
+.remote-config-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「来源 · 版本」小字：只读升级后从 Cloudflare API 拿到，可用来确认配置有没有生效 */
+.remote-config-meta {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 .remote-config-body pre {
@@ -4418,15 +4603,10 @@ onUnmounted(() => {
   box-shadow: var(--shadow-card);
 }
 
-.tile-btn.highlight-tile {
-  border-color: var(--accent-color);
-  background: linear-gradient(135deg, var(--bg-card-solid) 0%, rgba(96, 205, 255, 0.08) 100%);
-}
-
-.tile-btn.highlight-folder-tile {
-  border-color: rgba(0, 95, 184, 0.4);
-  background: linear-gradient(135deg, var(--bg-card-solid) 0%, rgba(255, 185, 0, 0.08) 100%);
-}
+/* 「安装 cloudflared」「打开配置目录」两块磁贴不再做特殊描边：
+   原来写的 border-color 是主题强调色（浅色 #005fb8 / 深色 #60cdff），
+   那是一条**常驻**蓝边、不是 focus 环，看上去像一直在亮，用户明确要求去掉。
+   现在两块与其它磁贴完全一致，只在 hover 时才有反馈。 */
 
 .tile-icon {
   font-size: 24px;

@@ -160,13 +160,30 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
 
     case 'stop_remote_tunnel': {
       const key = ((args?.key as string) || '').trim();
+      const tunnelName = ((args?.tunnelName as string) || key).trim();
       const idx = mockRemotes.findIndex(r => r.key === key);
       if (idx === -1) {
-        return '该云端托管隧道当前未在运行' as unknown as T;
+        return '指定的服务端隧道当前未在运行' as unknown as T;
       }
       mockRemotes.splice(idx, 1);
-      emitMockLog('[INFO] 云端托管已停止', 'warn', 'remote');
-      return '云端托管已停止' as unknown as T;
+      emitMockLog(`[INFO] 服务端隧道 [${tunnelName}] 已停止`, 'warn', 'remote');
+      return `服务端隧道 [${tunnelName}] 已停止` as unknown as T;
+    }
+
+    case 'fetch_tunnel_config': {
+      // 只读升级：桌面端走 Cloudflare API 读 ingress，演示模式直接造一份结构相同的数据
+      const tunnelId = ((args?.tunnelId as string) || '').trim();
+      if (!tunnelId) throw new Error('隧道 ID 格式不正确');
+      const tunnel = mockTunnels.find(t => t.id === tunnelId);
+      const name = tunnel?.name || tunnelId;
+      return {
+        source: 'cloudflare',
+        version: 12,
+        rules: [
+          { hostname: `${name}.example.com`, path: '', service: 'http://localhost:25565' },
+          { hostname: '', path: '', service: 'http_status:404' },
+        ],
+      } as unknown as T;
     }
 
     case 'list_remote_tunnels':
