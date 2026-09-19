@@ -272,9 +272,9 @@
                 <span class="btn-icon">⚡</span>
                 {{ t.server_tab.btn_generate_quick }}
               </button>
-              <button class="fluent-btn" @click="refreshQuickTunnels">
-                <span class="btn-icon">🔄</span>
-                {{ t.server_tab.btn_refresh }}
+              <button class="fluent-btn" @click="refreshQuickTunnels" :disabled="refreshingTunnels.quick">
+                <span class="btn-icon" :class="{ spinning: refreshingTunnels.quick }">🔄</span>
+                {{ refreshingTunnels.quick ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
               </button>
               <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
                 <span class="pill-dot"></span>
@@ -1520,7 +1520,7 @@ const canSubmitClientAdd = computed(
 // 早先两处共用一个布尔值，于是「固定域名」正在刷新时，「云端托管」的刷新按钮
 // 也会一起变灰 —— 而且这个刷新会去等 Cloudflare API（网络不通时长达二三十秒），
 // 表现出来就是「明明没在刷这个列表，按钮却点不动」。
-const refreshingTunnels = ref<{ local: boolean; remote: boolean }>({ local: false, remote: false });
+const refreshingTunnels = ref<{ local: boolean; remote: boolean; quick: boolean }>({ local: false, remote: false, quick: false });
 const isCreatingTunnel = ref(false);
 const isDownloadingCloudflared = ref(false);
 
@@ -2583,6 +2583,10 @@ const handleStartQuick = async () => {
 
 // 刷新临时链接列表（从后端同步运行状态）
 const refreshQuickTunnels = async () => {
+  // 防重入：上一轮刷新还没结束就不再叠加（临时链接走的是本地命令 is_quick_running，毫秒级，
+  // 但连点仍会并发触发，这里挡住）
+  if (refreshingTunnels.value.quick) return;
+  refreshingTunnels.value.quick = true;
   try {
     const quickKeys = await invoke<string[]>('is_quick_running');
     // 保留已有 url 信息，合并后端返回的运行中 key
@@ -2601,6 +2605,8 @@ const refreshQuickTunnels = async () => {
     appendLog(`[INFO] 已刷新临时链接列表，共获取到 ${merged.length} 条隧道`, 'info', 'quick');
   } catch (err: any) {
     appendLog(`[ERROR] 刷新临时链接列表失败: ${err}`, 'error', 'quick');
+  } finally {
+    refreshingTunnels.value.quick = false;
   }
 };
 
