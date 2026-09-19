@@ -123,6 +123,12 @@ export interface LangPack {
     status_remote_stopped: string;
     remote_config_title: string;
     remote_config_empty: string;
+    config_sec_published: string;
+    config_sec_hostname: string;
+    config_sec_cidr: string;
+    config_none: string;
+    config_load_failed: string;
+    delete_force_hint: string;
     remote_add_btn: string;
     remote_add_title: string;
     remote_edit_title: string;
