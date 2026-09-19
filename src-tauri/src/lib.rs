@@ -183,13 +183,14 @@ fn webview_data_dir() -> PathBuf {
     app_data_dir().join("webview")
 }
 
-/// cloudflared 在本软件内的私有工作目录：`<软件目录>\data\cloudflared`。
-fn cloudflared_data_dir() -> PathBuf {
-    app_data_dir().join("cloudflared")
-}
-
-/// 旧版 cloudflared 默认目录 `~/.cloudflared`（迁移来源，同时保留作读取回退）。
-fn legacy_cloudflared_dir() -> PathBuf {
+/// cloudflared 的默认凭证目录 `~/.cloudflared`（Windows 即 `%USERPROFILE%\.cloudflared`）。
+///
+/// 授权证书 `cert.pem` 与隧道密钥 `<隧道ID>.json` 一律放这里，跟 cloudflared 自己的默认行为一致。
+///
+/// **不再做「便携化」**：早先版本把凭证收进 `<软件目录>\data\cloudflared`，但 data 目录就在
+/// 安装目录里面，用户覆盖安装 / 卸载时会被 NSIS 整目录清空，凭证跟着全丢（2026-09-19 真实事故）。
+/// 现在交回默认位置 —— 重装软件不会碰用户主目录，凭证天然安全。
+fn default_cloudflared_dir() -> PathBuf {
     std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .map(PathBuf::from)
@@ -197,14 +198,9 @@ fn legacy_cloudflared_dir() -> PathBuf {
         .join(".cloudflared")
 }
 
-/// 当前生效的 cert.pem：优先软件目录，没有则回退旧的 `~/.cloudflared`。
+/// 当前生效的 cert.pem：固定为 cloudflared 的默认位置 `~/.cloudflared/cert.pem`。
 fn origin_cert_path() -> PathBuf {
-    let local = cloudflared_data_dir().join("cert.pem");
-    if local.exists() {
-        local
-    } else {
-        legacy_cloudflared_dir().join("cert.pem")
-    }
+    default_cloudflared_dir().join("cert.pem")
 }
 
 /// 递归复制目录（std 没有现成的 copy_dir）。
@@ -222,78 +218,6 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
-}
-
-/// 把旧目录 `~/.cloudflared` 里的 `cert.pem` 与 `*.json` 补齐到软件目录。
-///
-/// **只复制缺失的文件，不移动、不删除**：这样即使 cloudflared 内部仍从旧目录读凭证，
-/// 两个位置都有同一份文件，任何一条路径都能正常工作。
-fn sync_legacy_cloudflared_files() {
-    let legacy = legacy_cloudflared_dir();
-    if !legacy.exists() {
-        return;
-    }
-    let target = cloudflared_data_dir();
-    if fs::create_dir_all(&target).is_err() {
-        return;
-    }
-    let entries = match fs::read_dir(&legacy) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let name = match path.file_name() {
-            Some(n) => n.to_string_lossy().to_string(),
-            None => continue,
-        };
-        if name != "cert.pem" && !name.ends_with(".json") {
-            continue;
-        }
-        let dest = target.join(&name);
-        if !dest.exists() {
-            let _ = fs::copy(&path, &dest);
-        }
-    }
-}
-
-/// 清理用户主目录下遗留的 `~/.cloudflared`。
-///
-/// 旧版软件会把 cert.pem / `<隧道ID>.json` 写进用户主目录（根因见 create_base_command 注释）。
-/// 现在凭证一律落在软件目录，用户主目录那份就只是「软件以前留下的副本」，留着既是垃圾、
-/// 也容易被误认为软件还在依赖它，所以在启动时清掉。
-///
-/// 安全边界：只有当旧目录里的**每个文件**都能在软件目录找到同名同大小的副本时才删除。
-/// 只要有一个文件对不上（用户自己跑 `cloudflared login` 生成的、或存在子目录），
-/// 就原样保留 —— 宁可留下垃圾，也不误删用户数据。
-fn cleanup_user_cloudflared_dir() {
-    let legacy = legacy_cloudflared_dir();
-    if !legacy.is_dir() {
-        return;
-    }
-    let target = cloudflared_data_dir();
-    let entries = match fs::read_dir(&legacy) {
-        Ok(e) => e.flatten().collect::<Vec<_>>(),
-        Err(_) => return,
-    };
-    for entry in &entries {
-        let path = entry.path();
-        if !path.is_file() {
-            return;
-        }
-        let counterpart = target.join(entry.file_name());
-        let same = match (fs::metadata(&path), fs::metadata(&counterpart)) {
-            (Ok(a), Ok(b)) => a.len() == b.len(),
-            _ => false,
-        };
-        if !same {
-            return;
-        }
-    }
-    let _ = fs::remove_dir_all(&legacy);
 }
 
 /// 首次启动时把旧版 WebView2 数据目录（`%LOCALAPPDATA%\<identifier>`）整体搬到软件目录，
@@ -349,30 +273,42 @@ fn create_base_command() -> Command {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    // —— 便携化第一道锁：改写 cloudflared 的「家目录」——
-    // cloudflared 没被指定路径时会去找 `~/.cloudflared`。实测（2026.9.0）：只要设置 HOME，
-    // 它就会把 `~` 当成 HOME 指向的目录（USERPROFILE 一并设置做双保险）。
-    // 这样一来它的 ~/.cloudflared 落在 <软件目录>\data\.cloudflared，
-    // 而不是用户主目录下的 C:\Users\<你>\.cloudflared。
-    let data_dir = app_data_dir();
-    let _ = fs::create_dir_all(&data_dir);
-    if let Some(dir) = data_dir.to_str() {
-        cmd.env("HOME", dir);
-        cmd.env("USERPROFILE", dir);
-    }
-
-    // —— 便携化第二道锁：把证书路径钉死在软件目录 ——
-    // **无论 cert.pem 是否已存在都必须设置**，这是关键：
-    //   · `cloudflared tunnel login` 会把 cert.pem 写到这个路径；
-    //   · `cloudflared tunnel create` 会「跟着 cert.pem 所在目录」写 <隧道ID>.json
-    //     （cloudflared 原话：chose this file based on where your origin certificate was found）。
-    // 旧实现只在证书已存在时才设置，于是「第一次点授权登录」时 cert.pem 还不存在，
-    // cloudflared 便回退到 ~/.cloudflared，把凭证写进了用户主目录 —— 便携化就此破功。
-    let cert_dir = cloudflared_data_dir();
-    let _ = fs::create_dir_all(&cert_dir);
-    cmd.env("TUNNEL_ORIGIN_CERT", cert_dir.join("cert.pem"));
+    // 凭证一律使用 cloudflared 自己的默认位置：`%USERPROFILE%\.cloudflared`，此处不做任何改写。
+    // 早先版本做过「便携化」——改写 HOME/USERPROFILE，并把 TUNNEL_ORIGIN_CERT 钉到
+    // `<软件目录>\data\cloudflared`。但 data 目录就在安装目录里，覆盖安装/卸载会被 NSIS
+    // 整目录清空，凭证随之全丢（2026-09-19 真实事故）。回退默认位置后，重装软件不再影响凭证。
 
     cmd
+}
+
+/// 把 cloudflared 的 stderr 整理成一行可读文本。
+///
+/// cloudflared 出错时会把一整行 JSON 日志吐到 stderr，形如
+/// `{"level":"error","message":"Cannot find a valid certificate for your origin at the path:\n\n D:\\...cert.pem","originCertPath":"...","time":"..."}`，
+/// 后面再跟一行纯文本收尾说明；而 message 字段本身还带换行。
+/// 原样塞进控制台会把一行日志撑成好几行，看着像好几条错误混在一起，
+/// 所以这里取出 JSON 里的 message、把换行压平，多行再拼成一整句。
+fn tidy_cloudflared_error(stderr: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for line in stderr.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let text = serde_json::from_str::<serde_json::Value>(trimmed)
+            .ok()
+            .and_then(|v| {
+                v.get("message")
+                    .and_then(|m| m.as_str())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| trimmed.to_string());
+        let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !flat.is_empty() {
+            parts.push(flat);
+        }
+    }
+    parts.join(" ")
 }
 
 #[tauri::command]
@@ -396,7 +332,7 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
     // 如果 stdout 为空，可能是没有隧道或出错
     if stdout_str.trim().is_empty() {
         if !stderr_str.trim().is_empty() {
-            return Err(stderr_str);
+            return Err(tidy_cloudflared_error(&stderr_str));
         }
         return Ok(Vec::new());
     }
@@ -413,9 +349,8 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
     let raw_list: Vec<RawTunnel> = serde_json::from_str(&stdout_str)
         .map_err(|e| format!("解析隧道列表失败: {}", e))?;
 
-    // 隧道密钥（<隧道ID>.json）优先看软件目录，读取回退旧的 ~/.cloudflared
-    let cred_dir = cloudflared_data_dir();
-    let legacy_cred_dir = legacy_cloudflared_dir();
+    // 隧道密钥（<隧道ID>.json）与 cert.pem 同处：cloudflared 的默认目录 ~/.cloudflared
+    let cred_dir = default_cloudflared_dir();
 
     let mut list = Vec::new();
     for t in raw_list {
@@ -428,8 +363,7 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
                 .join(", ")
         };
         let cred_path = cred_dir.join(format!("{}.json", t.id));
-        let legacy_cred_path = legacy_cred_dir.join(format!("{}.json", t.id));
-        let tunnel_type = if cred_path.exists() || legacy_cred_path.exists() {
+        let tunnel_type = if cred_path.exists() {
             "local".to_string()
         } else {
             "remote".to_string()
@@ -463,12 +397,15 @@ fn create_tunnel(name: String) -> Result<String, String> {
     let err_str = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        // 新建隧道会生成 <隧道ID>.json 密钥。cloudflared 可能把它写在 ~/.cloudflared 而不是
-        // cert.pem 所在目录，所以这里再补同步一次，保证软件目录里也有同一份。
-        sync_legacy_cloudflared_files();
+        // 新建隧道生成的 <隧道ID>.json 密钥就落在 cert.pem 同目录（~/.cloudflared），
+        // 与软件读取的位置一致，不需要额外搬运。
         Ok(if out_str.trim().is_empty() { err_str } else { out_str })
     } else {
-        Err(if !err_str.trim().is_empty() { err_str } else { out_str })
+        Err(if !err_str.trim().is_empty() {
+            tidy_cloudflared_error(&err_str)
+        } else {
+            tidy_cloudflared_error(&out_str)
+        })
     }
 }
 
@@ -532,7 +469,11 @@ fn delete_tunnel(name: String) -> Result<String, String> {
     if output.status.success() {
         Ok(format!("隧道 {} 已成功删除{}", trimmed, dns_cleanup_note))
     } else {
-        Err(if !err_str.trim().is_empty() { err_str } else { out_str })
+        Err(if !err_str.trim().is_empty() {
+            tidy_cloudflared_error(&err_str)
+        } else {
+            tidy_cloudflared_error(&out_str)
+        })
     }
 }
 
@@ -560,7 +501,11 @@ fn route_dns_tunnel(name: String, hostname: String) -> Result<String, String> {
     if output.status.success() {
         Ok(if out_str.trim().is_empty() { err_str } else { out_str })
     } else {
-        Err(if !err_str.trim().is_empty() { err_str } else { out_str })
+        Err(if !err_str.trim().is_empty() {
+            tidy_cloudflared_error(&err_str)
+        } else {
+            tidy_cloudflared_error(&out_str)
+        })
     }
 }
 
@@ -588,9 +533,9 @@ fn tunnel_exists(name: &str) -> Result<bool, String> {
     // 未登录或执行出错时（此时无法确定隧道是否存在），视为失败并提示
     if !output.status.success() {
         return Err(if !stderr_str.trim().is_empty() {
-            stderr_str
+            tidy_cloudflared_error(&stderr_str)
         } else {
-            stdout_str
+            tidy_cloudflared_error(&stdout_str)
         });
     }
 
@@ -1366,10 +1311,11 @@ fn watch_login_line(line: &str, watch: &Arc<Mutex<LoginWatch>>) -> Option<(Strin
 #[tauri::command]
 fn login_cloudflared(app: AppHandle) -> Result<String, String> {
     let mut cmd = create_base_command();
-    // 授权登录必须无条件把 cert.pem 写进软件目录：此刻可能还没有证书，
-    // create_base_command 只在证书已存在时才设置该变量，所以这里显式覆盖一次。
-    let _ = fs::create_dir_all(cloudflared_data_dir());
-    let cert = cloudflared_data_dir().join("cert.pem");
+    // 显式把 cert.pem 钉到 cloudflared 的默认目录（~/.cloudflared）。默认行为本来就在这里，
+    // 显式指定是为了保证目录存在，同时不受上游默认值变化影响。
+    let cert_dir = default_cloudflared_dir();
+    let _ = fs::create_dir_all(&cert_dir);
+    let cert = cert_dir.join("cert.pem");
     cmd.env("TUNNEL_ORIGIN_CERT", &cert);
     cmd.args(["tunnel", "login"])
         .stdout(Stdio::piped())
@@ -1526,8 +1472,8 @@ fn exit_app(app: AppHandle, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn open_cloudflared_config_dir(app: AppHandle) -> Result<String, String> {
-    // 打开软件目录下的凭证目录（cert.pem 与隧道密钥都放这里，不再散落在用户主目录）
-    let config_dir = cloudflared_data_dir();
+    // 打开 cloudflared 的默认凭证目录（cert.pem 与隧道密钥都在这里）
+    let config_dir = default_cloudflared_dir();
 
     if !config_dir.exists() {
         let _ = fs::create_dir_all(&config_dir);
@@ -1591,8 +1537,7 @@ fn extract_ingress_from_log(line: &str) -> Option<String> {
 ///
 /// Token 存在 Cloudflare 云端，靠 cert.pem 的账号级授权就能随时换出来，
 /// 所以界面完全不需要用户手填 Token，也就不必把 Token 明文写进 localStorage。
-/// 注意：create_base_command 只在软件目录下确实有 cert.pem 时才设置
-/// TUNNEL_ORIGIN_CERT，所以这里必须先确认证书存在，否则 cloudflared 会直接报错。
+/// 注意：凭证固定在 `~/.cloudflared`，所以这里必须先确认证书存在，否则 cloudflared 会直接报错。
 fn tunnel_token_of(id_or_name: &str) -> Result<String, String> {
     let target = id_or_name.trim();
     if target.is_empty() {
@@ -2621,13 +2566,8 @@ pub fn run() {
             }
         }))
         .setup(|app| {
-            // 便携化：把旧位置（~/.cloudflared）的授权凭证补拷到软件目录。
-            // 只复制缺失文件、不移动不删除，失败也不阻断启动。
-            sync_legacy_cloudflared_files();
-            // 便携化：凭证都进软件目录后，用户主目录那份遗留副本就没用了，顺手清掉。
-            // 只在「每个文件都与软件目录一致」时才删，绝不误删用户自己维护的数据。
-            cleanup_user_cloudflared_dir();
-            // 便携化：首次启动把旧的 WebView2 数据目录整体搬到软件目录，避免隧道列表/token 变空。
+            // 首次启动把旧的 WebView2 数据目录整体搬到软件目录，避免隧道列表/token 变空。
+            // （凭证不在这里处理：cloudflared 的默认目录 ~/.cloudflared 就是它的归宿。）
             migrate_legacy_webview_profile();
 
             // 便携化：主窗口改由代码创建，把 WebView2 数据目录指定为 <软件目录>\data\webview。

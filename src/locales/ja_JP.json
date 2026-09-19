@@ -158,7 +158,7 @@
     "btn_install": "cloudflared をインストール",
     "btn_install_desc": "OSとCPUアーキテクチャを自動検出してアプリフォルダにダウンロード",
     "btn_open_config_dir": "ローカル設定フォルダを開く",
-    "btn_open_config_dir_desc": "アプリのディレクトリ内の資格情報フォルダを表示（data\\cloudflared）",
+    "btn_open_config_dir_desc": "cloudflared の資格情報フォルダを表示（%USERPROFILE%\\.cloudflared）",
     "config_dir_warning": "警告：プライバシー漏洩やトンネルの不正使用を防ぐため、cert.pem 証明書や .json トンネル設定ファイルを他人に公開・共有しないでください！",
     "btn_login": "Cloudflared ログイン認証",
     "btn_check_version": "バージョン確認",

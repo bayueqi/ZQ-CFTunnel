@@ -698,12 +698,11 @@
                   :key="g.key"
                   class="remote-config-group"
                 >
+                  <!-- 这里只放隧道名（ID 在 tooltip 里）：早先还渲染过 API 的 source 与 version，
+                       一个语义是「配置托管方」放进「云端配置」卡片自相矛盾，另一个 v39 长得像软件版本号，
+                       都是噪音，已去掉；要版本号时直接看接口返回。 -->
                   <div class="remote-config-group-title" :title="g.tooltip">
                     <span class="remote-config-group-name">{{ g.name }}</span>
-                    <!-- 只留版本号，不打「云端托管 / 本地托管」标签 ——
-                         这张卡片本身就是列云端配置，再标一遍归属没有意义；
-                         版本号每次写入递增，是唯一能确认「网页改完有没有生效」的信号。 -->
-                    <span v-if="g.version" class="remote-config-meta">v{{ g.version }}</span>
                   </div>
                   <!-- 1. 已发布应用程序路由（= ingress，/cfd_tunnel/{id}/configurations） -->
                   <div class="remote-config-section">
@@ -830,7 +829,7 @@
               <span class="tile-icon">📂</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_open_config_dir || '打开本地配置文件目录' }}</span>
-                <span class="tile-desc">{{ t.misc_tab.btn_open_config_dir_desc || '在文件资源管理器中查看软件目录下的凭证目录（data\\cloudflared）' }}</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_open_config_dir_desc || '在文件资源管理器中查看凭证目录（%USERPROFILE%\\.cloudflared）' }}</span>
               </div>
             </button>
 
@@ -1946,12 +1945,21 @@ const showToast = (msg: string) => {
   }, 2600);
 };
 
+// 控制台每行左侧已经按 level 渲染了一个 [INFO]/[WARN]/[ERROR]/[SUCCESS] 标签，
+// 而各处调用点（含 Rust 侧 emit 过来的）又在正文开头写了一遍同样的前缀，
+// 于是同一行会显示成「[WARN][INFO] 临时链接 已停止…」这种两层甚至多层标签。
+// 统一在入库前剥掉正文开头的层级标签（只剥开头，正文中间出现的 [81044] 之类原样保留），
+// 并把 cloudflared 原样吐出的多行 stderr 压成一行 —— 保证「一行日志 = 一个标签 + 一句正文」。
+const LOG_LEVEL_PREFIX = /^(?:\s*\[(?:INFO|WARN|ERROR|SUCCESS|DEBUG)\])+/i;
+const normalizeLogMessage = (raw: string) =>
+  raw.replace(LOG_LEVEL_PREFIX, '').replace(/\s+/g, ' ').trim();
+
 // 追加日志
 const appendLog = (message: string, level: LogEntry['level'] = 'info', source: LogEntry['source'] = 'system') => {
   logs.value.push({
     id: `${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     timestamp: new Date().toLocaleTimeString(),
-    message,
+    message: normalizeLogMessage(message),
     level,
     source,
   });
@@ -4078,16 +4086,6 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 「来源 · 版本」小字：只读升级后从 Cloudflare API 拿到，可用来确认配置有没有生效 */
-.remote-config-meta {
-  display: inline-flex;
-  gap: 6px;
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-secondary);
 }
 
 /* 每条隧道下三块：已发布应用程序路由 / 主机名路由 / CIDR 路由。

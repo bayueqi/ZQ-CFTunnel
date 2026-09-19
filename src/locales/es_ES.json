@@ -158,7 +158,7 @@
     "btn_install": "Instalar cloudflared",
     "btn_install_desc": "Detectar SO y CPU y descargar en la carpeta de la app",
     "btn_open_config_dir": "Abrir Carpeta de Configuración Local",
-    "btn_open_config_dir_desc": "Ver la carpeta de credenciales dentro del directorio de la app (data\\cloudflared)",
+    "btn_open_config_dir_desc": "Ver la carpeta de credenciales de cloudflared (%USERPROFILE%\\.cloudflared)",
     "config_dir_warning": "Aviso: ¡No muestre ni comparta el archivo cert.pem ni los archivos .json del túnel con nadie para evitar fugas de privacidad!",
     "btn_login": "Iniciar Sesión Cloudflared",
     "btn_check_version": "Verificar Versión",

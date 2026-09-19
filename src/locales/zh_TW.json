@@ -158,7 +158,7 @@
     "btn_install": "安裝 cloudflared",
     "btn_install_desc": "自動偵測作業系統與 CPU 架構並下載至應用目錄",
     "btn_open_config_dir": "開啟本機設定檔目錄",
-    "btn_open_config_dir_desc": "在檔案總管中查看軟體目錄下的憑證目錄（data\\cloudflared）",
+    "btn_open_config_dir_desc": "在檔案總管中查看憑證目錄（%USERPROFILE%\\.cloudflared）",
     "config_dir_warning": "提示：請不要將 cert.pem 憑證檔案和 .json 隧道設定檔展示或分享給任何人，以免造成隱私外洩和隧道被盜用！",
     "btn_login": "Cloudflared 授權登入",
     "btn_check_version": "檢查 cloudflared 版本",

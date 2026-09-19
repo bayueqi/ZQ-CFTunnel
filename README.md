@@ -16,7 +16,7 @@
 - [支持的全部协议](#支持的全部协议)
 - [前提条件](#前提条件)
 - [安装与授权登录](#安装与授权登录)
-- [数据存在哪里（便携式）](#数据存在哪里便携式)
+- [数据存在哪里](#数据存在哪里)
 - [使用临时链接（免绑定）](#使用临时链接免绑定)
 - [使用固定域名](#使用固定域名)
 - [管理已绑定域名（改名 / 解绑）](#管理已绑定域名改名--解绑)
@@ -40,7 +40,7 @@ CFTunnel 里的隧道分三种，本质区别在于 **「隧道的配置写在�
 | **灵活性** | 最高：填端口即出链接 | ⬆️ 高：协议、端口随时改，改完即生效 | ⬇️ 低：协议/端口在网页端固定，改要回后台 |
 | **域名稳定性** | ❌ 每次启动随机变化，停止即失效 | ✅ 固定，可随时重连 | ✅ 固定 |
 | **可否多开** | ✅ 可同时生成多条 | ✅ 可同时运行多条命名隧道 | ✅ 可多条并存 |
-| **凭证存放** | 无 | 本机软件目录 `data\cloudflared\<隧道ID>.json` | 无；运行 Token 每次启动由本机 `cert.pem` 现换，不落盘 |
+| **凭证存放** | 无 | 本机 `%USERPROFILE%\.cloudflared\<隧道ID>.json` | 无；运行 Token 每次启动由本机 `cert.pem` 现换，不落盘 |
 | **启动命令** | `cloudflared tunnel --url <协议>://127.0.0.1:<端口>` | `cloudflared tunnel --name <名称> --url <协议>://127.0.0.1:<端口>` | `cloudflared tunnel token <隧道>` + `cloudflared tunnel run --token <Token>` |
 | **适用场景** | 临时分享个链接、快速测试，不想折腾域名 | 长期发布本地服务，需要固定域名 | 已在后台写好 ingress 规则，只想在本机把它跑起来 |
 
@@ -85,7 +85,7 @@ CFTunnel 里的隧道分三种，本质区别在于 **「隧道的配置写在�
 
 1. 打开 CFTunnel，在左侧边栏点击 **「⚙️ 配置」**；
 2. 点击 **「📦 安装 cloudflared」**：自动检测系统与 CPU 架构，从官方 Release 拉取最新二进制；
-3. 点击 **「🔑 Cloudflared 授权登录」**：唤起默认浏览器，在 Cloudflare 网页上**选择你要授权的域名**完成登录，证书保存在软件目录下的 `data\cloudflared\cert.pem`（旧版 `~/.cloudflared\cert.pem` 会在首次启动时自动补齐一份过来）。
+3. 点击 **「🔑 Cloudflared 授权登录」**：唤起默认浏览器，在 Cloudflare 网页上**选择你要授权的域名**完成登录，证书保存在 cloudflared 的默认位置 `%USERPROFILE%\.cloudflared\cert.pem`。
 
 > 授权登录这一步，就是把「你的 Cloudflare 账号 + 某个域名」的操控权限下放给本机 cloudflared，之后才能在本机创建隧道、绑定该域名的 DNS 路由。
 >
@@ -93,9 +93,9 @@ CFTunnel 里的隧道分三种，本质区别在于 **「隧道的配置写在�
 
 ---
 
-## 数据存在哪里（便携式）
+## 数据存在哪里
 
-所有数据都放在**软件自己的目录**下（即 `cftunnel.exe` 所在目录），把整个文件夹拷走就等于完整迁移，不依赖 `%APPDATA%`、`%LOCALAPPDATA%` 或用户主目录：
+界面数据放在**软件自己的目录**下（即 `cftunnel.exe` 所在目录）：
 
 ```
 <软件目录>\
@@ -103,19 +103,23 @@ CFTunnel 里的隧道分三种，本质区别在于 **「隧道的配置写在�
 ├── uninstall.exe                    卸载器
 ├── cloudflared.exe                  界面里「安装 / 更新 cloudflared」下载到这里
 └── data\
-    ├── webview\                     WebView2 用户数据：语言 / 主题 / 端口 / 客户端隧道列表
-    ├── cloudflared\                 cloudflared 凭证：cert.pem（授权登录）+ <隧道ID>.json（隧道密钥）
-    └── .cloudflared\                cloudflared 自己的「家目录」（HOME 被软件改写到这里），正常为空
+    └── webview\                     WebView2 用户数据：语言 / 主题 / 端口 / 客户端隧道列表
 ```
 
-- **备份**：拷 `<软件目录>\data\` 即可。
+**授权凭证不在软件目录里**，而是交给 cloudflared 自己的默认位置：
+
+```
+%USERPROFILE%\.cloudflared\
+├── cert.pem                         授权登录证书（账号级，用来管隧道和域名路由）
+└── <隧道ID>.json                     隧道密钥（本地托管的隧道运行时要读它）
+```
+
+- **备份**：两处都要拷 —— 界面数据在 `<软件目录>\data\`，授权凭证在 `%USERPROFILE%\.cloudflared\`。
 - **恢复出厂**：删掉 `<软件目录>\data\webview\`，下次启动回到默认语言与空列表，登录状态不受影响。
-- **升级**：覆盖安装不会清空 `data\`，配置保留。
-- ⚠️ **卸载**：卸载程序会连 `<软件目录>` 一起清理，卸载前请先备份 `data\`。
-- **自动迁移**：首次启动会从旧位置补齐数据 —— WebView2 数据从 `%LOCALAPPDATA%\com.zhishifenzi.cloudflared-gui` 整体搬运，cloudflared 凭证从 `~/.cloudflared` 复制一份。
-- 🚫 **不再碰 `~/.cloudflared`**：软件给所有 cloudflared 子进程同时设置 `HOME` / `USERPROFILE` 和 `TUNNEL_ORIGIN_CERT`，把它的「家目录」与证书路径**一起锁进软件目录**，所以 `C:\Users\<你>\.cloudflared` 不会被自动创建了。
-  （旧版只在 `cert.pem` 已存在时才设 `TUNNEL_ORIGIN_CERT`，于是「第一次点授权登录」时 cloudflared 回退到了用户主目录 —— 这是历史遗留的根因。）
-  启动时若发现用户主目录下还留着旧版遗留的文件、且**每个文件都与软件目录里的副本大小一致**，会自动清理；只要有一个对不上就原样保留，绝不误删你自己 `cloudflared login` 生成的东西。
+- ✅ **升级 / 卸载都安全**：凭证在用户主目录里，覆盖安装也好、卸载程序清理安装目录也好，都碰不到它。
+  （历史教训：早先版本把凭证塞进 `<软件目录>\data\cloudflared`，一次覆盖安装就被卸载器连带清空，授权全丢 —— 所以改回了默认位置。）
+- ✅ **和命令行共用同一套凭证**：软件不改写子进程的 `HOME` / `USERPROFILE`，`cloudflared` 写在哪，软件就读哪。
+  你在终端里跑 `cloudflared` 和用这个软件，用的是同一份 `~/.cloudflared`，不会出现「两边凭证不一致」。
 
 ---
 
