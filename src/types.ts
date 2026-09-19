@@ -72,6 +72,7 @@ export interface LangPack {
     btn_start: string;
     btn_stop: string;
     btn_refresh: string;
+    btn_refreshing: string;
     btn_delete: string;
     btn_clear_log: string;
     status_running: string;

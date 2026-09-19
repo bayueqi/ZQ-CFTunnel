@@ -28,6 +28,7 @@
     "btn_start": "Start",
     "btn_stop": "Stop",
     "btn_refresh": "Refresh",
+    "btn_refreshing": "Refreshing...",
     "btn_delete": "Delete",
     "btn_clear_log": "Clear Logs",
     "status_running": "Running",

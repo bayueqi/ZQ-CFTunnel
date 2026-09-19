@@ -481,7 +481,7 @@
                   </tr>
                   <tr v-if="localTunnelList.length === 0">
                     <td colspan="7" class="empty-table">
-                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道' }}
+                      {{ refreshingTunnels.local ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
                 </tbody>
@@ -489,9 +489,13 @@
             </div>
 
             <div class="actions-row table-actions">
-              <button class="fluent-btn" @click="handleRefreshTunnels('local')" :disabled="isRefreshingTunnels">
-                <span class="btn-icon">🔄</span>
-                {{ t.server_tab.btn_refresh }}
+              <button
+                class="fluent-btn"
+                :disabled="refreshingTunnels.local"
+                @click="handleRefreshTunnels('local')"
+              >
+                <span class="btn-icon" :class="{ spinning: refreshingTunnels.local }">🔄</span>
+                {{ refreshingTunnels.local ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
               </button>
 
               <button
@@ -577,11 +581,11 @@
               <div class="client-title-actions">
                 <button
                   class="fluent-btn small"
+                  :disabled="refreshingTunnels.remote"
                   @click="handleRefreshTunnels('remote')"
-                  :disabled="isRefreshingTunnels"
                 >
-                  <span class="btn-icon">🔄</span>
-                  {{ t.server_tab.btn_refresh }}
+                  <span class="btn-icon" :class="{ spinning: refreshingTunnels.remote }">🔄</span>
+                  {{ refreshingTunnels.remote ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
                 </button>
                 <!-- 删除按钮就放在刷新旁边，作用于列表里选中的那条隧道，点开先弹确认框 -->
                 <button
@@ -663,7 +667,7 @@
                   </tr>
                   <tr v-if="remoteTunnelList.length === 0">
                     <td colspan="8" class="empty-table">
-                      {{ isRefreshingTunnels ? '正在刷新列表...' : '未发现隧道' }}
+                      {{ refreshingTunnels.remote ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
                 </tbody>
@@ -1512,7 +1516,11 @@ const canSubmitClientAdd = computed(
     !!clientForm.value.domain.trim() &&
     !!clientForm.value.port.trim()
 );
-const isRefreshingTunnels = ref(false);
+// 刷新态按列表分开：固定域名 / 云端托管各一份。
+// 早先两处共用一个布尔值，于是「固定域名」正在刷新时，「云端托管」的刷新按钮
+// 也会一起变灰 —— 而且这个刷新会去等 Cloudflare API（网络不通时长达二三十秒），
+// 表现出来就是「明明没在刷这个列表，按钮却点不动」。
+const refreshingTunnels = ref<{ local: boolean; remote: boolean }>({ local: false, remote: false });
 const isCreatingTunnel = ref(false);
 const isDownloadingCloudflared = ref(false);
 
@@ -2073,35 +2081,52 @@ const onTunnelDoubleClick = (tunnel: TunnelInfo) => {
   showToast(`已选择隧道: ${tunnel.name}`);
 };
 
+// 把绑定域名补进当前列表。
+// 这一步要打 Cloudflare API（遍历 zone 下的 DNS 记录），慢且可能失败，
+// 所以与列表本体解耦：失败时**保留上一次的值** —— 网络抖一下就把整列刷成
+// 「未绑定」，会让人误以为域名被解绑了，比不更新更糟。
+const fillTunnelHostnames = async () => {
+  try {
+    const map = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
+    // 重建数组而不是原地改属性，保证表格一定收到更新
+    tunnelList.value = tunnelList.value.map(t => ({ ...t, hostnames: map[t.id] ?? [] }));
+  } catch {
+    // 未授权 / 网络不通：静默忽略，保留旧值
+  }
+};
+
 // 刷新隧道列表
 // scope：由哪个列表的刷新按钮触发（local=固定域名列表 / remote=云端托管列表），
-//        只影响日志文案与统计口径（各列表只统计自己那一类隧道）；内部调用不传则统计全部。
+//        只影响日志文案、统计口径，以及要不要顺带刷新云端数据；内部调用不传则统计全部。
+//
+// 这里最要紧的是「别让网络拖着按钮」：列表本体读的是本地 cloudflared 配置（毫秒级），
+// 而绑定域名、云端 ingress 都要打 Cloudflare API —— 网络不通时单次能一直等到超时。
+// 所以列表先上屏、慢活全部异步化，按钮随后就能恢复可点。
 const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
-  isRefreshingTunnels.value = true;
+  const key: 'local' | 'remote' = scope === 'remote' ? 'remote' : 'local';
+  // 防重入：同一个列表连点不做第二次；两个列表互不影响
+  if (refreshingTunnels.value[key]) return;
+  refreshingTunnels.value[key] = true;
   try {
     const res = await invoke<TunnelInfo[]>('list_tunnels');
-    // 拉取各隧道绑定的域名（读取 cert.pem 的 apiToken 查 Cloudflare API）
-    try {
-      const hostnames = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
-      for (const t of res) {
-        t.hostnames = hostnames[t.id] || [];
-      }
-    } catch {
-      // 未授权或查询失败时静默忽略，域名列显示「未绑定」
-      for (const t of res) t.hostnames = [];
-    }
     tunnelList.value = res;
 
-    // 一并与后端对账命名隧道的运行状态（多开后靠这里把已退出的进程同步掉）
+    // 绑定域名走云 API，不阻塞列表上屏与按钮恢复
+    void fillTunnelHostnames();
+
+    // 与后端对账命名隧道的运行状态（多开后靠这里把已退出的进程同步掉）
     await reconcileServerRunning();
 
     // 云端托管列表的刷新按钮只有 handleRefreshTunnels 这一个入口，
     // 顺手把云端隧道进程也对账一次，否则「运行中」状态会一直停在旧值上。
+    // 注意条件保留 `scope !== 'local'`：启动时的自动刷新（不带 scope）也要走到，
+    // 否则上次停在云端 Tab 的用户重启后，配置卡片会一直空着。
     if (scope !== 'local') {
       await refreshRemoteTunnels();
-      // 云端 ingress 配置改走 API 读取：隧道不跑起来也能看到。
-      // 这是用户手动点的刷新，强刷拿最新值，不吃缓存
-      await refreshRemoteConfigs({ force: true });
+      // 云端 ingress 配置要逐条隧道发两个 API 请求，网络不通时会拖很久。
+      // 列表与运行状态都已更新完，这里后台跑，不继续锁着按钮；
+      // 只有用户亲手点这个列表的刷新按钮才强刷，自动刷新走缓存（见 refreshRemoteConfigs）。
+      void refreshRemoteConfigs({ force: scope === 'remote' });
     }
 
     // 按触发刷新的列表分别统计：固定域名列表 / 云端托管
@@ -2114,7 +2139,7 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
     const scopeName = scope === 'local' ? '固定域名' : scope === 'remote' ? '云端托管' : '隧道';
     appendLog(`[ERROR] 刷新${scopeName}列表失败: ${err}`, 'error', 'server');
   } finally {
-    isRefreshingTunnels.value = false;
+    refreshingTunnels.value[key] = false;
   }
 };
 
@@ -4296,6 +4321,21 @@ onUnmounted(() => {
 .fluent-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 刷新进行中，图标转起来。
+   「按钮变灰、界面纹丝不动」会被当成按钮坏了 —— 加个转圈明确表达「正在忙」，
+   尤其是在等网络请求、可能要十几秒才有结果的时候。
+   .btn-icon 本身是 inline 元素，不设 inline-block 的话 transform 不生效。 */
+.btn-icon.spinning {
+  display: inline-block;
+  animation: btnSpin 0.9s linear infinite;
+}
+
+@keyframes btnSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .fluent-btn.primary {

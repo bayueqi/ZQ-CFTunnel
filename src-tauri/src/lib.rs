@@ -2194,7 +2194,11 @@ fn cf_api_request(
     token: &str,
     json_body: Option<&str>,
 ) -> Result<String, String> {
+    // 连接阶段单独限时。ureq 的 `timeout_connect` 默认是 30 秒，而且**优先于**
+    // `timeout()`；网络不通时（断网、Cloudflare 不可达）界面就得干等半分钟。
+    // 显式压到 8 秒：正常请求 300ms 级，8 秒足够，失败也失败得干脆。
     let agent = ureq::builder()
+        .timeout_connect(std::time::Duration::from_secs(8))
         .timeout(std::time::Duration::from_secs(30))
         .build();
 

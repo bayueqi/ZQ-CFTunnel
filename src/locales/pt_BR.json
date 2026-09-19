@@ -28,6 +28,7 @@
     "btn_start": "Iniciar",
     "btn_stop": "Parar",
     "btn_refresh": "Atualizar",
+    "btn_refreshing": "Atualizando...",
     "btn_delete": "Excluir",
     "btn_clear_log": "Limpar Logs",
     "status_running": "Em Execução",
