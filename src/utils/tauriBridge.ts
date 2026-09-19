@@ -186,6 +186,21 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       } as unknown as T;
     }
 
+    case 'fetch_tunnel_routes': {
+      // 主机名路由 / CIDR 路由：与 ingress 无关的两份独立数据，演示模式各给一种情况
+      // （一个有数据、一个空列表），好让两种分支都能在网页端看到。
+      const tunnelId = ((args?.tunnelId as string) || '').trim();
+      if (!tunnelId) throw new Error('隧道 ID 格式不正确');
+      const tunnel = mockTunnels.find(t => t.id === tunnelId);
+      const name = tunnel?.name || tunnelId;
+      return {
+        hostname_routes: [{ hostname: `${name}.internal`, comment: '演示数据' }],
+        cidr_routes: [],
+        hostname_error: null,
+        cidr_error: null,
+      } as unknown as T;
+    }
+
     case 'list_remote_tunnels':
       // 云端托管支持多开：返回当前所有在跑的进程快照（key 为隧道 ID）
       return mockRemotes.map(r => ({ key: r.key })) as unknown as T;

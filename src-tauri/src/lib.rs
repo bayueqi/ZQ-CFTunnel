@@ -82,6 +82,38 @@ pub struct TunnelConfig {
     pub rules: Vec<TunnelIngressRule>,
 }
 
+/// 一条「主机名路由」（Zero Trust 的路由资源，独立于 ingress）。
+///
+/// 注意它跟上面 `TunnelIngressRule` 不是一回事：主机名路由是把某个主机名
+/// （可以是 `office-1.local` 这种内网名）指到隧道，落在公共 DNS 之外，
+/// 面板上是单独一页、单独一套 API。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TunnelHostnameRoute {
+    pub hostname: String,
+    pub comment: String,
+}
+
+/// 一条「CIDR 路由」（= 私有网络网段经 WARP 访问）。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TunnelCidrRoute {
+    pub network: String,
+    pub comment: String,
+}
+
+/// 一条隧道除 ingress 之外的其余两页路由（只读展示用）。
+///
+/// 两块数据来自两个不同的账号级端点，**失败互不影响**（比如 token 少了
+/// `Cloudflare One Networks Read` 权限时主机名路由 403，CIDR 路由仍可能正常），
+/// 所以各自带一个 `*_error`：`None` = 读取成功（列表可能为空）。
+/// 整条命令不会因为其中一块失败而报错，前端也能分别显示「无」与「读取失败」。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TunnelRouteSet {
+    pub hostname_routes: Vec<TunnelHostnameRoute>,
+    pub cidr_routes: Vec<TunnelCidrRoute>,
+    pub hostname_error: Option<String>,
+    pub cidr_error: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TunnelInfo {
     pub id: String,
@@ -2215,6 +2247,121 @@ fn fetch_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
     })
 }
 
+/// 读取某条隧道在面板另外两页里的路由（只读）：「主机名路由」与「CIDR 路由」。
+///
+/// 这两页与 ingress 是**三份彼此独立的数据**，端点也各不相同：
+/// - 主机名路由：`GET /accounts/{acct}/zerotrust/routes/hostname`（账号级资源，
+///   支持 `tunnel_id` 查询参数过滤；**不是** ingress，也不是 `/cfd_tunnel/{id}/routes`，后者实测 404）；
+/// - CIDR 路由：`GET /accounts/{acct}/teamnet/routes`（同样是账号级端点，
+///   隧道路径下没有 routes 子资源）。
+///
+/// 两块都过了 `tunnel_id` 查询参数，返回里再按 `tunnel_id` 过滤一遍兜底，
+/// 免得同账号下别的隧道的条目混进来。
+///
+/// 任一块失败只把原因写进对应的 `*_error`，不让整条命令失败 —— 否则一个 403
+/// 会把已经拿到的 ingress 配置一起遮掉（token 缺少 Cloudflare One Networks 权限时就会这样）。
+#[tauri::command]
+fn fetch_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
+    let id = tunnel_id.trim();
+    if !is_valid_tunnel_id(id) {
+        return Err("隧道 ID 格式不正确".to_string());
+    }
+
+    let (api_token, account_id) = cloudflare_account_credentials()?;
+
+    let hostname_url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/zerotrust/routes/hostname?tunnel_id={}&per_page=100",
+        account_id, id
+    );
+    let (hostname_routes, hostname_error) =
+        match cf_api_request("GET", &hostname_url, &api_token, None) {
+            Ok(body) => match parse_hostname_routes(&body, id) {
+                Ok(list) => (list, None),
+                Err(e) => (Vec::new(), Some(e)),
+            },
+            Err(e) => (Vec::new(), Some(e)),
+        };
+
+    let cidr_url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes?tunnel_id={}&per_page=100",
+        account_id, id
+    );
+    let (cidr_routes, cidr_error) = match cf_api_request("GET", &cidr_url, &api_token, None) {
+        Ok(body) => match parse_cidr_routes(&body, id) {
+            Ok(list) => (list, None),
+            Err(e) => (Vec::new(), Some(e)),
+        },
+        Err(e) => (Vec::new(), Some(e)),
+    };
+
+    Ok(TunnelRouteSet {
+        hostname_routes,
+        cidr_routes,
+        hostname_error,
+        cidr_error,
+    })
+}
+
+/// 解析主机名路由列表：`{ result: [{ hostname, comment, tunnel_id, deleted_at }] }`。
+fn parse_hostname_routes(body: &str, tunnel_id: &str) -> Result<Vec<TunnelHostnameRoute>, String> {
+    let json: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
+    let mut out = Vec::new();
+    if let Some(items) = json.get("result").and_then(|v| v.as_array()) {
+        for item in items {
+            if !route_belongs_to_tunnel(item, tunnel_id) {
+                continue;
+            }
+            out.push(TunnelHostnameRoute {
+                hostname: json_str_field(item, "hostname"),
+                comment: json_str_field(item, "comment"),
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// 解析 CIDR 路由列表：`{ result: [{ network, comment, tunnel_id, deleted_at }] }`。
+fn parse_cidr_routes(body: &str, tunnel_id: &str) -> Result<Vec<TunnelCidrRoute>, String> {
+    let json: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("解析 API 响应失败: {}", e))?;
+    let mut out = Vec::new();
+    if let Some(items) = json.get("result").and_then(|v| v.as_array()) {
+        for item in items {
+            if !route_belongs_to_tunnel(item, tunnel_id) {
+                continue;
+            }
+            out.push(TunnelCidrRoute {
+                network: json_str_field(item, "network"),
+                comment: json_str_field(item, "comment"),
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// 路由条目是否属于指定隧道：未删除，且 `tunnel_id` 相符。
+///
+/// `tunnel_id` 字段缺失时按「属于」处理并放行：请求已经带了 `tunnel_id` 查询参数，
+/// 由服务端做过一次过滤，这里只是兜底，没必要因为字段缺失把内容吞掉。
+fn route_belongs_to_tunnel(item: &serde_json::Value, tunnel_id: &str) -> bool {
+    let deleted = item.get("deleted_at").map(|v| !v.is_null()).unwrap_or(false);
+    if deleted {
+        return false;
+    }
+    let owner = json_str_field(item, "tunnel_id");
+    owner.is_empty() || owner == tunnel_id
+}
+
+/// 取字符串字段值，缺失或为 null 时给空串（面板的「描述」列本来就可空）。
+fn json_str_field(value: &serde_json::Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
 /// 校验 Cloudflare DNS 记录 ID（32 位十六进制）。
 ///
 /// 该 ID 会被直接拼进请求 URL，必须严格校验以防路径注入。
@@ -2564,6 +2711,7 @@ pub fn run() {
             create_tunnel,
             delete_tunnel,
             fetch_tunnel_config,
+            fetch_tunnel_routes,
             route_dns_tunnel,
             start_server_tunnel,
             stop_server_tunnel,

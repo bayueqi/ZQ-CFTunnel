@@ -687,7 +687,8 @@
             </div>
           </div>
 
-          <!-- 云端 ingress 配置卡片：按隧道名称分组，多条并行也分得清是哪条隧道 -->
+          <!-- 云端配置卡片：按隧道名称分组，每条隧道下三块 —— 已发布应用程序路由 / 主机名路由 / CIDR 路由。
+               这三块是 Cloudflare 面板上三个独立页面的数据、三个不同接口，互不相关，所以分开列。 -->
           <div class="fluent-card form-card remote-config-card">
             <h3 class="card-title">{{ t.server_tab.remote_config_title }}</h3>
             <div class="remote-config-body">
@@ -699,16 +700,32 @@
                 >
                   <div class="remote-config-group-title" :title="g.tooltip">
                     <span class="remote-config-group-name">{{ g.name }}</span>
-                    <!-- 配置改走 Cloudflare API 读取后能拿到 source 与版本号：
-                         版本号每次写入递增，可用来确认「刚改的有没有生效」 -->
-                    <span v-if="g.source || g.version" class="remote-config-meta">
-                      <span v-if="g.source === 'cloudflare'">{{ t.server_tab.config_src_cloudflare }}</span>
-                      <span v-else-if="g.source === 'local'">{{ t.server_tab.config_src_local }}</span>
-                      <span v-if="g.version">v{{ g.version }}</span>
-                    </span>
+                    <!-- 只留版本号，不打「云端托管 / 本地托管」标签 ——
+                         这张卡片本身就是列云端配置，再标一遍归属没有意义；
+                         版本号每次写入递增，是唯一能确认「网页改完有没有生效」的信号。 -->
+                    <span v-if="g.version" class="remote-config-meta">v{{ g.version }}</span>
                   </div>
-                  <!-- 在跑但云端还没吐出任何规则时不占位提示：空着也不显示那句「启动后自动获取」 -->
-                  <pre v-if="g.config">{{ g.config }}</pre>
+                  <!-- 1. 已发布应用程序路由（= ingress，/cfd_tunnel/{id}/configurations） -->
+                  <div class="remote-config-section">
+                    <div class="remote-config-section-title">{{ t.server_tab.config_sec_published }}</div>
+                    <pre v-if="g.published">{{ g.published }}</pre>
+                    <div v-else-if="g.ingressError" class="remote-config-section-error">{{ t.server_tab.config_load_failed }}：{{ g.ingressError }}</div>
+                    <div v-else class="remote-config-section-empty">{{ t.server_tab.config_none }}</div>
+                  </div>
+                  <!-- 2. 主机名路由（/zerotrust/routes/hostname，独立于 ingress） -->
+                  <div class="remote-config-section">
+                    <div class="remote-config-section-title">{{ t.server_tab.config_sec_hostname }}</div>
+                    <pre v-if="g.hostname">{{ g.hostname }}</pre>
+                    <div v-else-if="g.hostnameError" class="remote-config-section-error">{{ t.server_tab.config_load_failed }}：{{ g.hostnameError }}</div>
+                    <div v-else class="remote-config-section-empty">{{ t.server_tab.config_none }}</div>
+                  </div>
+                  <!-- 3. CIDR 路由（/teamnet/routes） -->
+                  <div class="remote-config-section">
+                    <div class="remote-config-section-title">{{ t.server_tab.config_sec_cidr }}</div>
+                    <pre v-if="g.cidr">{{ g.cidr }}</pre>
+                    <div v-else-if="g.cidrError" class="remote-config-section-error">{{ t.server_tab.config_load_failed }}：{{ g.cidrError }}</div>
+                    <div v-else class="remote-config-section-empty">{{ t.server_tab.config_none }}</div>
+                  </div>
                 </div>
               </template>
               <div v-else class="remote-config-empty">{{ t.server_tab.remote_config_empty }}</div>
@@ -1606,15 +1623,41 @@ const remoteRunningKeys = ref<string[]>([]);
 const isRemoteRunning = (tunnelId: string) => remoteRunningKeys.value.includes(tunnelId);
 const remoteRunningCount = computed(() => remoteRunningKeys.value.length);
 
-// 云端 ingress 规则（只读）。
-// 数据来自 Cloudflare API 而不是 cloudflared 的运行日志 —— 隧道没跑起来也能看到配置，
-// 还能拿到 source（local / cloudflare）与版本号。
+// 云端配置（只读）。面板上这些数据其实分三块，来源是三个互不相关的接口：
+//   1. 已发布应用程序路由 → GET .../cfd_tunnel/{id}/configurations 的 ingress
+//   2. 主机名路由        → GET .../zerotrust/routes/hostname
+//   3. CIDR 路由         → GET .../teamnet/routes
+// 数据都来自 Cloudflare API 而不是 cloudflared 的运行日志 —— 隧道没跑起来也能看到配置。
 type TunnelIngressRule = { hostname: string; path: string; service: string };
-type TunnelConfigInfo = { source: string; version: number; rules: TunnelIngressRule[] };
-const remoteConfigs = ref<Record<string, TunnelConfigInfo>>({});
+type TunnelHostnameRoute = { hostname: string; comment: string };
+type TunnelCidrRoute = { network: string; comment: string };
+type TunnelRouteSet = {
+  hostname_routes: TunnelHostnameRoute[];
+  cidr_routes: TunnelCidrRoute[];
+  hostname_error: string | null;
+  cidr_error: string | null;
+};
+type TunnelCloudInfo = {
+  source: string;
+  version: number;
+  rules: TunnelIngressRule[];
+  hostnameRoutes: TunnelHostnameRoute[];
+  cidrRoutes: TunnelCidrRoute[];
+  // 三块各自的读取失败原因，空串表示读到了（列表本身可能为空）
+  ingressError: string;
+  hostnameError: string;
+  cidrError: string;
+};
+const remoteConfigs = ref<Record<string, TunnelCloudInfo>>({});
 
-// 把隧道列表里每一条在 Cloudflare 侧的配置拉回来；单条失败就跳过，不打扰用户
-// （例如刚创建、云上还没有任何 ingress 规则时会拿不到内容）。
+// invoke 被拒绝时抛出来的既可能是字符串（Rust 侧 Result<_, String>），也可能是别的对象，
+// 统一转成能直接显示的一行文本。
+const errorText = (e: unknown): string =>
+  typeof e === 'string' ? e : String((e as Error)?.message ?? e);
+
+// 把隧道列表里每一条在 Cloudflare 侧的三块配置都拉回来。
+// 三块分别容错：某一块失败只在那块里显示「读取失败」，另外两块照常显示 ——
+// 否则主机名路由缺权限（403）会把已经拿到的已发布应用程序路由一起遮掉。
 const refreshRemoteConfigs = async () => {
   const items = remoteTunnelList.value;
   if (!items.length) {
@@ -1623,15 +1666,34 @@ const refreshRemoteConfigs = async () => {
   }
   const entries = await Promise.all(
     items.map(async (tn) => {
-      try {
-        const cfg = await invoke<TunnelConfigInfo>('fetch_tunnel_config', { tunnelId: tn.id });
-        return [tn.id, cfg] as const;
-      } catch {
-        return null;
-      }
+      const [cfgRes, routeRes] = await Promise.allSettled([
+        invoke<{ source: string; version: number; rules: TunnelIngressRule[] }>('fetch_tunnel_config', {
+          tunnelId: tn.id,
+        }),
+        invoke<TunnelRouteSet>('fetch_tunnel_routes', { tunnelId: tn.id }),
+      ]);
+      const info: TunnelCloudInfo = {
+        source: cfgRes.status === 'fulfilled' ? cfgRes.value.source : '',
+        version: cfgRes.status === 'fulfilled' ? cfgRes.value.version : 0,
+        rules: cfgRes.status === 'fulfilled' ? cfgRes.value.rules : [],
+        ingressError: cfgRes.status === 'rejected' ? errorText(cfgRes.reason) : '',
+        // 演示模式（浏览器里跑）可能返回 null，这里兜一层，别让整条刷新链炸掉
+        hostnameRoutes:
+          routeRes.status === 'fulfilled' ? routeRes.value?.hostname_routes ?? [] : [],
+        cidrRoutes: routeRes.status === 'fulfilled' ? routeRes.value?.cidr_routes ?? [] : [],
+        hostnameError:
+          routeRes.status === 'fulfilled'
+            ? routeRes.value?.hostname_error || ''
+            : errorText(routeRes.reason),
+        cidrError:
+          routeRes.status === 'fulfilled'
+            ? routeRes.value?.cidr_error || ''
+            : errorText(routeRes.reason),
+      };
+      return [tn.id, info] as const;
     }),
   );
-  const next: Record<string, TunnelConfigInfo> = {};
+  const next: Record<string, TunnelCloudInfo> = {};
   for (const entry of entries) {
     if (entry) next[entry[0]] = entry[1];
   }
@@ -1640,7 +1702,7 @@ const refreshRemoteConfigs = async () => {
 
 // 规则渲染成「匹配目标 → 源站」的文本行。hostname 为空即 ingress 末尾的兜底规则，
 // 显示成「(默认)」；带 path 的规则把 path 缀在域名后面一起显示。
-const formatIngressRules = (cfg?: TunnelConfigInfo) => {
+const formatIngressRules = (cfg?: TunnelCloudInfo) => {
   if (!cfg || !cfg.rules.length) return '';
   return cfg.rules
     .map(r => {
@@ -1650,35 +1712,72 @@ const formatIngressRules = (cfg?: TunnelConfigInfo) => {
     .join('\n');
 };
 
+// 主机名路由 / CIDR 路由：一行一条，有「描述」就缀在后面。
+const formatRouteLines = (rows: { value: string; comment: string }[]) =>
+  rows
+    .map(r => {
+      const value = r.value.trim();
+      if (!value) return '';
+      return r.comment.trim() ? `${value}  ·  ${r.comment.trim()}` : value;
+    })
+    .filter(Boolean)
+    .join('\n');
+
 // 配置卡片按隧道分组：标题用隧道名称，隧道 ID 只放进 tooltip，
 // 否则一列 8e1b8616 / 511e2469 根本分不清是哪条隧道。
+type RemoteConfigGroup = {
+  key: string;
+  name: string;
+  tooltip: string;
+  source: string;
+  version: number;
+  published: string;
+  hostname: string;
+  cidr: string;
+  ingressError: string;
+  hostnameError: string;
+  cidrError: string;
+};
+
+const toConfigGroup = (key: string, name: string, cfg?: TunnelCloudInfo): RemoteConfigGroup => {
+  const info: TunnelCloudInfo = cfg ?? {
+    source: '',
+    version: 0,
+    rules: [],
+    hostnameRoutes: [],
+    cidrRoutes: [],
+    ingressError: '',
+    hostnameError: '',
+    cidrError: '',
+  };
+  return {
+    key,
+    name,
+    tooltip: `隧道 ID: ${key}`,
+    source: info.source,
+    version: info.version,
+    published: formatIngressRules(cfg),
+    hostname: formatRouteLines(
+      info.hostnameRoutes.map(r => ({ value: r.hostname, comment: r.comment })),
+    ),
+    cidr: formatRouteLines(info.cidrRoutes.map(r => ({ value: r.network, comment: r.comment }))),
+    ingressError: info.ingressError,
+    hostnameError: info.hostnameError,
+    cidrError: info.cidrError,
+  };
+};
+
+// 列表里的每条隧道都出组，哪怕三块全空 —— 否则「这条隧道没有主机名路由」
+// 跟「压根没拉到」看起来一模一样，分不清。
 const remoteConfigGroups = computed(() => {
-  const groups = remoteTunnelList.value
-    .filter(tn => (remoteConfigs.value[tn.id]?.rules.length ?? 0) > 0)
-    .map(tn => {
-      const cfg = remoteConfigs.value[tn.id];
-      return {
-        key: tn.id,
-        name: tn.name || tn.id,
-        tooltip: `隧道 ID: ${tn.id}`,
-        config: formatIngressRules(cfg),
-        source: cfg.source,
-        version: cfg.version,
-      };
-    });
+  const groups = remoteTunnelList.value.map(tn =>
+    toConfigGroup(tn.id, tn.name || tn.id, remoteConfigs.value[tn.id]),
+  );
   // 后端在跑但隧道列表里还没有的（刚启动就刷新失败等）：按 ID 兜底显示
   const known = new Set(groups.map(g => g.key));
   for (const key of remoteRunningKeys.value) {
     if (known.has(key)) continue;
-    const cfg = remoteConfigs.value[key];
-    groups.push({
-      key,
-      name: key,
-      tooltip: `隧道 ID: ${key}`,
-      config: formatIngressRules(cfg),
-      source: cfg?.source || '',
-      version: cfg?.version || 0,
-    });
+    groups.push(toConfigGroup(key, key, remoteConfigs.value[key]));
   }
   return groups;
 });
@@ -3989,6 +4088,32 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 400;
   color: var(--text-secondary);
+}
+
+/* 每条隧道下三块：已发布应用程序路由 / 主机名路由 / CIDR 路由。
+   三块来自面板上三个独立页面、三个不同接口，分开列清楚，别让人误以为是一套数据 */
+.remote-config-section + .remote-config-section {
+  margin-top: 8px;
+}
+
+.remote-config-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+/* 空与「读不到」要分开显示：空是有数据源、就 0 条；失败是压根没读到 */
+.remote-config-section-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.remote-config-section-error {
+  font-size: 12px;
+  color: var(--danger-color);
+  word-break: break-all;
 }
 
 .remote-config-body pre {
