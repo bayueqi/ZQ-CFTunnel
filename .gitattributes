@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# 音频等二进制资源一律不做换行处理 —— CRLF 转换会直接损坏文件
+*.wav binary
+*.ico binary
+*.png binary

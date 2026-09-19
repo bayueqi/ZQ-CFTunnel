@@ -9,9 +9,37 @@ export class SoundManager {
   public enabled: boolean = true;
 
   /**
+   * 开关音效。
+   * 关闭时顺手释放 AudioContext：只要它活着，WebView2 的音频服务进程就会一直挂着
+   * （实测约 26 MB），对已经静音的用户来说是纯浪费。
+   */
+  public setEnabled(value: boolean) {
+    this.enabled = value;
+    if (!value) this.dispose();
+  }
+
+  /**
+   * 释放 AudioContext（之后再播放会按需重建）
+   */
+  public dispose() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    this.ctx = null;
+    try {
+      void ctx.close().catch(() => {});
+    } catch {
+      // close 失败也不影响，引用已断开
+    }
+  }
+
+  /**
    * 初始化 AudioContext (支持浏览器自动播放安全策略恢复)
    */
   public init() {
+    // 音效关着时不创建 AudioContext。
+    // 全局点击代理原先是无条件调用 init() 的，于是「已静音」的用户随便点一下界面，
+    // 也会把音频上下文建起来、把音频进程拉起来，而且此后一直不释放。
+    if (!this.enabled) return;
     try {
       if (!this.ctx) {
         const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;

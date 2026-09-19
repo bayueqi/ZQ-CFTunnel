@@ -209,11 +209,14 @@
       <!-- 主体内容卡片区 (平滑过渡动效) -->
       <main class="fluent-body">
       <!-- 1. 服务端 Tab -->
-      <section v-show="currentTab === 'server'" class="tab-view server-view animated-view">
+      <!-- 视图容器用 v-if 而不是 v-show：v-show 会让三个 Tab、五个子视图的 DOM 全部长期常驻，
+           隐藏页面的节点既占内存，也参与每个响应式更新周期的 diff。这里各视图天然互斥，
+           改用 v-if 后只挂载当前可见的那一份，其余整棵卸载。表单值都走 ref / localStorage，切换不丢。 -->
+      <section v-if="currentTab === 'server'" class="tab-view server-view animated-view">
         <!-- ============ 固定域名视图 ============ -->
-        <div v-show="serverMode === 'local'" class="server-sub-view">
+        <div v-if="serverMode === 'local'" class="server-sub-view">
           <!-- ============ 临时链接（临时域名） ============ -->
-          <div v-show="localSubMode === 'quick'" class="server-sub-view">
+          <div v-if="localSubMode === 'quick'" class="server-sub-view">
           <!-- 输入表单卡片 -->
           <div class="fluent-card form-card">
             <div class="form-grid">
@@ -318,7 +321,7 @@
           </div>
 
           <!-- ============ 绑定域名（命名隧道） ============ -->
-          <div v-show="localSubMode === 'named'" class="server-sub-view">
+          <div v-if="localSubMode === 'named'" class="server-sub-view">
           <!-- 输入表单卡片 -->
           <div class="fluent-card form-card">
             <div class="form-grid">
@@ -565,7 +568,7 @@
         </div>
 
         <!-- ============ 云端托管视图 ============ -->
-        <div v-show="serverMode === 'remote'" class="server-sub-view">
+        <div v-if="serverMode === 'remote'" class="server-sub-view">
           <!-- 云端托管列表卡片：一条隧道一行，行内 ▶/⏹ 直接启停。
                启动用的 Token 由后端拿 cert.pem 现取，界面上不出现 Token，也不落盘。 -->
           <div class="fluent-card table-card">
@@ -715,7 +718,7 @@
       </section>
 
       <!-- 2. 客户端 Tab：支持多开，一条隧道一行，可同时桥接多条 -->
-      <section v-show="currentTab === 'client'" class="tab-view client-view animated-view">
+      <section v-if="currentTab === 'client'" class="tab-view client-view animated-view">
         <div class="fluent-card form-card client-card">
           <div class="client-title-row">
             <h3 class="card-title client-title">{{ t.client_tab.title }}</h3>
@@ -792,7 +795,7 @@
       </section>
 
       <!-- 3. 杂项 Tab (保留上下滑动 Slider) -->
-      <section v-show="currentTab === 'misc'" class="tab-view misc-view animated-view">
+      <section v-if="currentTab === 'misc'" class="tab-view misc-view animated-view">
         <!-- 快捷操作区 -->
         <div class="fluent-card action-tiles-card">
           <div class="tile-grid">
@@ -1211,7 +1214,7 @@ const isThemeSpinning = ref(false);
 // 音效状态与动画
 const isSoundEnabled = ref(localStorage.getItem('app_sound_enabled') !== 'false');
 const isSoundSpinning = ref(false);
-soundManager.enabled = isSoundEnabled.value;
+soundManager.setEnabled(isSoundEnabled.value);
 
 // Logo 彩蛋状态
 const isLogoShaking = ref(false);
@@ -1228,7 +1231,7 @@ const onLogoClick = () => {
 const toggleSound = () => {
   isSoundSpinning.value = true;
   isSoundEnabled.value = !isSoundEnabled.value;
-  soundManager.enabled = isSoundEnabled.value;
+  soundManager.setEnabled(isSoundEnabled.value);
   localStorage.setItem('app_sound_enabled', isSoundEnabled.value ? 'true' : 'false');
   if (isSoundEnabled.value) {
     soundManager.playSuccess();
@@ -1981,6 +1984,12 @@ const LOG_LEVEL_PREFIX = /^(?:\s*\[(?:INFO|WARN|ERROR|SUCCESS|DEBUG)\])+/i;
 const normalizeLogMessage = (raw: string) =>
   raw.replace(LOG_LEVEL_PREFIX, '').replace(/\s+/g, ' ').trim();
 
+// 控制台最多保留的日志行数（滑动窗口，只留最近的）。
+// 日志面板是本软件唯一会「随时间单向增长」的内存：每条日志既是数组里的一个对象，
+// 又是 DOM 里的一行，而原先只 push、从不回收 —— 挂一整天能堆到几千条，
+// 每条还都带着 Vue 的响应式代理。超出上限就从头部丢，复制日志也只复制保留下来的部分。
+const MAX_LOG_ENTRIES = 500;
+
 // 追加日志
 const appendLog = (message: string, level: LogEntry['level'] = 'info', source: LogEntry['source'] = 'system') => {
   logs.value.push({
@@ -1990,6 +1999,10 @@ const appendLog = (message: string, level: LogEntry['level'] = 'info', source: L
     level,
     source,
   });
+
+  if (logs.value.length > MAX_LOG_ENTRIES) {
+    logs.value.splice(0, logs.value.length - MAX_LOG_ENTRIES);
+  }
 
   nextTick(() => {
     if (consoleBodyRef.value) {
