@@ -698,9 +698,9 @@
                   :key="g.key"
                   class="remote-config-group"
                 >
-                  <!-- 这里只放隧道名（ID 在 tooltip 里）：早先还渲染过 API 的 source 与 version，
-                       一个语义是「配置托管方」放进「云端配置」卡片自相矛盾，另一个 v39 长得像软件版本号，
-                       都是噪音，已去掉；要版本号时直接看接口返回。 -->
+                  <!-- 这里只放隧道名（ID 在 tooltip 里）：API 的 source 与 version 都是噪音
+                       （一个语义是「配置托管方」，放进「云端配置」卡片里自相矛盾；另一个长得像软件版本号），
+                       前端已不接收这两个字段。 -->
                   <div class="remote-config-group-title" :title="g.tooltip">
                     <span class="remote-config-group-name">{{ g.name }}</span>
                   </div>
@@ -1637,8 +1637,6 @@ type TunnelRouteSet = {
   cidr_error: string | null;
 };
 type TunnelCloudInfo = {
-  source: string;
-  version: number;
   rules: TunnelIngressRule[];
   hostnameRoutes: TunnelHostnameRoute[];
   cidrRoutes: TunnelCidrRoute[];
@@ -1666,14 +1664,12 @@ const refreshRemoteConfigs = async () => {
   const entries = await Promise.all(
     items.map(async (tn) => {
       const [cfgRes, routeRes] = await Promise.allSettled([
-        invoke<{ source: string; version: number; rules: TunnelIngressRule[] }>('fetch_tunnel_config', {
+        invoke<{ rules: TunnelIngressRule[] }>('fetch_tunnel_config', {
           tunnelId: tn.id,
         }),
         invoke<TunnelRouteSet>('fetch_tunnel_routes', { tunnelId: tn.id }),
       ]);
       const info: TunnelCloudInfo = {
-        source: cfgRes.status === 'fulfilled' ? cfgRes.value.source : '',
-        version: cfgRes.status === 'fulfilled' ? cfgRes.value.version : 0,
         rules: cfgRes.status === 'fulfilled' ? cfgRes.value.rules : [],
         ingressError: cfgRes.status === 'rejected' ? errorText(cfgRes.reason) : '',
         // 演示模式（浏览器里跑）可能返回 null，这里兜一层，别让整条刷新链炸掉
@@ -1728,8 +1724,6 @@ type RemoteConfigGroup = {
   key: string;
   name: string;
   tooltip: string;
-  source: string;
-  version: number;
   published: string;
   hostname: string;
   cidr: string;
@@ -1740,8 +1734,6 @@ type RemoteConfigGroup = {
 
 const toConfigGroup = (key: string, name: string, cfg?: TunnelCloudInfo): RemoteConfigGroup => {
   const info: TunnelCloudInfo = cfg ?? {
-    source: '',
-    version: 0,
     rules: [],
     hostnameRoutes: [],
     cidrRoutes: [],
@@ -1753,8 +1745,6 @@ const toConfigGroup = (key: string, name: string, cfg?: TunnelCloudInfo): Remote
     key,
     name,
     tooltip: `隧道 ID: ${key}`,
-    source: info.source,
-    version: info.version,
     published: formatIngressRules(cfg),
     hostname: formatRouteLines(
       info.hostnameRoutes.map(r => ({ value: r.hostname, comment: r.comment })),
@@ -2059,7 +2049,7 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
     // 顺手把云端隧道进程也对账一次，否则「运行中」状态会一直停在旧值上。
     if (scope !== 'local') {
       await refreshRemoteTunnels();
-      // 云端 ingress 配置改走 API 读取：隧道不跑起来也能看到，还能拿到 source 与版本号
+      // 云端 ingress 配置改走 API 读取：隧道不跑起来也能看到
       await refreshRemoteConfigs();
     }
 
