@@ -12,13 +12,15 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "CFTunnel",
         "width": 1180,
         "height": 740,
         "minWidth": 960,
         "minHeight": 620,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "create": false
       }
     ],
     "security": {
@@ -38,6 +40,7 @@
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
         "headerImage": "icons/128x128.png",
         "sidebarImage": "icons/128x128@2x.png",
         "installMode": "currentUser"

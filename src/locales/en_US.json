@@ -152,7 +152,7 @@
     "btn_install": "Install cloudflared",
     "btn_install_desc": "Auto-detect OS & CPU Arch and download to app directory",
     "btn_open_config_dir": "Open Local Config Directory",
-    "btn_open_config_dir_desc": "View ~/.cloudflared config directory in File Explorer",
+    "btn_open_config_dir_desc": "View the credential folder inside the app directory (data\\cloudflared)",
     "config_dir_warning": "Notice: Never expose or share cert.pem certificate or .json tunnel files with anyone to prevent credential theft!",
     "btn_login": "Cloudflared Auth Login",
     "btn_check_version": "Check Version",

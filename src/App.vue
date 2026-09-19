@@ -827,7 +827,7 @@
               <span class="tile-icon">📂</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_open_config_dir || '打开本地配置文件目录' }}</span>
-                <span class="tile-desc">{{ t.misc_tab.btn_open_config_dir_desc || '在文件资源管理器中查看 ~/.cloudflared 配置文件目录' }}</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_open_config_dir_desc || '在文件资源管理器中查看软件目录下的凭证目录（data\\cloudflared）' }}</span>
               </div>
             </button>
 
@@ -1975,7 +1975,7 @@ const openUrl = async (url: string) => {
   }
 };
 
-// 打开本地配置文件目录 (~/.cloudflared)
+// 打开软件目录下的凭证目录（<安装目录>\data\cloudflared）
 const handleOpenConfigDir = async () => {
   try {
     const dir = await invoke<string>('open_cloudflared_config_dir');

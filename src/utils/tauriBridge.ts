@@ -199,8 +199,8 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       return 'OK' as unknown as T;
 
     case 'open_cloudflared_config_dir':
-      emitMockLog('[INFO] 模拟打开本地配置目录: C:\\Users\\当前用户\\.cloudflared', 'info', 'misc');
-      return '~/.cloudflared' as unknown as T;
+      emitMockLog('[INFO] 模拟打开本地配置目录: <安装目录>\\data\\cloudflared', 'info', 'misc');
+      return '<安装目录>\\data\\cloudflared' as unknown as T;
 
     case 'minimize_window':
     case 'toggle_maximize_window':

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -91,28 +91,159 @@ pub struct QuickUrlPayload {
     pub url: String,
 }
 
-/// 优先获取本地应用目录下的 cloudflared 可执行文件，不存在时回退到系统环境变量 PATH 中的程序
+// ==================== 便携化：所有数据都放在软件目录下 ====================
+//
+// 布局（<软件目录> = 可执行文件所在目录，比如 D:\CFTunnel）：
+//
+//   <软件目录>\cftunnel.exe          主程序
+//   <软件目录>\uninstall.exe         卸载器
+//   <软件目录>\cloudflared.exe       自动下载的 cloudflared（不再跟着「启动时的工作目录」乱跑）
+//   <软件目录>\data\webview\         WebView2 用户数据目录：界面设置、隧道列表、token 全在这里的 localStorage
+//   <软件目录>\data\cloudflared\     cloudflared 凭证：cert.pem（授权登录）+ <隧道ID>.json（隧道密钥）
+//
+// 用可执行文件所在目录而不是「当前工作目录」，是为了无论从资源管理器、快捷方式还是
+// 其它程序启动，数据都落在同一个地方。
+
+/// 软件安装目录：可执行文件所在目录，取不到时退回当前工作目录。
+fn app_dir() -> PathBuf {
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            return exe_dir.to_path_buf();
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// 软件数据根目录：`<软件目录>\data`。
+fn app_data_dir() -> PathBuf {
+    app_dir().join("data")
+}
+
+/// WebView2 用户数据目录：`<软件目录>\data\webview`。
+///
+/// 界面里的语言 / 主题 / 端口 / 客户端隧道列表 / 云端托管 token 都保存在
+/// 这个目录下的 localStorage 里，删掉它等于恢复出厂设置。
+fn webview_data_dir() -> PathBuf {
+    app_data_dir().join("webview")
+}
+
+/// cloudflared 在本软件内的私有工作目录：`<软件目录>\data\cloudflared`。
+fn cloudflared_data_dir() -> PathBuf {
+    app_data_dir().join("cloudflared")
+}
+
+/// 旧版 cloudflared 默认目录 `~/.cloudflared`（迁移来源，同时保留作读取回退）。
+fn legacy_cloudflared_dir() -> PathBuf {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_default()
+        .join(".cloudflared")
+}
+
+/// 当前生效的 cert.pem：优先软件目录，没有则回退旧的 `~/.cloudflared`。
+fn origin_cert_path() -> PathBuf {
+    let local = cloudflared_data_dir().join("cert.pem");
+    if local.exists() {
+        local
+    } else {
+        legacy_cloudflared_dir().join("cert.pem")
+    }
+}
+
+/// 递归复制目录（std 没有现成的 copy_dir）。
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let target = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            // 单个文件复制失败（被占用等）不阻断整体迁移
+            let _ = fs::copy(entry.path(), &target);
+        }
+    }
+    Ok(())
+}
+
+/// 把旧目录 `~/.cloudflared` 里的 `cert.pem` 与 `*.json` 补齐到软件目录。
+///
+/// **只复制缺失的文件，不移动、不删除**：这样即使 cloudflared 内部仍从旧目录读凭证，
+/// 两个位置都有同一份文件，任何一条路径都能正常工作。
+fn sync_legacy_cloudflared_files() {
+    let legacy = legacy_cloudflared_dir();
+    if !legacy.exists() {
+        return;
+    }
+    let target = cloudflared_data_dir();
+    if fs::create_dir_all(&target).is_err() {
+        return;
+    }
+    let entries = match fs::read_dir(&legacy) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = match path.file_name() {
+            Some(n) => n.to_string_lossy().to_string(),
+            None => continue,
+        };
+        if name != "cert.pem" && !name.ends_with(".json") {
+            continue;
+        }
+        let dest = target.join(&name);
+        if !dest.exists() {
+            let _ = fs::copy(&path, &dest);
+        }
+    }
+}
+
+/// 首次启动时把旧版 WebView2 数据目录（`%LOCALAPPDATA%\<identifier>`）整体搬到软件目录，
+/// 否则用户会看到隧道列表和 token 全部「消失」。
+fn migrate_legacy_webview_profile() {
+    let target = webview_data_dir();
+    if target.exists() {
+        return;
+    }
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(local_app_data).join("com.zhishifenzi.cloudflared-gui"));
+    }
+    if let Ok(roaming_app_data) = std::env::var("APPDATA") {
+        // 更早期构建（可执行文件叫 cftunnel-app.exe 那版）留下的旧 profile
+        candidates.push(PathBuf::from(roaming_app_data).join("cftunnel-app.exe"));
+    }
+    for src in candidates {
+        if src.join("EBWebView").exists() && copy_dir_all(&src, &target).is_ok() {
+            return;
+        }
+    }
+}
+
+/// 优先获取软件安装目录下的 cloudflared 可执行文件，不存在时回退到系统环境变量 PATH 中的程序
 pub fn get_cloudflared_executable() -> PathBuf {
     #[cfg(target_os = "windows")]
     let exe_name = "cloudflared.exe";
     #[cfg(not(target_os = "windows"))]
     let exe_name = "cloudflared";
 
-    // 1. 检查当前工作目录 / 应用根目录
+    // 1. 软件安装目录（下载也固定装到这里，保证「程序在哪、依赖就在哪」）
+    let install_path = app_dir().join(exe_name);
+    if install_path.exists() {
+        return install_path;
+    }
+
+    // 2. 兼容：当前工作目录（开发时手动放的 cloudflared 仍可用）
     if let Ok(cwd) = std::env::current_dir() {
         let local_path = cwd.join(exe_name);
         if local_path.exists() {
             return local_path;
-        }
-    }
-
-    // 2. 检查主程序自身所在的目录
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            let local_path = exe_dir.join(exe_name);
-            if local_path.exists() {
-                return local_path;
-            }
         }
     }
 
@@ -125,6 +256,16 @@ fn create_base_command() -> Command {
     let mut cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
+
+    // 让 cloudflared 从软件目录读 cert.pem（配合 sync_legacy_cloudflared_files 已经把旧凭证拷过来）。
+    // 实测结论（cloudflared 2026.9.0）：TUNNEL_ORIGIN_CERT 指向不存在的路径时，需要证书的命令会
+    // 直接失败且**不会**回退到 ~/.cloudflared，所以只在证书确实存在时才设置这个变量；
+    // 没有证书时保持不设置，让 cloudflared 走它自己的默认搜索路径。
+    let cert = cloudflared_data_dir().join("cert.pem");
+    if cert.exists() {
+        cmd.env("TUNNEL_ORIGIN_CERT", &cert);
+    }
+
     cmd
 }
 
@@ -166,11 +307,9 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
     let raw_list: Vec<RawTunnel> = serde_json::from_str(&stdout_str)
         .map_err(|e| format!("解析隧道列表失败: {}", e))?;
 
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let cloudflared_dir = home.join(".cloudflared");
+    // 隧道密钥（<隧道ID>.json）优先看软件目录，读取回退旧的 ~/.cloudflared
+    let cred_dir = cloudflared_data_dir();
+    let legacy_cred_dir = legacy_cloudflared_dir();
 
     let mut list = Vec::new();
     for t in raw_list {
@@ -182,8 +321,13 @@ fn list_tunnels() -> Result<Vec<TunnelInfo>, String> {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let cred_path = cloudflared_dir.join(format!("{}.json", t.id));
-        let tunnel_type = if cred_path.exists() { "local".to_string() } else { "remote".to_string() };
+        let cred_path = cred_dir.join(format!("{}.json", t.id));
+        let legacy_cred_path = legacy_cred_dir.join(format!("{}.json", t.id));
+        let tunnel_type = if cred_path.exists() || legacy_cred_path.exists() {
+            "local".to_string()
+        } else {
+            "remote".to_string()
+        };
         list.push(TunnelInfo {
             id: t.id,
             name: t.name,
@@ -213,6 +357,9 @@ fn create_tunnel(name: String) -> Result<String, String> {
     let err_str = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
+        // 新建隧道会生成 <隧道ID>.json 密钥。cloudflared 可能把它写在 ~/.cloudflared 而不是
+        // cert.pem 所在目录，所以这里再补同步一次，保证软件目录里也有同一份。
+        sync_legacy_cloudflared_files();
         Ok(if out_str.trim().is_empty() { err_str } else { out_str })
     } else {
         Err(if !err_str.trim().is_empty() { err_str } else { out_str })
@@ -873,7 +1020,10 @@ fn download_and_install_cloudflared(
             .unwrap_or(0);
 
         let mut reader = response.into_reader();
-        let target_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        // 固定装到软件安装目录：下载出来的 cloudflared.exe 与主程序放在一起，
+        // 不跟着「启动时的工作目录」乱跑（旧实现用 current_dir，从别处启动会到处乱丢）。
+        let target_dir = app_dir();
+        let _ = fs::create_dir_all(&target_dir);
 
         #[cfg(target_os = "windows")]
         let target_exe_name = "cloudflared.exe";
@@ -1106,6 +1256,11 @@ fn watch_login_line(line: &str, watch: &Arc<Mutex<LoginWatch>>) -> Option<(Strin
 #[tauri::command]
 fn login_cloudflared(app: AppHandle) -> Result<String, String> {
     let mut cmd = create_base_command();
+    // 授权登录必须无条件把 cert.pem 写进软件目录：此刻可能还没有证书，
+    // create_base_command 只在证书已存在时才设置该变量，所以这里显式覆盖一次。
+    let _ = fs::create_dir_all(cloudflared_data_dir());
+    let cert = cloudflared_data_dir().join("cert.pem");
+    cmd.env("TUNNEL_ORIGIN_CERT", &cert);
     cmd.args(["tunnel", "login"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -1261,12 +1416,8 @@ fn exit_app(app: AppHandle, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn open_cloudflared_config_dir(app: AppHandle) -> Result<String, String> {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map(PathBuf::from)
-        .map_err(|_| "无法获取用户主目录".to_string())?;
-
-    let config_dir = home.join(".cloudflared");
+    // 打开软件目录下的凭证目录（cert.pem 与隧道密钥都放这里，不再散落在用户主目录）
+    let config_dir = cloudflared_data_dir();
 
     if !config_dir.exists() {
         let _ = fs::create_dir_all(&config_dir);
@@ -1722,18 +1873,15 @@ fn is_quick_running(state: State<'_, AppState>) -> Vec<String> {
     keys
 }
 
-/// 从本机 `~/.cloudflared/cert.pem` 读取 Cloudflare 凭据，返回 `(apiToken, zoneID)`。
+/// 读取 Cloudflare 凭据（软件目录下的 `cert.pem`，回退旧的 `~/.cloudflared/cert.pem`），
+/// 返回 `(apiToken, zoneID)`。
 ///
 /// cert.pem 由 `cloudflared tunnel login` 生成，PEM 正文是 base64 编码的 JSON，
 /// 内含 apiToken 与 zoneID。该 token 属于 Cloudflare 的 DNS:Edit 权限组
 /// （`cloudflared tunnel route dns` 正是用它创建记录），因此读写删除都可用。
 /// 注意：证书只授权单个区域，其它区域的记录既看不到也改不了。
 fn cloudflare_credentials() -> Result<(String, String), String> {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map(PathBuf::from)
-        .map_err(|_| "无法获取用户主目录".to_string())?;
-    let cert_path = home.join(".cloudflared").join("cert.pem");
+    let cert_path = origin_cert_path();
 
     let raw = fs::read_to_string(&cert_path)
         .map_err(|_| "未找到 cert.pem，请先完成「Cloudflared 授权登录」".to_string())?;
@@ -1865,7 +2013,7 @@ fn is_valid_hostname(hostname: &str) -> bool {
     })
 }
 
-/// 从本机 `~/.cloudflared/cert.pem` 提取 Cloudflare API Token，查询
+/// 从本机软件目录下的 `cert.pem`（回退 `~/.cloudflared/cert.pem`）提取 Cloudflare API Token，查询
 /// 该账号域名下所有指向隧道（*.cfargotunnel.com）的 CNAME 记录，
 /// 返回 `{ 隧道ID: [绑定域名...] }` 的映射，供前端隧道列表展示绑定域名。
 ///
@@ -2089,6 +2237,26 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            // 便携化：把旧位置（~/.cloudflared）的授权凭证补拷到软件目录。
+            // 只复制缺失文件、不移动不删除，失败也不阻断启动。
+            sync_legacy_cloudflared_files();
+            // 便携化：首次启动把旧的 WebView2 数据目录整体搬到软件目录，避免隧道列表/token 变空。
+            migrate_legacy_webview_profile();
+
+            // 便携化：主窗口改由代码创建，把 WebView2 数据目录指定为 <软件目录>\data\webview。
+            // 配套要求 tauri.conf.json 里该窗口设置 "create": false，否则会被自动创建、
+            // 这里再建会因 label 重复而失败。
+            if let Some(window_config) = app.config().app.windows.first().cloned() {
+                let mut window_builder =
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
+                // 软件目录不可写时（例如装到 Program Files 又没管理员权限）退回 WebView2 默认
+                // 数据目录，宁可数据不集中，也不能让窗口起不来。
+                if fs::create_dir_all(webview_data_dir()).is_ok() {
+                    window_builder = window_builder.data_directory(webview_data_dir());
+                }
+                window_builder.build()?;
+            }
+
             // 创建系统托盘右键菜单
             let show_i = MenuItem::with_id(app, "show", "🖥️ 显示主窗口", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "🚪 退出程序", true, None::<&str>)?;
