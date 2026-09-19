@@ -185,6 +185,44 @@ fn webview_data_dir() -> PathBuf {
     app_data_dir().join("webview")
 }
 
+/// 传给 WebView2 的额外浏览器参数（`--disable-features=...` 这一类）。
+///
+/// 只放「确定不影响功能」的项：
+/// - `--disable-crash-reporter`：不拉起 crashpad 上报进程（实测工作集约 15–20 MB）。
+///   桌面壳没有崩溃上报后端，那个进程纯属白占。
+/// - 关掉几项「只有浏览器才需要」的后台能力：在线 Office 界面、内置 PDF 界面、
+///   网址信誉检查（SmartScreen）、优化指南模型下载、资讯推荐。本软件只加载本地前端，
+///   既不浏览网页也不显示 PDF，这些一个都用不上。
+///
+/// **注意**：一旦调用 `additional_browser_args`，wry 默认传的那串
+/// `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` 就不会再传了
+/// （Tauri 文档 §Warning 明确写了）。所以下面数组里前三个**必须保留** ——
+/// 漏掉不是「少省一点」，而是把原本关着的浏览器功能重新打开。
+///
+/// 默认**不**把 GPU 进程并进主进程：`--in-process-gpu` 能再省掉一个进程
+/// （实测工作集约 100 MB），但渲染一旦出问题会连带整个界面一起挂，属于「会影响使用」，
+/// 所以留成开关 —— 设环境变量 `CFTUNNEL_INPROCESS_GPU=1` 才启用。
+fn webview_browser_args() -> String {
+    let features = [
+        // ↓ 前三个是 wry 的默认值，不能删
+        "msWebOOUI",
+        "msPdfOOUI",
+        "msSmartScreenProtection",
+        // ↓ 本软件用不上的浏览器后台能力
+        "OptimizationGuideModelDownloading",
+        "InterestFeedContentSuggestions",
+    ]
+    .join(",");
+
+    let mut args = format!("--disable-crash-reporter --disable-features={}", features);
+
+    if std::env::var("CFTUNNEL_INPROCESS_GPU").ok().as_deref() == Some("1") {
+        args.push_str(" --in-process-gpu");
+    }
+
+    args
+}
+
 /// cloudflared 的默认凭证目录 `~/.cloudflared`（Windows 即 `%USERPROFILE%\.cloudflared`）。
 ///
 /// 授权证书 `cert.pem` 与隧道密钥 `<隧道ID>.json` 一律放这里，跟 cloudflared 自己的默认行为一致。
@@ -2672,6 +2710,10 @@ pub fn run() {
                 if fs::create_dir_all(webview_data_dir()).is_ok() {
                     window_builder = window_builder.data_directory(webview_data_dir());
                 }
+                // WebView2 浏览器参数：省掉崩溃上报进程、关掉用不上的浏览器后台能力。
+                // 细节与坑见 webview_browser_args() 的注释。
+                window_builder =
+                    window_builder.additional_browser_args(&webview_browser_args());
                 window_builder.build()?;
             }
 
