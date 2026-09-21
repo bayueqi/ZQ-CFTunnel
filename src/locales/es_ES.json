@@ -99,6 +99,28 @@
     "remote_delete_confirm_msg": "¿Eliminar el túnel alojado en la nube \"{target}\"? Si está en ejecución, se detendrá primero.",
     "remote_token_invalid": "Token no reconocido (debe empezar por eyJ)",
     "remote_token_dup": "Este token ya existe",
+    "btn_lock": "Bloquear",
+    "btn_unlock": "Desbloquear",
+    "named_create_title": "Crear túnel con nombre",
+    "quick_create_title": "Crear túnel temporal",
+    "named_edit_title": "Editar túnel",
+    "named_create_domain_label": "Vincular hostname (opcional)",
+    "named_create_domain_placeholder": "p. ej. mc.example.com: se creará una ruta DNS automáticamente",
+    "lock_switch_label": "Activar bloqueo con contraseña (solo podrán conectarse los clientes con la contraseña de acceso)",
+    "lock_switch_hint": "Se necesita un hostname vinculado antes de activar el bloqueo; las conexiones sin contraseña serán rechazadas",
+    "lock_need_domain": "Vincula un hostname antes de activar el bloqueo",
+    "lock_host_label": "Hostname protegido",
+    "lock_success_title": "Bloqueo con contraseña activado",
+    "lock_success_msg": "Comparte el ID de acceso / contraseña de acceso con quien necesite conectarse; las conexiones sin estas credenciales son rechazadas por Cloudflare.",
+    "lock_account_label": "ID de acceso",
+    "lock_secret_label": "Contraseña de acceso",
+    "lock_done_btn": "Listo",
+    "unlock_confirm_title": "Quitar el bloqueo",
+    "unlock_confirm_msg": "Al quitarlo, {hostname} vuelve a ser público: cualquiera que conozca el hostname podrá conectarse. ¿Quitar?",
+    "unlocked_toast": "Bloqueo eliminado",
+    "copied_toast": "Copiado al portapapeles",
+    "edit_need_config": "Este túnel aún no tiene protocolo ni puerto. Haz clic en Editar para completarlo.",
+    "edit_restart_hint": "Este túnel está en ejecución; se reiniciará automáticamente con la nueva configuración al guardar.",
     "headers": {
       "id": "ID del Túnel",
       "name": "Nombre",
@@ -107,7 +129,8 @@
       "connections": "Conexiones",
       "hostname": "Dominio Vinculado",
       "status": "Estado",
-      "actions": "Acciones"
+      "actions": "Acciones",
+      "password": "Contraseña de acceso"
     },
     "errors": {
       "tunnel_invalid": "El nombre del túnel solo debe contener letras (a-z, A-Z)",
@@ -119,7 +142,8 @@
       "dns_unbind_confirm_title": "Confirmar Desvinculación",
       "dns_unbind_confirm_msg": "¿Desvincular el dominio \"{name}\" del túnel \"{tunnel}\"? El dominio dejará de funcionar de inmediato; el túnel no se verá afectado.",
       "quick_stop_confirm_title": "Confirmar detener enlace temporal",
-      "quick_stop_confirm_msg": "¿Detener este enlace temporal? El dominio temporal dejará de funcionar de inmediato y no se podrá recuperar el mismo dominio."
+      "quick_stop_confirm_msg": "¿Detener este enlace temporal? El dominio temporal dejará de funcionar de inmediato y no se podrá recuperar el mismo dominio.",
+      "token_pair_invalid": "El ID de acceso y la contraseña deben rellenarse juntos o dejarse vacíos juntos"
     },
     "quick_no_address_hint": "No es necesario: usa el servidor de prueba integrado de cloudflared",
     "quick_no_address_label": "Destino:"
@@ -135,13 +159,15 @@
     "status_disconnected": "Desconectado",
     "errors": {
       "domain_invalid": "Ingrese un dominio o nombre de host válido",
-      "port_invalid": "El puerto debe ser un número válido entre 1 y 65535"
+      "port_invalid": "El puerto debe ser un número válido entre 1 y 65535",
+      "token_pair_invalid": "El ID de acceso y la contraseña deben rellenarse juntos o dejarse vacíos juntos"
     },
     "title": "Conexiones de cliente",
     "add_btn": "Agregar",
     "add_title": "Agregar conexión de cliente",
     "col_domain": "Dominio",
     "col_port": "Puerto local",
+    "col_password": "Contraseña de acceso",
     "col_status": "Estado",
     "col_action": "Acción",
     "empty": "No se encontraron túneles",
@@ -152,6 +178,10 @@
     "btn_delete": "Eliminar",
     "btn_save": "Guardar",
     "edit_title": "Editar túnel de cliente",
+    "token_id_label": "ID de acceso (opcional)",
+    "token_id_placeholder": "Necesario si el túnel de destino está bloqueado",
+    "token_secret_label": "Contraseña de acceso (opcional)",
+    "token_secret_placeholder": "Rellenar junto con el ID de acceso",
     "delete_confirm_title": "Eliminar túnel de cliente",
     "delete_confirm_msg": "¿Eliminar el túnel de cliente \"{target}\"? Se quitará de la lista; si está en ejecución, se desconectará primero."
   },
@@ -164,7 +194,11 @@
     "btn_login": "Iniciar Sesión Cloudflared",
     "btn_check_version": "Verificar Versión",
     "btn_update": "Actualizar Cloudflared",
-    "btn_download": "Página de Descarga"
+    "btn_download": "Página de Descarga",
+    "access_token_label": "Access Token (credencial del bloqueo)",
+    "access_token_placeholder": "Vacío para usar la credencial de inicio de sesión",
+    "access_token_hint": "Se usa para crear o quitar bloqueos de túnel. Requiere permiso de edición para Access: Apps and Policies y Access: Service Tokens; consulta el README.",
+    "access_token_saved": "Access Token guardado"
   },
   "console": {
     "title": "Registros de la Consola en Vivo",

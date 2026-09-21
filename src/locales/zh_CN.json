@@ -99,6 +99,28 @@
     "remote_delete_confirm_msg": "确定要删除云端托管隧道「{target}」吗？运行中的隧道会先被断开。",
     "remote_token_invalid": "无法识别 Token（应以 eyJ 开头）",
     "remote_token_dup": "该 Token 已存在，请勿重复添加",
+    "btn_lock": "上锁",
+    "btn_unlock": "解锁",
+    "named_create_title": "创建固定域名隧道",
+    "quick_create_title": "创建临时链接",
+    "named_edit_title": "修改隧道",
+    "named_create_domain_label": "绑定域名（可选）",
+    "named_create_domain_placeholder": "例如 mc.example.com，填写后自动创建 DNS 路由",
+    "lock_switch_label": "开启密码锁（仅持访问密码的客户端能连接）",
+    "lock_switch_hint": "需要先填写绑定域名，密码锁才有保护对象；开启后未携带密码的连接一律被拒绝",
+    "lock_need_domain": "请先绑定域名，再开启密码锁",
+    "lock_host_label": "锁定的域名",
+    "lock_success_title": "密码锁已开启",
+    "lock_success_msg": "把下面这对访问账号 / 访问密码发给需要连接的人，客户端连接时填写即可；没有这对凭据的连接会被 Cloudflare 直接拒绝。",
+    "lock_account_label": "访问账号",
+    "lock_secret_label": "访问密码",
+    "lock_done_btn": "完成",
+    "unlock_confirm_title": "解除密码锁",
+    "unlock_confirm_msg": "解除后，域名 {hostname} 将恢复公开访问，任何知道域名的人都能直接连接。确定解除？",
+    "unlocked_toast": "密码锁已解除",
+    "copied_toast": "已复制到剪贴板",
+    "edit_need_config": "该隧道还没有配置协议和端口，请先点击「修改」补全",
+    "edit_restart_hint": "该隧道正在运行，保存后将自动用新配置重启。",
     "headers": {
       "id": "隧道 ID",
       "name": "隧道名称",
@@ -107,7 +129,8 @@
       "connections": "连接状态",
       "hostname": "绑定域名",
       "status": "状态",
-      "actions": "操作"
+      "actions": "操作",
+      "password": "访问密码"
     },
     "errors": {
       "tunnel_invalid": "隧道名不能为空且只能包含纯字母 (a-z, A-Z)，不可含数字、空格或特殊字符",
@@ -119,7 +142,8 @@
       "dns_unbind_confirm_title": "确认解除绑定",
       "dns_unbind_confirm_msg": "确定要解除域名 \"{name}\" 与隧道 \"{tunnel}\" 的绑定吗？解除后该域名将立即无法访问，隧道本身不受影响。",
       "quick_stop_confirm_title": "确认停止临时链接",
-      "quick_stop_confirm_msg": "确定要停止该临时链接吗？停止后临时域名会立即失效，且无法恢复为同一个域名。"
+      "quick_stop_confirm_msg": "确定要停止该临时链接吗？停止后临时域名会立即失效，且无法恢复为同一个域名。",
+      "token_pair_invalid": "访问账号与访问密码必须同时填写或同时留空"
     },
     "quick_no_address_hint": "无需填写，使用 cloudflared 内置测试服务器",
     "quick_no_address_label": "目标地址:"
@@ -135,13 +159,15 @@
     "status_disconnected": "未连接",
     "errors": {
       "domain_invalid": "请输入有效的隧道域名或主机名格式 (不可包含空格或非法符号)",
-      "port_invalid": "本地监听端口必须为 1-65535 的纯数字"
+      "port_invalid": "本地监听端口必须为 1-65535 的纯数字",
+      "token_pair_invalid": "访问账号与访问密码必须同时填写或同时留空"
     },
     "title": "客户端连接",
     "add_btn": "添加",
     "add_title": "添加客户端连接",
     "col_domain": "隧道域名",
     "col_port": "本地端口",
+    "col_password": "访问密码",
     "col_status": "状态",
     "col_action": "操作",
     "empty": "未发现隧道",
@@ -152,6 +178,10 @@
     "btn_delete": "删除",
     "btn_save": "保存",
     "edit_title": "编辑客户端隧道",
+    "token_id_label": "访问账号（可选）",
+    "token_id_placeholder": "目标隧道开启密码锁时填写",
+    "token_secret_label": "访问密码（可选）",
+    "token_secret_placeholder": "与访问账号成对填写",
     "delete_confirm_title": "确认删除客户端隧道",
     "delete_confirm_msg": "确定要删除客户端隧道 \"{target}\" 吗？删除后该条目会从列表中移除，运行中的隧道会先被断开。"
   },
@@ -164,7 +194,11 @@
     "btn_login": "Cloudflared 授权登录",
     "btn_check_version": "检查 cloudflared 版本",
     "btn_update": "在线更新 cloudflared",
-    "btn_download": "前往官方下载页面"
+    "btn_download": "前往官方下载页面",
+    "access_token_label": "Access Token（密码锁凭证）",
+    "access_token_placeholder": "留空使用「授权登录」的凭证",
+    "access_token_hint": "用于创建 / 解除隧道密码锁。需要具备 Access: Apps and Policies 与 Access: Service Tokens 两个「编辑」权限；获取步骤见项目 README。",
+    "access_token_saved": "Access Token 已保存"
   },
   "console": {
     "title": "控制台实时日志输出",

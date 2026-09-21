@@ -99,6 +99,28 @@
     "remote_delete_confirm_msg": "Delete cloud-hosted tunnel \"{target}\"? A running tunnel will be stopped first.",
     "remote_token_invalid": "Unrecognized token (must start with eyJ)",
     "remote_token_dup": "This token already exists",
+    "btn_lock": "Lock",
+    "btn_unlock": "Unlock",
+    "named_create_title": "Create Named Tunnel",
+    "quick_create_title": "Create Quick Tunnel",
+    "named_edit_title": "Edit Tunnel",
+    "named_create_domain_label": "Bind hostname (optional)",
+    "named_create_domain_placeholder": "e.g. mc.example.com — a DNS route will be created automatically",
+    "lock_switch_label": "Enable password lock (only clients with the access password can connect)",
+    "lock_switch_hint": "A bound hostname is required before enabling the lock; connections without the password will be rejected",
+    "lock_need_domain": "Bind a hostname before enabling the lock",
+    "lock_host_label": "Protected hostname",
+    "lock_success_title": "Password lock enabled",
+    "lock_success_msg": "Share the access ID / access password below with whoever needs to connect; connections without this pair of credentials are rejected by Cloudflare.",
+    "lock_account_label": "Access ID",
+    "lock_secret_label": "Access password",
+    "lock_done_btn": "Done",
+    "unlock_confirm_title": "Remove password lock",
+    "unlock_confirm_msg": "Once removed, {hostname} becomes public again — anyone who knows the hostname can connect. Remove it?",
+    "unlocked_toast": "Password lock removed",
+    "copied_toast": "Copied to clipboard",
+    "edit_need_config": "This tunnel has no protocol/port yet. Click Edit to complete it first.",
+    "edit_restart_hint": "This tunnel is running; it will restart automatically with the new settings after saving.",
     "headers": {
       "id": "Tunnel ID",
       "name": "Name",
@@ -107,7 +129,8 @@
       "connections": "Connections",
       "hostname": "Hostname",
       "status": "Status",
-      "actions": "Actions"
+      "actions": "Actions",
+      "password": "Access password"
     },
     "errors": {
       "tunnel_invalid": "Tunnel name must contain only letters (a-z, A-Z)",
@@ -119,7 +142,8 @@
       "dns_unbind_confirm_title": "Confirm Unbind",
       "dns_unbind_confirm_msg": "Unbind hostname \"{name}\" from tunnel \"{tunnel}\"? The hostname will stop working immediately; the tunnel itself is not affected.",
       "quick_stop_confirm_title": "Confirm Stop Quick Link",
-      "quick_stop_confirm_msg": "Stop this quick link? Its temporary domain stops working immediately and the same domain cannot be recovered."
+      "quick_stop_confirm_msg": "Stop this quick link? Its temporary domain stops working immediately and the same domain cannot be recovered.",
+      "token_pair_invalid": "Access ID and access password must be filled in together or left empty together"
     },
     "quick_no_address_hint": "Not required - uses the cloudflared built-in test server",
     "quick_no_address_label": "Target:"
@@ -135,13 +159,15 @@
     "status_disconnected": "Disconnected",
     "errors": {
       "domain_invalid": "Please enter a valid domain/hostname",
-      "port_invalid": "Local port must be a valid number between 1 and 65535"
+      "port_invalid": "Local port must be a valid number between 1 and 65535",
+      "token_pair_invalid": "Access ID and access password must be filled in together or left empty together"
     },
     "title": "Client Connections",
     "add_btn": "Add",
     "add_title": "Add Client Connection",
     "col_domain": "Hostname",
     "col_port": "Local Port",
+    "col_password": "Access password",
     "col_status": "Status",
     "col_action": "Action",
     "empty": "No tunnels found",
@@ -152,6 +178,10 @@
     "btn_delete": "Delete",
     "btn_save": "Save",
     "edit_title": "Edit client tunnel",
+    "token_id_label": "Access ID (optional)",
+    "token_id_placeholder": "Required if the target tunnel is locked",
+    "token_secret_label": "Access password (optional)",
+    "token_secret_placeholder": "Fill in together with the Access ID",
     "delete_confirm_title": "Delete client tunnel",
     "delete_confirm_msg": "Delete client tunnel \"{target}\"? The entry will be removed from the list; a running tunnel will be disconnected first."
   },
@@ -164,7 +194,11 @@
     "btn_login": "Cloudflared Auth Login",
     "btn_check_version": "Check Version",
     "btn_update": "Update Cloudflared",
-    "btn_download": "Download Cloudflared"
+    "btn_download": "Download Cloudflared",
+    "access_token_label": "Access Token (lock credential)",
+    "access_token_placeholder": "Leave empty to use the login credential",
+    "access_token_hint": "Used to create/remove tunnel locks. Requires Edit permission for both Access: Apps and Policies and Access: Service Tokens; see the README for details.",
+    "access_token_saved": "Access Token saved"
   },
   "console": {
     "title": "Console Live Logs",

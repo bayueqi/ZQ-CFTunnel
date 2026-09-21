@@ -133,6 +133,27 @@ pub struct DnsBinding {
     pub name: String,
 }
 
+/// 一条隧道的「密码锁」信息（Cloudflare Access + Service Token）。
+///
+/// 上锁 = 在云端建一个 Access 应用（绑在某条已绑定域名上）+ 一个 Service Token，
+/// 策略只放行持有该 Token 的客户端。`client_id` / `client_secret` 就是连接时用的
+/// 「访问账号 / 访问密码」，没有这对凭据的连接一律 403。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TunnelLockInfo {
+    /// 锁保护的域名（Access 应用绑定的 public hostname）
+    pub hostname: String,
+    /// Access 应用 UID（解锁时用它删应用）
+    pub app_uid: String,
+    /// Access 应用名称（显示用）
+    pub app_name: String,
+    /// Service Token UID（换密码 / 解锁时用它删 Token）
+    pub token_uid: String,
+    /// 访问账号（Service Token 的 client_id）
+    pub client_id: String,
+    /// 访问密码（Service Token 的 client_secret）
+    pub client_secret: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LogPayload {
     pub message: String,
@@ -887,6 +908,8 @@ fn start_client_tunnel(
     state: State<'_, AppState>,
     domain: String,
     port: String,
+    service_token_id: Option<String>,
+    service_token_secret: Option<String>,
 ) -> Result<String, String> {
     let domain_trimmed = domain.trim();
     let port_trimmed = port.trim();
@@ -896,6 +919,14 @@ fn start_client_tunnel(
     }
     if port_trimmed.is_empty() || port_trimmed.parse::<u16>().is_err() {
         return Err("本地监听端口必须为 1-65535 的纯数字".to_string());
+    }
+
+    // 访问账号 / 访问密码（Service Token）：受密码锁保护的隧道必须成对携带，
+    // 只填其一会到云端才报错，白白等一次握手，这里提前拦下。
+    let token_id = service_token_id.as_deref().map(str::trim).unwrap_or("");
+    let token_secret = service_token_secret.as_deref().map(str::trim).unwrap_or("");
+    if token_id.is_empty() != token_secret.is_empty() {
+        return Err("访问账号与访问密码必须同时填写或同时留空".to_string());
     }
 
     let key = client_tunnel_key(domain_trimmed, port_trimmed);
@@ -920,8 +951,13 @@ fn start_client_tunnel(
 
     let url_arg = format!("tcp://127.0.0.1:{}", port_trimmed);
     let mut cmd = create_base_command();
-    cmd.args(["access", "tcp", "--hostname", domain_trimmed, "--url", &url_arg])
-        .stdout(Stdio::piped())
+    cmd.args(["access", "tcp", "--hostname", domain_trimmed, "--url", &url_arg]);
+    // 密码锁凭据：cloudflared 会带着这对 Token 去 Access 完成校验，
+    // 对不上直接被拒（403），本地端口根本不会开。
+    if !token_id.is_empty() {
+        cmd.args(["--service-token-id", token_id, "--service-token-secret", token_secret]);
+    }
+    cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
     let mut child = cmd.spawn().map_err(|e| {
@@ -2684,6 +2720,274 @@ fn base64_decode(input: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
+// ============================ 隧道密码锁（Cloudflare Access） ============================
+//
+// 「上锁」= 在云端自动创建三个资源，把某条隧道的已绑定域名保护起来：
+//   1. Service Token（访问账号 + 访问密码，机器对机器的凭据，不需要浏览器登录）
+//   2. Access 策略（decision = non_identity，只放行持有该 Token 的连接）
+//   3. Access 应用（type = self_hosted，绑定该域名，挂上第 2 步的策略）
+//
+// 之后的连接分两种结局：
+//   * 携带正确 Token（cloudflared access tcp --service-token-id/--service-token-secret）→ 放行
+//   * 其余任何连接（浏览器裸开、游戏客户端裸连）→ 一律 403 拒绝
+//
+// 请求体结构与端点均为 2026-09 实测通过版本：
+//   POST /accounts/{aid}/access/service_tokens  → result { id, client_id, client_secret }
+//   POST /accounts/{aid}/access/policies        → result { id }（decision 必须是 non_identity，
+//                                                 官方文档里没有明说，service_auth 会被 400 拒掉）
+//   POST /accounts/{aid}/access/apps            → result { uid }
+//   PUT  /accounts/{aid}/access/apps/{uid}      → 把策略挂到应用上（policies: [{id}]）
+
+/// 发起一次 Access API 请求并返回解析出的 `result` 对象。
+///
+/// 与 `cf_api_request` 的区别：这里额外校验 Cloudflare 的 `success` 标志，
+/// 失败时把 `errors` 翻译成可读信息（`cf_api_request` 只在非 2xx 时报错，
+/// 而 Access 接口偶有 200 + success=false 的回复，不查会拿到空 result 干瞪眼）。
+fn cf_access_json(
+    method: &str,
+    url: &str,
+    token: &str,
+    json_body: Option<&str>,
+    what: &str,
+) -> Result<serde_json::Value, String> {
+    let body = cf_api_request(method, url, token, json_body)?;
+    let json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("解析{}响应失败: {}", what, e))?;
+    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(format!("{}失败: {}", what, extract_cf_error(&body)));
+    }
+    json.get("result")
+        .cloned()
+        .ok_or_else(|| format!("{}失败: 响应中没有 result", what))
+}
+
+/// 取 Access 操作用的 `(apiToken, accountID)`。
+///
+/// 配置页填了自定义 Access Token 就用它（此时 accountID 仍从 cert.pem 取；
+/// 连 cert.pem 都没有的机器，退而用该 Token 调 `/accounts` 取第一个账号），
+/// 没填则直接用「授权登录」凭证 —— 与 DNS / 配置读取共用同一份。
+fn access_api_credentials(custom_token: Option<&str>) -> Result<(String, String), String> {
+    let custom = custom_token.map(str::trim).filter(|s| !s.is_empty());
+    match custom {
+        None => cloudflare_account_credentials(),
+        Some(token) => match read_origin_cert_json() {
+            Ok(json) => {
+                let account_id = cert_json_str(&json, &["accountID"], "accountID")?;
+                Ok((token.to_string(), account_id))
+            }
+            Err(_) => {
+                let body = cf_api_request(
+                    "GET",
+                    "https://api.cloudflare.com/client/v4/accounts",
+                    token,
+                    None,
+                )?;
+                let json: serde_json::Value = serde_json::from_str(&body)
+                    .map_err(|e| format!("解析账号列表响应失败: {}", e))?;
+                let account_id = json
+                    .get("result")
+                    .and_then(|r| r.as_array())
+                    .and_then(|a| a.first())
+                    .and_then(|x| x.get("id"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        "无法确定账号 ID：该 Access Token 没有关联的账号权限".to_string()
+                    })?
+                    .to_string();
+                Ok((token.to_string(), account_id))
+            }
+        },
+    }
+}
+
+/// 用一个短的随机后缀给云端资源命名，避免同域名重复上锁时撞名。
+fn lock_resource_suffix() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64 ^ d.as_secs())
+        .unwrap_or(0);
+    format!("{:06x}", nanos & 0xffffff)
+}
+
+/// 创建密码锁的完整流程（同步阻塞，必须跑在阻塞线程池里）。
+///
+/// 中途任何一步失败都会把已创建的云端资源尽力删掉，不留孤儿：
+/// Token 建好但策略失败 → 删 Token；应用建好但挂策略失败 → 删应用 + 删 Token。
+fn lock_tunnel_impl(hostname: &str, token: &str, account_id: &str) -> Result<TunnelLockInfo, String> {
+    let host = hostname.trim().to_lowercase();
+    if !is_valid_hostname(&host) {
+        return Err("域名格式不正确，请先在「绑定域名」区为隧道绑定一个合法域名".to_string());
+    }
+
+    let base = format!("https://api.cloudflare.com/client/v4/accounts/{}/access", account_id);
+    let suffix = lock_resource_suffix();
+    // 域名直接进资源名没问题，但太长会被云端截断，只取主体部分
+    let short_host: String = host.split('.').take(2).collect::<Vec<_>>().join(".");
+    let app_name = format!("CFTunnel-{}-{}", short_host, suffix);
+
+    // 1. Service Token：访问账号 + 访问密码
+    let tok = cf_access_json(
+        "POST",
+        &format!("{}/service_tokens", base),
+        token,
+        Some(&format!("{{\"name\":\"{}\"}}", app_name)),
+        "创建访问凭据(Service Token)",
+    )?;
+    let token_uid = tok.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let client_id = tok
+        .get("client_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let client_secret = tok
+        .get("client_secret")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if token_uid.is_empty() || client_id.is_empty() || client_secret.is_empty() {
+        return Err("创建访问凭据失败: 云端返回的数据不完整".to_string());
+    }
+
+    // 2. 策略：只放行持有该 Token 的连接（non_identity = Service Auth）
+    let policy = match cf_access_json(
+        "POST",
+        &format!("{}/policies", base),
+        token,
+        Some(&format!(
+            "{{\"name\":\"{}-policy\",\"decision\":\"non_identity\",\"include\":[{{\"service_token\":{{\"token_id\":\"{}\"}}}}]}}",
+            app_name, token_uid
+        )),
+        "创建访问策略",
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
+            return Err(e);
+        }
+    };
+    let policy_id = policy.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if policy_id.is_empty() {
+        let _ = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
+        return Err("创建访问策略失败: 云端未返回策略 ID".to_string());
+    }
+
+    // 3. Access 应用：绑定域名
+    let app_body = format!(
+        "{{\"name\":\"{}\",\"type\":\"self_hosted\",\"domain\":\"{}\",\"session_duration\":\"24h\"}}",
+        app_name, host
+    );
+    let app = match cf_access_json("POST", &format!("{}/apps", base), token, Some(&app_body), "创建访问应用") {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = cf_api_request("DELETE", &format!("{}/policies/{}", base, policy_id), token, None);
+            let _ = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
+            return Err(e);
+        }
+    };
+    let app_uid = app.get("uid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if app_uid.is_empty() {
+        let _ = cf_api_request("DELETE", &format!("{}/policies/{}", base, policy_id), token, None);
+        let _ = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
+        return Err("创建访问应用失败: 云端未返回应用 ID".to_string());
+    }
+
+    // 4. 把策略挂到应用上（PUT 整个应用，策略以 id 引用）
+    let attach_body = format!(
+        "{{\"name\":\"{}\",\"type\":\"self_hosted\",\"domain\":\"{}\",\"session_duration\":\"24h\",\"policies\":[{{\"id\":\"{}\"}}]}}",
+        app_name, host, policy_id
+    );
+    if let Err(e) = cf_access_json("PUT", &format!("{}/apps/{}", base, app_uid), token, Some(&attach_body), "挂载访问策略") {
+        let _ = cf_api_request("DELETE", &format!("{}/apps/{}", base, app_uid), token, None);
+        let _ = cf_api_request("DELETE", &format!("{}/policies/{}", base, policy_id), token, None);
+        let _ = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
+        return Err(e);
+    }
+
+    Ok(TunnelLockInfo {
+        hostname: host,
+        app_uid,
+        app_name,
+        token_uid,
+        client_id,
+        client_secret,
+    })
+}
+
+/// 删除一条密码锁（应用 + Token）。两个删除互相独立、尽力而为，
+/// 任一失败都如实带回错误信息，前端据此提示用户去面板手动清理。
+fn unlock_tunnel_impl(
+    app_uid: &str,
+    token_uid: &str,
+    token: &str,
+    account_id: &str,
+) -> Result<String, String> {
+    // app_uid / token_uid 都是标准 UUID（会被拼进请求 URL，必须严格校验防路径注入）
+    if !is_valid_tunnel_id(app_uid) || !is_valid_tunnel_id(token_uid) {
+        return Err("锁资源 ID 格式不正确".to_string());
+    }
+    let base = format!("https://api.cloudflare.com/client/v4/accounts/{}/access", account_id);
+
+    let app_res = cf_api_request("DELETE", &format!("{}/apps/{}", base, app_uid), token, None);
+    let token_res = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
+
+    let mut failed: Vec<String> = Vec::new();
+    if let Err(e) = &app_res {
+        failed.push(format!("删除访问应用失败: {}", e));
+    }
+    if let Err(e) = &token_res {
+        failed.push(format!("删除访问凭据失败: {}", e));
+    }
+    if failed.is_empty() {
+        Ok("密码锁已解除，该域名恢复公开访问".to_string())
+    } else {
+        Err(failed.join("；"))
+    }
+}
+
+/// 给一条隧道上密码锁：返回访问账号 / 访问密码（前端展示给用户复制保存）。
+#[tauri::command]
+async fn tunnel_lock(hostname: String, access_token: Option<String>) -> Result<TunnelLockInfo, String> {
+    run_blocking("创建隧道密码锁", move || {
+        let host = hostname.trim().to_string();
+        let (token, account_id) = access_api_credentials(access_token.as_deref())?;
+        lock_tunnel_impl(&host, &token, &account_id)
+    })
+    .await
+}
+
+/// 解除密码锁：删掉 Access 应用与 Service Token，域名恢复公开。
+#[tauri::command]
+async fn tunnel_unlock(
+    app_uid: String,
+    token_uid: String,
+    access_token: Option<String>,
+) -> Result<String, String> {
+    run_blocking("解除隧道密码锁", move || {
+        let (token, account_id) = access_api_credentials(access_token.as_deref())?;
+        unlock_tunnel_impl(app_uid.trim(), token_uid.trim(), &token, &account_id)
+    })
+    .await
+}
+
+/// 换密码：删掉旧的锁（应用 + Token），重新走一遍上锁流程。
+/// 旧的访问密码随即作废，拿到过旧密码的连接全部失效。
+#[tauri::command]
+async fn tunnel_rotate_password(
+    hostname: String,
+    app_uid: String,
+    token_uid: String,
+    access_token: Option<String>,
+) -> Result<TunnelLockInfo, String> {
+    run_blocking("更换隧道访问密码", move || {
+        let host = hostname.trim().to_string();
+        let (token, account_id) = access_api_credentials(access_token.as_deref())?;
+        // 旧锁删不干净不阻断换新：最坏情况是云端多一个孤儿应用，锁本身仍然有效
+        let _ = unlock_tunnel_impl(app_uid.trim(), token_uid.trim(), &token, &account_id);
+        lock_tunnel_impl(&host, &token, &account_id)
+    })
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -2817,7 +3121,10 @@ pub fn run() {
             is_quick_running,
             get_tunnel_hostnames,
             rename_dns_route,
-            delete_dns_route
+            delete_dns_route,
+            tunnel_lock,
+            tunnel_unlock,
+            tunnel_rotate_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -99,6 +99,28 @@
     "remote_delete_confirm_msg": "クラウドホスト型トンネル「{target}」を削除しますか？実行中の場合は先に停止します。",
     "remote_token_invalid": "Token を認識できません（eyJ で始まる必要があります）",
     "remote_token_dup": "この Token は既に追加されています",
+    "btn_lock": "ロック",
+    "btn_unlock": "ロック解除",
+    "named_create_title": "名前付きトンネルを作成",
+    "quick_create_title": "クイックトンネルを作成",
+    "named_edit_title": "トンネルを編集",
+    "named_create_domain_label": "ホスト名をバインド（任意）",
+    "named_create_domain_placeholder": "例: mc.example.com — DNS ルートを自動作成します",
+    "lock_switch_label": "パスワードロックを有効化（アクセスパスワードを持つクライアントのみ接続可）",
+    "lock_switch_hint": "ロック対象となるバインド済みホスト名が必要です。有効化するとパスワードのない接続はすべて拒否されます",
+    "lock_need_domain": "先にホスト名をバインドしてからロックを有効にしてください",
+    "lock_host_label": "保護対象のホスト名",
+    "lock_success_title": "パスワードロックが有効になりました",
+    "lock_success_msg": "下のアクセス ID / アクセスパスワードを接続する人に共有してください。この資格情報のない接続は Cloudflare によって拒否されます。",
+    "lock_account_label": "アクセス ID",
+    "lock_secret_label": "アクセスパスワード",
+    "lock_done_btn": "完了",
+    "unlock_confirm_title": "パスワードロックを解除",
+    "unlock_confirm_msg": "解除すると {hostname} は再び公開になり、ホスト名を知っている誰もが接続できます。解除しますか？",
+    "unlocked_toast": "パスワードロックを解除しました",
+    "copied_toast": "クリップボードにコピーしました",
+    "edit_need_config": "このトンネルにはプロトコルとポートの設定がありません。先に「編集」で入力してください",
+    "edit_restart_hint": "このトンネルは実行中です。保存後、新しい設定で自動的に再起動されます。",
     "headers": {
       "id": "トンネル ID",
       "name": "名前",
@@ -107,7 +129,8 @@
       "connections": "接続状態",
       "hostname": "バインドドメイン",
       "status": "状態",
-      "actions": "操作"
+      "actions": "操作",
+      "password": "アクセスパスワード"
     },
     "errors": {
       "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",
@@ -119,7 +142,8 @@
       "dns_unbind_confirm_title": "バインド解除の確認",
       "dns_unbind_confirm_msg": "ドメイン \"{name}\" とトンネル \"{tunnel}\" のバインドを解除しますか？解除後このドメインは即座にアクセスできなくなります。トンネル自体には影響しません。",
       "quick_stop_confirm_title": "クイックリンクの停止確認",
-      "quick_stop_confirm_msg": "このクイックリンクを停止しますか？停止すると一時ドメインは即座に無効になり、同じドメインには戻せません。"
+      "quick_stop_confirm_msg": "このクイックリンクを停止しますか？停止すると一時ドメインは即座に無効になり、同じドメインには戻せません。",
+      "token_pair_invalid": "アクセス ID とアクセスパスワードは両方入力するか、両方空にしてください"
     },
     "quick_no_address_hint": "入力不要。cloudflared 内蔵のテストサーバーを使用します",
     "quick_no_address_label": "ターゲット:"
@@ -135,13 +159,15 @@
     "status_disconnected": "未接続",
     "errors": {
       "domain_invalid": "有効なドメイン名を入力してください",
-      "port_invalid": "ポート番号は 1〜65535 の数字である必要があります"
+      "port_invalid": "ポート番号は 1〜65535 の数字である必要があります",
+      "token_pair_invalid": "アクセス ID とアクセスパスワードは両方入力するか、両方空にしてください"
     },
     "title": "クライアント接続",
     "add_btn": "追加",
     "add_title": "クライアント接続を追加",
     "col_domain": "ホスト名",
     "col_port": "ローカルポート",
+    "col_password": "アクセスパスワード",
     "col_status": "状態",
     "col_action": "操作",
     "empty": "トンネルが見つかりません",
@@ -152,6 +178,10 @@
     "btn_delete": "削除",
     "btn_save": "保存",
     "edit_title": "クライアントトンネルを編集",
+    "token_id_label": "アクセス ID（任意）",
+    "token_id_placeholder": "接続先トンネルがロックされている場合に入力",
+    "token_secret_label": "アクセスパスワード（任意）",
+    "token_secret_placeholder": "アクセス ID とペアで入力",
     "delete_confirm_title": "クライアントトンネルの削除",
     "delete_confirm_msg": "クライアントトンネル \"{target}\" を削除しますか？一覧から削除され、実行中の場合は先に切断されます。"
   },
@@ -164,7 +194,11 @@
     "btn_login": "Cloudflared ログイン認証",
     "btn_check_version": "バージョン確認",
     "btn_update": "Cloudflared アップデート",
-    "btn_download": "ダウンロードページを開く"
+    "btn_download": "ダウンロードページを開く",
+    "access_token_label": "Access Token（ロック用資格情報）",
+    "access_token_placeholder": "空欄でログイン資格情報を使用",
+    "access_token_hint": "トンネルロックの作成/解除に使用します。Access: Apps and Policies と Access: Service Tokens の両方の編集権限が必要です。詳細は README を参照。",
+    "access_token_saved": "Access Token を保存しました"
   },
   "console": {
     "title": "コンソールログ出力",

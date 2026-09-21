@@ -143,6 +143,29 @@ export interface LangPack {
     remote_delete_confirm_msg: string;
     remote_token_invalid: string;
     remote_token_dup: string;
+    // ===== 隧道密码锁（Cloudflare Access） =====
+    btn_lock: string;
+    btn_unlock: string;
+    named_create_title: string;
+    quick_create_title: string;
+    named_edit_title: string;
+    named_create_domain_label: string;
+    named_create_domain_placeholder: string;
+    lock_switch_label: string;
+    lock_switch_hint: string;
+    lock_need_domain: string;
+    lock_host_label: string;
+    lock_success_title: string;
+    lock_success_msg: string;
+    lock_account_label: string;
+    lock_secret_label: string;
+    lock_done_btn: string;
+    unlock_confirm_title: string;
+    unlock_confirm_msg: string;
+    unlocked_toast: string;
+    copied_toast: string;
+    edit_need_config: string;
+    edit_restart_hint: string;
     headers: {
       id: string;
       name: string;
@@ -152,6 +175,7 @@ export interface LangPack {
       hostname: string;
       status: string;
       actions: string;
+      password: string;
     };
     errors: {
       tunnel_invalid: string;
@@ -164,6 +188,7 @@ export interface LangPack {
       dns_unbind_confirm_msg: string;
       quick_stop_confirm_title: string;
       quick_stop_confirm_msg: string;
+      token_pair_invalid: string;
     };
   };
   client_tab: {
@@ -180,6 +205,7 @@ export interface LangPack {
     add_title: string;
     col_domain: string;
     col_port: string;
+    col_password: string;
     col_status: string;
     col_action: string;
     empty: string;
@@ -192,9 +218,15 @@ export interface LangPack {
     delete_confirm_title: string;
     delete_confirm_msg: string;
     edit_title: string;
+    // 访问凭据（目标隧道开了密码锁时成对填写）
+    token_id_label: string;
+    token_id_placeholder: string;
+    token_secret_label: string;
+    token_secret_placeholder: string;
     errors: {
       domain_invalid: string;
       port_invalid: string;
+      token_pair_invalid: string;
     };
   };
   misc_tab: {
@@ -207,6 +239,11 @@ export interface LangPack {
     btn_check_version: string;
     btn_update: string;
     btn_download: string;
+    // 访问密码锁凭证（Cloudflare Access API 用）
+    access_token_label: string;
+    access_token_placeholder: string;
+    access_token_hint: string;
+    access_token_saved: string;
   };
   exit_modal: {
     title: string;

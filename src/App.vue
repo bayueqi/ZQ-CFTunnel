@@ -217,78 +217,25 @@
         <div v-if="serverMode === 'local'" class="server-sub-view">
           <!-- ============ 临时链接（临时域名） ============ -->
           <div v-if="localSubMode === 'quick'" class="server-sub-view">
-          <!-- 输入表单卡片 -->
-          <div class="fluent-card form-card">
-            <div class="form-grid">
-              <div v-if="quickAddressMode !== 'none'" class="fluent-form-group">
-                <label class="form-label">
-                  {{ quickAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.quick_port_label }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    v-if="quickAddressMode === 'port'"
-                    type="text"
-                    v-model="quickConfig.port"
-                    :placeholder="t.server_tab.quick_port_placeholder"
-                    :class="['fluent-input', { 'input-error': quickPortHasError }]"
-                    @input="onQuickPortInput"
-                  />
-                  <input
-                    v-else
-                    type="text"
-                    v-model="quickConfig.unixSocket"
-                    :placeholder="t.server_tab.unix_socket_placeholder"
-                    class="fluent-input"
-                    @input="onQuickUnixSocketInput"
-                  />
-                </div>
-              </div>
-
-              <div class="fluent-form-group">
-                <label class="form-label">{{ t.server_tab.protocol_label }}</label>
-                <div class="input-container">
-                  <select v-model="quickConfig.protocol" class="fluent-input fluent-select">
-                    <option value="http">{{ t.server_tab.protocol_http }}</option>
-                    <option value="https">{{ t.server_tab.protocol_https }}</option>
-                    <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
-                    <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
-                    <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
-                    <option value="smb">{{ t.server_tab.protocol_smb }}</option>
-                    <option value="unix">{{ t.server_tab.protocol_unix }}</option>
-                    <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
-                    <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div class="actions-row center-actions">
-              <button
-                class="fluent-btn primary"
-                @click="handleStartQuick"
-                :disabled="!canStartQuick"
-              >
-                <span class="btn-icon">⚡</span>
-                {{ t.server_tab.btn_generate_quick }}
-              </button>
-              <button class="fluent-btn" @click="refreshQuickTunnels" :disabled="refreshingTunnels.quick">
-                <span class="btn-icon" :class="{ spinning: refreshingTunnels.quick }">🔄</span>
-                {{ refreshingTunnels.quick ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
-              </button>
-              <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
-                <span class="pill-dot"></span>
-                {{ quickRunning
-                  ? `${t.server_tab.status_running} (${quickTunnels.length})`
-                  : t.server_tab.status_stopped }}
-              </div>
-            </div>
-          </div>
-
-          <!-- 运行中的临时链接列表卡片 -->
+          <!-- 运行中的临时链接列表卡片：创建入口收进右上角，不再放常驻表单 -->
           <div class="fluent-card table-card">
-            <div class="card-header">
-              <h3 class="card-title">{{ t.server_tab.quick_list_title }}</h3>
+            <div class="client-title-row">
+              <h3 class="card-title client-title">{{ t.server_tab.quick_list_title }}</h3>
+              <div class="client-title-actions">
+                <button class="fluent-btn small primary" @click="openQuickCreateModal">
+                  <span class="btn-icon">＋</span>
+                  {{ t.server_tab.btn_create }}
+                </button>
+                <button class="fluent-btn small" @click="refreshQuickTunnels" :disabled="refreshingTunnels.quick">
+                  <span class="btn-icon" :class="{ spinning: refreshingTunnels.quick }">🔄</span>
+                  {{ refreshingTunnels.quick ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
+                </button>
+                <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
+                  {{ quickRunning
+                    ? `${t.server_tab.status_running} (${quickTunnels.length})`
+                    : t.server_tab.status_stopped }}
+                </div>
+              </div>
             </div>
 
             <div class="quick-list">
@@ -322,114 +269,30 @@
 
           <!-- ============ 绑定域名（命名隧道） ============ -->
           <div v-if="localSubMode === 'named'" class="server-sub-view">
-          <!-- 输入表单卡片 -->
-          <div class="fluent-card form-card">
-            <div class="form-grid">
-              <!-- 隧道名字 -->
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.tunnel_name }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    type="text"
-                    v-model="serverConfig.name"
-                    :placeholder="t.server_tab.tunnel_name_placeholder"
-                    :class="['fluent-input', { 'input-error': serverNameHasError }]"
-                    @input="onServerNameInput"
-                  />
-                </div>
-                <div v-if="serverNameHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.tunnel_invalid }}
-                </div>
-              </div>
-
-              <div v-if="serverAddressMode !== 'none'" class="fluent-form-group">
-                <label class="form-label">
-                  {{ serverAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
-                  <span class="required">*</span>
-                </label>
-                <div class="input-container">
-                  <input
-                    v-if="serverAddressMode === 'port'"
-                    type="text"
-                    v-model="serverConfig.port"
-                    :placeholder="t.server_tab.port_placeholder"
-                    :class="['fluent-input', { 'input-error': serverPortHasError }]"
-                    @input="onServerPortInput"
-                  />
-                  <input
-                    v-else
-                    type="text"
-                    v-model="serverConfig.unixSocket"
-                    :placeholder="t.server_tab.unix_socket_placeholder"
-                    class="fluent-input"
-                    @input="onServerUnixSocketInput"
-                  />
-                </div>
-                <div v-if="serverAddressMode === 'port' && serverPortHasError" class="error-tip">
-                  <span class="error-icon">⚠️</span>
-                  {{ t.server_tab.errors.port_invalid }}
-                </div>
-              </div>
-
-              <!-- 协议选择 -->
-              <div class="fluent-form-group">
-                <label class="form-label">
-                  {{ t.server_tab.protocol_label }}
-                </label>
-                <div class="input-container">
-                  <select
-                    v-model="serverConfig.protocol"
-                    class="fluent-input fluent-select"
-                  >
-                    <option value="http">{{ t.server_tab.protocol_http }}</option>
-                    <option value="https">{{ t.server_tab.protocol_https }}</option>
-                    <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
-                    <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
-                    <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
-                    <option value="smb">{{ t.server_tab.protocol_smb }}</option>
-                    <option value="unix">{{ t.server_tab.protocol_unix }}</option>
-                    <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
-                    <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- 固定域名主要操作按钮 -->
-            <div class="actions-row center-actions">
-              <button class="fluent-btn" @click="handleCreateTunnel" :disabled="isCreatingTunnel">
-                <span class="btn-icon">➕</span>
-                {{ t.server_tab.btn_create }}
-              </button>
-
-              <button
-                class="fluent-btn"
-                :class="currentServerNameRunning ? 'danger' : 'primary'"
-                @click="currentServerNameRunning ? handleStopServer() : handleStartServer()"
-                :disabled="!currentServerNameRunning && !canStartServer"
-              >
-                <span class="btn-icon">{{ currentServerNameRunning ? '⏹' : '▶' }}</span>
-                {{ currentServerNameRunning ? t.server_tab.btn_stop : t.server_tab.btn_start }}
-              </button>
-
-              <div class="status-pill" :class="localRunningCount > 0 ? 'online' : 'offline'">
-                <span class="pill-dot"></span>
-                {{ localRunningCount > 0
-                  ? `${t.server_tab.status_running} (${localRunningCount})`
-                  : t.server_tab.status_stopped }}
-              </div>
-            </div>
-          </div>
-
-          <!-- 固定域名列表卡片 -->
+          <!-- 固定域名列表卡片：创建 / 刷新 / 运行中(N) 收进右上角，
+               每行的启停、修改、删除与密码锁都做进行内操作 -->
           <div class="fluent-card table-card">
-            <div class="card-header">
-              <h3 class="card-title">{{ t.server_tab.local_list_title }}</h3>
-              <span class="card-subtitle">（双击行可快速填入隧道名字）</span>
+            <div class="client-title-row">
+              <h3 class="card-title client-title">{{ t.server_tab.local_list_title }}</h3>
+              <div class="client-title-actions">
+                <button class="fluent-btn small primary" @click="openNamedCreateModal">
+                  <span class="btn-icon">＋</span>
+                  {{ t.server_tab.btn_create }}
+                </button>
+                <button
+                  class="fluent-btn small"
+                  :disabled="refreshingTunnels.local"
+                  @click="handleRefreshTunnels('local')"
+                >
+                  <span class="btn-icon" :class="{ spinning: refreshingTunnels.local }">🔄</span>
+                  {{ refreshingTunnels.local ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
+                </button>
+                <div class="status-pill" :class="localRunningCount > 0 ? 'online' : 'offline'">
+                  {{ localRunningCount > 0
+                    ? `${t.server_tab.status_running} (${localRunningCount})`
+                    : t.server_tab.status_stopped }}
+                </div>
+              </div>
             </div>
 
             <div class="fluent-table-wrapper">
@@ -441,8 +304,10 @@
                     <th class="col-type">{{ t.server_tab.headers.type }}</th>
                     <th class="col-created">{{ t.server_tab.headers.created }}</th>
                     <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
+                    <th class="col-password">{{ t.server_tab.headers.password }}</th>
                     <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
                     <th class="col-status">{{ t.server_tab.headers.status }}</th>
+                    <th class="col-actions">{{ t.server_tab.headers.actions }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -451,7 +316,6 @@
                     :key="tunnel.id"
                     :class="{ selected: selectedTunnel?.id === tunnel.id }"
                     @click="selectTunnel(tunnel)"
-                    @dblclick="onTunnelDoubleClick(tunnel)"
                   >
                     <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
                     <td class="col-name font-bold">{{ tunnel.name }}</td>
@@ -471,6 +335,38 @@
                       </template>
                       <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
                     </td>
+                    <!-- 访问密码锁：未上锁显示🔓（点击直接上锁），已上锁显示🔒+明文凭据（点击弹解锁确认） -->
+                    <td class="col-password">
+                      <template v-if="lockOf(tunnel.id)">
+                        <div class="lock-cell">
+                          <button
+                            class="row-action-btn lock-btn"
+                            :title="t.server_tab.btn_unlock"
+                            :disabled="isLockMutating"
+                            @click.stop="promptUnlockTunnel(tunnel)"
+                          >🔒</button>
+                          <div class="lock-cred">
+                            <span
+                              class="lock-cred-line mono"
+                              :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
+                              @click.stop="copyText(lockOf(tunnel.id)?.client_id)"
+                            >{{ lockOf(tunnel.id)?.client_id }}</span>
+                            <span
+                              class="lock-cred-line mono"
+                              :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
+                              @click.stop="copyText(lockOf(tunnel.id)?.client_secret)"
+                            >{{ lockOf(tunnel.id)?.client_secret }}</span>
+                          </div>
+                        </div>
+                      </template>
+                      <button
+                        v-else
+                        class="row-action-btn lock-btn"
+                        :title="tunnel.hostnames && tunnel.hostnames.length ? t.server_tab.btn_lock : t.server_tab.lock_need_domain"
+                        :disabled="isLockMutating"
+                        @click.stop="promptLockTunnel(tunnel)"
+                      >🔓</button>
+                    </td>
                     <td class="col-connections">{{ tunnel.connections || '-' }}</td>
                     <td class="col-status">
                       <span class="tunnel-status" :class="{ online: isTunnelRunning(tunnel.name) }">
@@ -478,34 +374,35 @@
                         {{ isTunnelRunning(tunnel.name) ? t.server_tab.status_running : t.server_tab.status_not_running }}
                       </span>
                     </td>
+                    <td class="col-actions">
+                      <button
+                        class="row-action-btn"
+                        :class="isTunnelRunning(tunnel.name) ? 'danger' : 'primary'"
+                        :title="isTunnelRunning(tunnel.name) ? t.server_tab.btn_stop : t.server_tab.btn_start"
+                        @click.stop="isTunnelRunning(tunnel.name) ? handleStopServer(tunnel.name) : handleRowStart(tunnel)"
+                      >
+                        <span v-if="isTunnelRunning(tunnel.name)" class="icon-square"></span>
+                        <span v-else class="icon-triangle"></span>
+                      </button>
+                      <button
+                        class="row-action-btn"
+                        :title="t.server_tab.named_edit_title"
+                        @click.stop="openNamedEditModal(tunnel)"
+                      >✎</button>
+                      <button
+                        class="row-action-btn danger"
+                        :title="t.server_tab.btn_delete"
+                        @click.stop="promptDeleteTunnel(tunnel)"
+                      >🗑</button>
+                    </td>
                   </tr>
                   <tr v-if="localTunnelList.length === 0">
-                    <td colspan="7" class="empty-table">
+                    <td colspan="9" class="empty-table">
                       {{ refreshingTunnels.local ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
                 </tbody>
               </table>
-            </div>
-
-            <div class="actions-row table-actions">
-              <button
-                class="fluent-btn"
-                :disabled="refreshingTunnels.local"
-                @click="handleRefreshTunnels('local')"
-              >
-                <span class="btn-icon" :class="{ spinning: refreshingTunnels.local }">🔄</span>
-                {{ refreshingTunnels.local ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
-              </button>
-
-              <button
-                class="fluent-btn danger-outline"
-                @click="promptDeleteTunnel"
-                :disabled="!selectedTunnel"
-              >
-                <span class="btn-icon">🗑️</span>
-                {{ t.server_tab.btn_delete }}
-              </button>
             </div>
           </div>
 
@@ -750,6 +647,7 @@
                 <tr>
                   <th class="col-hostname">{{ t.client_tab.col_domain }}</th>
                   <th class="col-port">{{ t.client_tab.col_port }}</th>
+                  <th class="col-password">{{ t.client_tab.col_password }}</th>
                   <th class="col-status">{{ t.client_tab.col_status }}</th>
                   <th class="col-actions">{{ t.client_tab.col_action }}</th>
                 </tr>
@@ -758,6 +656,22 @@
                 <tr v-for="c in clientRows" :key="c.key">
                   <td class="col-hostname font-bold" :title="c.domain">{{ c.domain }}</td>
                   <td class="col-port mono">{{ c.port }}</td>
+                  <!-- 已保存的访问凭据：明文展示，点击复制；未配置显示占位符 -->
+                  <td class="col-password">
+                    <div v-if="c.tokenId || c.tokenSecret" class="lock-cred">
+                      <span
+                        class="lock-cred-line mono"
+                        :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
+                        @click="copyText(c.tokenId || '')"
+                      >{{ c.tokenId || '—' }}</span>
+                      <span
+                        class="lock-cred-line mono"
+                        :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
+                        @click="copyText(c.tokenSecret || '')"
+                      >{{ c.tokenSecret || '—' }}</span>
+                    </div>
+                    <span v-else class="lock-cred-empty">—</span>
+                  </td>
                   <td class="col-status">
                     <span class="tunnel-status" :class="{ online: c.running }">
                       {{ c.running ? t.client_tab.status_connected : t.client_tab.status_disconnected }}
@@ -790,7 +704,7 @@
                   </td>
                 </tr>
                 <tr v-if="clientRows.length === 0">
-                  <td colspan="4" class="empty-table">{{ t.client_tab.empty }}</td>
+                  <td colspan="5" class="empty-table">{{ t.client_tab.empty }}</td>
                 </tr>
               </tbody>
             </table>
@@ -800,6 +714,28 @@
 
       <!-- 3. 杂项 Tab (保留上下滑动 Slider) -->
       <section v-if="currentTab === 'misc'" class="tab-view misc-view animated-view">
+        <!-- 访问密码锁凭证：上锁 / 解锁 / 换密码走 Cloudflare Access API 时使用。
+             留空 = 使用「授权登录」的凭证；获取方式见项目 README。 -->
+        <div class="fluent-card form-card access-token-card">
+          <div class="access-token-row">
+            <div class="fluent-form-group access-token-field">
+              <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
+              <div class="input-container">
+                <input
+                  type="text"
+                  v-model="accessTokenInput"
+                  :placeholder="t.misc_tab.access_token_placeholder"
+                  class="fluent-input mono"
+                />
+              </div>
+            </div>
+            <button class="fluent-btn primary access-token-save" @click="saveAccessToken">
+              {{ t.server_tab.btn_save }}
+            </button>
+          </div>
+          <div class="modal-hint">{{ t.misc_tab.access_token_hint }}</div>
+        </div>
+
         <!-- 快捷操作区 -->
         <div class="fluent-card action-tiles-card">
           <div class="tile-grid">
@@ -1099,6 +1035,36 @@
               {{ t.client_tab.errors.port_invalid }}
             </div>
           </div>
+
+          <!-- 访问凭据（可选）：目标隧道开了密码锁时才需要填，两者必须成对 -->
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.client_tab.token_id_label }}</label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="clientForm.tokenId"
+                :placeholder="t.client_tab.token_id_placeholder"
+                class="fluent-input mono"
+                @keydown.enter="confirmClientAdd"
+              />
+            </div>
+          </div>
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.client_tab.token_secret_label }}</label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="clientForm.tokenSecret"
+                :placeholder="t.client_tab.token_secret_placeholder"
+                :class="['fluent-input mono', { 'input-error': clientTokenHasError }]"
+                @keydown.enter="confirmClientAdd"
+              />
+            </div>
+            <div v-if="clientTokenHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.client_tab.errors.token_pair_invalid }}
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="fluent-btn" @click="cancelClientAdd">{{ t.exit_modal.btn_cancel }}</button>
@@ -1143,6 +1109,328 @@
         <div class="modal-footer">
           <button class="fluent-btn" @click="cancelStopQuick">{{ t.exit_modal.btn_cancel }}</button>
           <button class="fluent-btn danger" @click="confirmStopQuick">{{ t.server_tab.quick_stop }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 固定域名：创建隧道弹窗（创建 + 可选绑定域名 + 可选上锁，一步到位） -->
+    <div v-if="showNamedCreateModal" class="fluent-modal-overlay">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">🔗 {{ t.server_tab.named_create_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <div class="fluent-form-group">
+            <label class="form-label">
+              {{ t.server_tab.tunnel_name }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="serverConfig.name"
+                :placeholder="t.server_tab.tunnel_name_placeholder"
+                :class="['fluent-input', { 'input-error': serverNameHasError }]"
+                @input="onServerNameInput"
+                @keydown.enter="confirmNamedCreate"
+              />
+            </div>
+            <div v-if="serverNameHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.server_tab.errors.tunnel_invalid }}
+            </div>
+          </div>
+
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.protocol_label }}</label>
+            <div class="input-container">
+              <select v-model="serverConfig.protocol" class="fluent-input fluent-select">
+                <option value="http">{{ t.server_tab.protocol_http }}</option>
+                <option value="https">{{ t.server_tab.protocol_https }}</option>
+                <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
+                <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
+                <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div v-if="serverAddressMode !== 'none'" class="fluent-form-group">
+            <label class="form-label">
+              {{ serverAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <input
+                v-if="serverAddressMode === 'port'"
+                type="text"
+                v-model="serverConfig.port"
+                :placeholder="t.server_tab.port_placeholder"
+                :class="['fluent-input', { 'input-error': serverPortHasError }]"
+                @input="onServerPortInput"
+                @keydown.enter="confirmNamedCreate"
+              />
+              <input
+                v-else
+                type="text"
+                v-model="serverConfig.unixSocket"
+                :placeholder="t.server_tab.unix_socket_placeholder"
+                class="fluent-input"
+                @input="onServerUnixSocketInput"
+                @keydown.enter="confirmNamedCreate"
+              />
+            </div>
+            <div v-if="serverAddressMode === 'port' && serverPortHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.server_tab.errors.port_invalid }}
+            </div>
+          </div>
+
+          <!-- 可选：创建后顺手绑定域名（cloudflared tunnel route dns） -->
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.named_create_domain_label }}</label>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="namedCreateDomain"
+                :placeholder="t.server_tab.named_create_domain_placeholder"
+                :class="['fluent-input', { 'input-error': namedCreateDomainHasError }]"
+                @input="onNamedCreateDomainInput"
+                @keydown.enter="confirmNamedCreate"
+              />
+            </div>
+            <div v-if="namedCreateDomainHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.server_tab.errors.dns_domain_invalid }}
+            </div>
+          </div>
+
+          <!-- 密码锁开关：绑定域名后才有锁的对象 -->
+          <label class="lock-switch-row" :class="{ disabled: !namedCreateDomain.trim() }">
+            <input
+              type="checkbox"
+              v-model="namedCreateLock"
+              :disabled="!namedCreateDomain.trim() || isLockMutating"
+            />
+            <span class="lock-switch-icon">🔐</span>
+            <span class="lock-switch-text">{{ t.server_tab.lock_switch_label }}</span>
+          </label>
+          <div v-if="!namedCreateDomain.trim()" class="modal-hint">{{ t.server_tab.lock_switch_hint }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="showNamedCreateModal = false">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn primary" @click="confirmNamedCreate" :disabled="isCreatingTunnel || isLockMutating">
+            {{ t.server_tab.btn_create }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 固定域名：修改隧道弹窗（协议 / 端口 + 密码锁，保存后运行中的隧道自动重启生效） -->
+    <div v-if="showNamedEditModal" class="fluent-modal-overlay">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">✎ {{ t.server_tab.named_edit_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p v-if="namedEditTarget" class="modal-context font-bold">{{ namedEditTarget.name }}</p>
+
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.protocol_label }}</label>
+            <div class="input-container">
+              <select v-model="namedEdit.protocol" class="fluent-input fluent-select">
+                <option value="http">{{ t.server_tab.protocol_http }}</option>
+                <option value="https">{{ t.server_tab.protocol_https }}</option>
+                <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
+                <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
+                <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div v-if="namedEditAddressMode !== 'none'" class="fluent-form-group">
+            <label class="form-label">
+              {{ namedEditAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <input
+                v-if="namedEditAddressMode === 'port'"
+                type="text"
+                v-model="namedEdit.port"
+                :placeholder="t.server_tab.port_placeholder"
+                :class="['fluent-input', { 'input-error': namedEditPortHasError }]"
+                @input="namedEditPortHasError = namedEdit.port.length > 0 && !isPortValid(namedEdit.port)"
+              />
+              <input
+                v-else
+                type="text"
+                v-model="namedEdit.unixSocket"
+                :placeholder="t.server_tab.unix_socket_placeholder"
+                class="fluent-input"
+              />
+            </div>
+            <div v-if="namedEditAddressMode === 'port' && namedEditPortHasError" class="error-tip">
+              <span class="error-icon">⚠️</span>
+              {{ t.server_tab.errors.port_invalid }}
+            </div>
+          </div>
+
+          <!-- 密码锁：已上锁的隧道可改锁定的域名（保存时自动换密码），也可直接解除 -->
+          <label class="lock-switch-row">
+            <input
+              type="checkbox"
+              v-model="namedEdit.lockOn"
+              :disabled="isLockMutating"
+            />
+            <span class="lock-switch-icon">🔐</span>
+            <span class="lock-switch-text">{{ t.server_tab.lock_switch_label }}</span>
+          </label>
+          <div v-if="namedEdit.lockOn && namedEditHostnames.length > 0" class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.lock_host_label }}</label>
+            <div class="input-container">
+              <select v-model="namedEdit.lockHostname" class="fluent-input fluent-select">
+                <option
+                  v-for="h in namedEditHostnames"
+                  :key="h"
+                  :value="h"
+                >{{ h }}</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="namedEdit.lockOn && namedEditHostnames.length === 0" class="error-tip">
+            <span class="error-icon">⚠️</span>
+            {{ t.server_tab.lock_need_domain }}
+          </div>
+          <div v-if="namedEditTarget && isTunnelRunning(namedEditTarget.name)" class="modal-hint warn">
+            {{ t.server_tab.edit_restart_hint }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="showNamedEditModal = false">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn primary" @click="confirmNamedEdit" :disabled="isCreatingTunnel || isLockMutating">
+            {{ t.server_tab.btn_save }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 密码锁：上锁 / 换密码成功后的凭据展示（明文 + 点击复制） -->
+    <div v-if="showLockInfoModal" class="fluent-modal-overlay">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">🔐 {{ t.server_tab.lock_success_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p class="modal-hint">{{ t.server_tab.lock_success_msg }}</p>
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.lock_host_label }}</label>
+            <div class="input-container">
+              <input type="text" :value="lockInfoDraft?.hostname" class="fluent-input mono" readonly />
+            </div>
+          </div>
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.lock_account_label }}</label>
+            <div class="input-container">
+              <input type="text" :value="lockInfoDraft?.clientId" class="fluent-input mono" readonly />
+              <button class="fluent-btn small copy-inline" :title="t.server_tab.click_to_copy" @click="copyText(lockInfoDraft?.clientId || '')">📋</button>
+            </div>
+          </div>
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.lock_secret_label }}</label>
+            <div class="input-container">
+              <input type="text" :value="lockInfoDraft?.clientSecret" class="fluent-input mono" readonly />
+              <button class="fluent-btn small copy-inline" :title="t.server_tab.click_to_copy" @click="copyText(lockInfoDraft?.clientSecret || '')">📋</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn primary" @click="showLockInfoModal = false">{{ t.server_tab.lock_done_btn }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 密码锁：解锁二次确认弹窗 -->
+    <div v-if="showUnlockModal" class="fluent-modal-overlay" @click.self="showUnlockModal = false">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚠️ {{ t.server_tab.unlock_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ t.server_tab.unlock_confirm_msg.replace('{hostname}', unlockTarget ? (lockOf(unlockTarget.id)?.hostname || '') : '') }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="showUnlockModal = false">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn danger" @click="confirmUnlockTunnel" :disabled="isLockMutating">
+            {{ t.server_tab.btn_unlock }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 临时链接：创建弹窗（协议 + 端口/套接字，域名由 Cloudflare 随机分配） -->
+    <div v-if="showQuickCreateModal" class="fluent-modal-overlay">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">⚡ {{ t.server_tab.quick_create_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <div class="fluent-form-group">
+            <label class="form-label">{{ t.server_tab.protocol_label }}</label>
+            <div class="input-container">
+              <select v-model="quickConfig.protocol" class="fluent-input fluent-select">
+                <option value="http">{{ t.server_tab.protocol_http }}</option>
+                <option value="https">{{ t.server_tab.protocol_https }}</option>
+                <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
+                <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
+                <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div v-if="quickAddressMode !== 'none'" class="fluent-form-group">
+            <label class="form-label">
+              {{ quickAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.quick_port_label }}
+              <span class="required">*</span>
+            </label>
+            <div class="input-container">
+              <input
+                v-if="quickAddressMode === 'port'"
+                type="text"
+                v-model="quickConfig.port"
+                :placeholder="t.server_tab.quick_port_placeholder"
+                :class="['fluent-input', { 'input-error': quickPortHasError }]"
+                @input="onQuickPortInput"
+                @keydown.enter="confirmQuickCreate"
+              />
+              <input
+                v-else
+                type="text"
+                v-model="quickConfig.unixSocket"
+                :placeholder="t.server_tab.unix_socket_placeholder"
+                class="fluent-input"
+                @input="onQuickUnixSocketInput"
+                @keydown.enter="confirmQuickCreate"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="showQuickCreateModal = false">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn primary" @click="confirmQuickCreate" :disabled="!canStartQuick">
+            {{ t.server_tab.btn_generate_quick }}
+          </button>
         </div>
       </div>
     </div>
@@ -1366,6 +1654,9 @@ const serverConfig = ref({
 const clientForm = ref({
   domain: '',
   port: localStorage.getItem('client_port') || '25566',
+  // 访问凭据（可选）：目标隧道开了密码锁时才需要，成对填写
+  tokenId: '',
+  tokenSecret: '',
 });
 
 // DNS 路由绑定表单 (cloudflared tunnel route dns)
@@ -1400,15 +1691,7 @@ const dnsEditHasError = ref(false);
 const isDnsMutating = ref(false);
 
 // 判断服务端表单是否满足启动条件（hello_world 无需端口，unix 协议需要套接字路径）
-const canStartServer = computed(() => {
-  const p = serverConfig.value.protocol;
-  if (!serverConfig.value.name) return false;
-  if (p === 'hello_world') return !serverNameHasError.value;
-  if (p === 'unix' || p === 'unix+tls') {
-    return !serverNameHasError.value && !!serverConfig.value.unixSocket.trim();
-  }
-  return !serverNameHasError.value && !serverPortHasError.value && !!serverConfig.value.port;
-});
+// 注：顶部常驻表单已移除，创建/修改都走弹窗，这里保留给弹窗复用的校验逻辑见 confirmNamedCreate
 
 // 运行状态：命名隧道支持多开，后端 is_server_running 返回正在运行的隧道名列表（key = 隧道名）
 const serverRunningNames = ref<string[]>([]);
@@ -1417,8 +1700,6 @@ const isTunnelRunning = (name: string) => {
   const n = name.trim();
   return !!n && serverRunningNames.value.includes(n);
 };
-// 表单里当前这条隧道是否正在运行
-const currentServerNameRunning = computed(() => isTunnelRunning(serverConfig.value.name));
 // 本地标记某条隧道为运行中 / 已停止
 const markServerRunning = (name: string) => {
   const n = name.trim();
@@ -1439,7 +1720,8 @@ const reconcileServerRunning = async () => {
 // 客户端隧道支持多开：配置持久保存（localStorage），运行状态与后端对账。
 // 断开只是停掉 cloudflared 进程，条目留在列表里，随时可再次启动。
 const clientConnections = ref<ClientTunnelItem[]>([]);
-type SavedClientTunnel = { key: string; domain: string; port: string };
+// tokenId / tokenSecret 是目标隧道的访问凭据（Service Token），开启密码锁的隧道必须携带
+type SavedClientTunnel = { key: string; domain: string; port: string; tokenId?: string; tokenSecret?: string };
 const CLIENT_TUNNELS_STORAGE_KEY = 'client_tunnels_v1';
 // 分隔符必须与 Rust 侧 client_tunnel_key / 浏览器 mock 一致（域名|端口）。
 // 不一致会导致「已保存的配置」与「后端在跑的实例」key 不同，对账时被判成两条不同隧道，
@@ -1462,7 +1744,11 @@ const loadSavedClientTunnels = (): SavedClientTunnel[] => {
       const key = clientTunnelKey(domain, port);
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ key, domain, port });
+      const entry: SavedClientTunnel = { key, domain, port };
+      // 访问凭据可选：旧版本没有这两个字段，读出来是 undefined 就当没配
+      if (typeof x.tokenId === 'string' && x.tokenId.trim()) entry.tokenId = x.tokenId.trim();
+      if (typeof x.tokenSecret === 'string' && x.tokenSecret.trim()) entry.tokenSecret = x.tokenSecret.trim();
+      out.push(entry);
     }
     return out;
   } catch {
@@ -1473,7 +1759,7 @@ const savedClientTunnels = ref<SavedClientTunnel[]>(loadSavedClientTunnels());
 const persistClientTunnels = () => {
   localStorage.setItem(
     CLIENT_TUNNELS_STORAGE_KEY,
-    JSON.stringify(savedClientTunnels.value.map(({ domain, port }) => ({ domain, port }))),
+    JSON.stringify(savedClientTunnels.value.map(({ domain, port, tokenId, tokenSecret }) => ({ domain, port, tokenId, tokenSecret }))),
   );
 };
 
@@ -1508,11 +1794,16 @@ const pendingDeleteClient = ref<SavedClientTunnel | null>(null);
 const editingClientKey = ref('');
 // 提交中标记，确认按钮据此避免重复提交
 const clientSubmitting = ref(false);
+// 访问凭据必须成对：只填账号或只填密码都视为填写错误
+const clientTokenHasError = computed(
+  () => clientForm.value.tokenId.trim().length > 0 !== clientForm.value.tokenSecret.trim().length > 0,
+);
 const canSubmitClientAdd = computed(
   () =>
     !clientSubmitting.value &&
     !clientFormDomainHasError.value &&
     !clientFormPortHasError.value &&
+    !clientTokenHasError.value &&
     !!clientForm.value.domain.trim() &&
     !!clientForm.value.port.trim()
 );
@@ -1834,6 +2125,180 @@ const localRunningCount = computed(() =>
   localTunnelList.value.filter(x => isTunnelRunning(x.name)).length,
 );
 
+// ============================ 隧道密码锁（Cloudflare Access） ============================
+//
+// 每条固定域名隧道可单独上锁：上锁 = 后端在云端创建 Access 应用 + Service Token，
+// 拿到「访问账号 / 访问密码」这对凭据。锁信息按隧道 ID 存在 localStorage，
+// 列表里明文展示（可点击复制），客户端连接时把这对凭据填进「访问账号 / 访问密码」。
+type TunnelLockEntry = {
+  tunnelId: string;
+  hostname: string;
+  appUid: string;
+  appName: string;
+  tokenUid: string;
+  clientId: string;
+  clientSecret: string;
+};
+const TUNNEL_LOCKS_STORAGE_KEY = 'tunnel_locks_v1';
+
+const loadTunnelLocks = (): Record<string, TunnelLockEntry> => {
+  try {
+    const raw = localStorage.getItem(TUNNEL_LOCKS_STORAGE_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+    // 只保留字段齐全的条目，坏数据直接丢弃（最坏情况是列表里显示未上锁，
+    // 云端那把锁仍在，可在面板手动清理）
+    const out: Record<string, TunnelLockEntry> = {};
+    for (const [id, v] of Object.entries(obj as Record<string, unknown>)) {
+      const e = v as Partial<TunnelLockEntry>;
+      if (
+        typeof e?.hostname === 'string' && e.hostname &&
+        typeof e?.appUid === 'string' && e.appUid &&
+        typeof e?.tokenUid === 'string' && e.tokenUid &&
+        typeof e?.clientId === 'string' && e.clientId &&
+        typeof e?.clientSecret === 'string' && e.clientSecret
+      ) {
+        out[id] = {
+          tunnelId: id,
+          hostname: e.hostname,
+          appUid: e.appUid,
+          appName: String(e.appName || ''),
+          tokenUid: e.tokenUid,
+          clientId: e.clientId,
+          clientSecret: e.clientSecret,
+        };
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+};
+
+const tunnelLocks = ref<Record<string, TunnelLockEntry>>(loadTunnelLocks());
+const persistTunnelLocks = () => {
+  localStorage.setItem(TUNNEL_LOCKS_STORAGE_KEY, JSON.stringify(tunnelLocks.value));
+};
+const lockOf = (tunnelId: string): TunnelLockEntry | null => tunnelLocks.value[tunnelId] || null;
+
+// 锁操作进行中：所有锁按钮统一禁用，防止并发重复建锁
+const isLockMutating = ref(false);
+
+// 上锁 / 换密码成功后的凭据展示弹窗
+const showLockInfoModal = ref(false);
+const lockInfoDraft = ref<{ hostname: string; clientId: string; clientSecret: string } | null>(null);
+
+// 解锁二次确认弹窗
+const showUnlockModal = ref(false);
+const unlockTarget = ref<TunnelInfo | null>(null);
+
+// 配置页的 Access Token：留空 = 用「授权登录」凭证。
+// 该凭证需要 Access: Apps and Policies 与 Access: Service Tokens 两个编辑权限（见 README）。
+const accessTokenInput = ref(localStorage.getItem('access_api_token') || '');
+const saveAccessToken = () => {
+  accessTokenInput.value = accessTokenInput.value.trim();
+  localStorage.setItem('access_api_token', accessTokenInput.value);
+  appendLog('[INFO] 访问密码锁凭证（Access Token）已保存', 'info', 'misc');
+  showToast(t.value.misc_tab.access_token_saved);
+};
+
+// 上锁（底层）：调后端创建 Access 应用 + Service Token，成功后落库并展示凭据
+const doLock = async (tunnelId: string, hostname: string): Promise<boolean> => {
+  try {
+    const res = await invoke<{
+      hostname: string; app_uid: string; app_name: string;
+      token_uid: string; client_id: string; client_secret: string;
+    }>('tunnel_lock', { hostname, accessToken: accessTokenInput.value || null });
+    tunnelLocks.value[tunnelId] = {
+      tunnelId,
+      hostname: res.hostname,
+      appUid: res.app_uid,
+      appName: res.app_name,
+      tokenUid: res.token_uid,
+      clientId: res.client_id,
+      clientSecret: res.client_secret,
+    };
+    persistTunnelLocks();
+    lockInfoDraft.value = { hostname: res.hostname, clientId: res.client_id, clientSecret: res.client_secret };
+    showLockInfoModal.value = true;
+    appendLog(`[SUCCESS] 已为域名 [${res.hostname}] 开启密码锁，只有携带访问密码的客户端能连接`, 'success', 'server');
+    return true;
+  } catch (err: any) {
+    appendLog(`[ERROR] 上锁失败: ${errorText(err)}`, 'error', 'server');
+    showToast(`${errorText(err)}`);
+    return false;
+  }
+};
+
+// 解锁（底层）：删掉云端的 Access 应用与 Service Token，恢复公开访问
+const doUnlock = async (entry: TunnelLockEntry): Promise<boolean> => {
+  try {
+    const res = await invoke<string>('tunnel_unlock', {
+      appUid: entry.appUid,
+      tokenUid: entry.tokenUid,
+      accessToken: accessTokenInput.value || null,
+    });
+    delete tunnelLocks.value[entry.tunnelId];
+    persistTunnelLocks();
+    appendLog(`[SUCCESS] ${res} (${entry.hostname})`, 'success', 'server');
+    return true;
+  } catch (err: any) {
+    appendLog(`[ERROR] 解锁失败: ${errorText(err)}`, 'error', 'server');
+    showToast(`${errorText(err)}`);
+    return false;
+  }
+};
+
+// 行内 🔓：直接用该隧道第一个绑定域名上锁（想换域名走「修改」弹窗）
+const promptLockTunnel = async (tunnel: TunnelInfo) => {
+  if (isLockMutating.value || lockOf(tunnel.id)) return;
+  const hostnames = tunnel.hostnames || [];
+  if (hostnames.length === 0) {
+    soundManager.playClick();
+    appendLog('[ERROR] 该隧道还没有绑定域名，请先在「绑定域名」区绑定后再上锁', 'error', 'server');
+    showToast(t.value.server_tab.lock_need_domain);
+    return;
+  }
+  soundManager.playSuccess();
+  isLockMutating.value = true;
+  try {
+    await doLock(tunnel.id, hostnames[0].name);
+  } finally {
+    isLockMutating.value = false;
+  }
+};
+
+// 行内 🔒：弹解锁确认框（解锁后域名恢复公开，任何知道域名的人都能连）
+const promptUnlockTunnel = (tunnel: TunnelInfo) => {
+  if (isLockMutating.value) return;
+  soundManager.playClick();
+  unlockTarget.value = tunnel;
+  showUnlockModal.value = true;
+};
+
+const confirmUnlockTunnel = async () => {
+  const tunnel = unlockTarget.value;
+  const entry = tunnel ? lockOf(tunnel.id) : null;
+  if (!tunnel || !entry || isLockMutating.value) {
+    showUnlockModal.value = false;
+    return;
+  }
+  showUnlockModal.value = false;
+  isLockMutating.value = true;
+  try {
+    await doUnlock(entry);
+    showToast(t.value.server_tab.unlocked_toast);
+  } finally {
+    isLockMutating.value = false;
+  }
+};
+
+// 修改弹窗里可选的锁域名 = 该隧道当前的绑定域名
+const namedEditHostnames = computed(() =>
+  (namedEditTarget.value?.hostnames || []).map(h => h.name),
+);
+
 // 「已绑定域名」管理列表：只展开固定域名的绑定记录，
 // 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
 // 按隧道聚合：一个隧道一行，其下所有绑定的域名收在 records 里，
@@ -2059,28 +2524,6 @@ const selectTunnel = (tunnel: TunnelInfo) => {
   selectedTunnel.value = tunnel;
 };
 
-// 双击隧道：填充名字，有启动记录时一并恢复该隧道的协议/端口，顶部即可直接启停
-const onTunnelDoubleClick = (tunnel: TunnelInfo) => {
-  selectedTunnel.value = tunnel;
-  serverConfig.value.name = tunnel.name;
-  onServerNameInput();
-
-  const saved = loadTunnelCfg(tunnel.name.trim());
-  if (saved) {
-    serverConfig.value.protocol = saved.protocol;
-    serverConfig.value.port = saved.port;
-    serverConfig.value.unixSocket = saved.unixSocket;
-    appendLog(
-      `[INFO] 已选择并填充隧道 [${tunnel.name}] (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`,
-      'info',
-      'server',
-    );
-  } else {
-    appendLog(`[INFO] 已选择并填充隧道 [${tunnel.name}] (ID: ${tunnel.id})`, 'info', 'server');
-  }
-  showToast(`已选择隧道: ${tunnel.name}`);
-};
-
 // 把绑定域名补进当前列表。
 // 这一步要打 Cloudflare API（遍历 zone 下的 DNS 记录），慢且可能失败，
 // 所以与列表本体解耦：失败时**保留上一次的值** —— 网络抖一下就把整列刷成
@@ -2144,11 +2587,58 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
 };
 
 // 创建隧道 (触发 playSuccess 音效)
-const handleCreateTunnel = async () => {
+// 创建弹窗状态：名称/协议/端口沿用 serverConfig（同时充当「上次用的值」的记忆），
+// 域名与上锁开关是弹窗自己的状态。
+const showNamedCreateModal = ref(false);
+const namedCreateDomain = ref('');
+const namedCreateDomainHasError = ref(false);
+const namedCreateLock = ref(false);
+
+const onNamedCreateDomainInput = () => {
+  const val = namedCreateDomain.value;
+  namedCreateDomainHasError.value = val.length > 0 && !isDomainValid(val);
+  // 域名被清空时锁开关没有作用对象，联动关掉
+  if (!val.trim()) namedCreateLock.value = false;
+};
+
+const openNamedCreateModal = () => {
+  soundManager.playClick();
+  namedCreateDomain.value = '';
+  namedCreateDomainHasError.value = false;
+  namedCreateLock.value = false;
+  serverNameHasError.value = false;
+  serverPortHasError.value = false;
+  showNamedCreateModal.value = true;
+};
+
+// 创建 + 可选绑定域名 + 可选上锁，一步到位：
+//   1. cloudflared tunnel create
+//   2. （填了域名）cloudflared tunnel route dns
+//   3. （勾了上锁）云端创建 Access 应用 + Service Token
+const confirmNamedCreate = async () => {
   const name = serverConfig.value.name.trim();
+  const port = serverConfig.value.port.trim();
+  const protocol = serverConfig.value.protocol;
+  const unixSocket = serverConfig.value.unixSocket.trim();
+  const domain = namedCreateDomain.value.trim();
+
   if (!name || !isTunnelNameValid(name)) {
     serverNameHasError.value = true;
     appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
+    return;
+  }
+  if (protocol !== 'hello_world' && !isPortValid(port)) {
+    serverPortHasError.value = true;
+    appendLog(`[ERROR] 本地端口错误`, 'error', 'server');
+    return;
+  }
+  if ((protocol === 'unix' || protocol === 'unix+tls') && !unixSocket) {
+    appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'server');
+    return;
+  }
+  if (domain && !isDomainValid(domain)) {
+    namedCreateDomainHasError.value = true;
+    appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
     return;
   }
 
@@ -2157,8 +2647,41 @@ const handleCreateTunnel = async () => {
   try {
     const res = await invoke<string>('create_tunnel', { name });
     appendLog(`[SUCCESS] 成功创建隧道 [${name}]: ${res}`, 'success', 'server');
-    showToast(`隧道 [${name}] 创建成功！`);
+
+    // 记住这条隧道的源站配置，列表行内「启动」直接可用
+    saveTunnelCfgValues(name, protocol, port, unixSocket);
+
+    if (domain) {
+      try {
+        const dnsRes = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
+        appendLog(`[SUCCESS] ${dnsRes}`, 'success', 'server');
+      } catch (err: any) {
+        appendLog(`[ERROR] 绑定域名失败: ${err}`, 'error', 'server');
+        showToast(`绑定域名失败: ${err}`);
+      }
+    }
+
+    // 刷新列表拿到新隧道的 ID，后续上锁与域名展示都要用
     await handleRefreshTunnels();
+
+    if (domain) await refreshHostnamesOnly();
+
+    if (namedCreateLock.value && domain) {
+      const created = tunnelList.value.find(x => x.name === name);
+      if (created) {
+        isLockMutating.value = true;
+        try {
+          await doLock(created.id, domain);
+        } finally {
+          isLockMutating.value = false;
+        }
+      } else {
+        appendLog('[WARN] 未能定位新隧道的 ID，密码锁未开启，请在列表行内手动上锁', 'warn', 'server');
+      }
+    }
+
+    if (!showLockInfoModal.value) showToast(`隧道 [${name}] 创建成功！`);
+    showNamedCreateModal.value = false;
   } catch (err: any) {
     appendLog(`[ERROR] 创建隧道失败: ${err}`, 'error', 'server');
   } finally {
@@ -2193,33 +2716,91 @@ const loadTunnelCfg = (name: string): { protocol: string; port: string; unixSock
   }
 };
 
-const saveTunnelCfg = (name: string) => {
+// 显式保存某条隧道的源站配置（创建 / 修改弹窗共用）。
+// 早先版本从顶部常驻表单取值，表单移除后由调用方把四个值直接传进来。
+const saveTunnelCfgValues = (name: string, protocol: string, port: string, unixSocket: string) => {
   try {
     localStorage.setItem(
       tunnelCfgKey(name),
-      JSON.stringify({
-        protocol: serverConfig.value.protocol,
-        port: serverConfig.value.port,
-        unixSocket: serverConfig.value.unixSocket,
-      }),
+      JSON.stringify({ protocol, port, unixSocket }),
     );
   } catch {}
 };
 
-// 启动服务端隧道 (触发 playSuccess 音效)
-const handleStartServer = async () => {
-  const name = serverConfig.value.name.trim();
-  const port = serverConfig.value.port.trim();
-  const protocol = serverConfig.value.protocol;
-  const unixSocket = serverConfig.value.unixSocket.trim();
-
-  if (!isTunnelNameValid(name)) {
-    serverNameHasError.value = true;
-    appendLog(`[ERROR] 隧道名错误`, 'error', 'server');
+// 列表行内「启动」：用该隧道保存的源站配置直接启动。
+// 没有保存过配置（旧版本创建的隧道）时引导用户先点「修改」补全。
+const handleRowStart = async (tunnel: TunnelInfo) => {
+  const name = tunnel.name.trim();
+  const saved = loadTunnelCfg(name);
+  if (!saved) {
+    soundManager.playClick();
+    appendLog(`[WARN] 隧道 [${name}] 还没有配置协议和端口，请先点击「修改」补全`, 'warn', 'server');
+    showToast(t.value.server_tab.edit_need_config);
+    openNamedEditModal(tunnel);
     return;
   }
+  if (saved.protocol === 'unix' || saved.protocol === 'unix+tls') {
+    if (!saved.unixSocket) {
+      appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'server');
+      return;
+    }
+  } else if (saved.protocol !== 'hello_world' && !isPortValid(saved.port)) {
+    appendLog(`[ERROR] 隧道 [${name}] 保存的端口不合法，请点击「修改」更正`, 'error', 'server');
+    openNamedEditModal(tunnel);
+    return;
+  }
+
+  soundManager.playSuccess();
+  try {
+    await invoke<string>('start_server_tunnel', {
+      name,
+      port: saved.port,
+      protocol: saved.protocol,
+      unixSocket: saved.unixSocket,
+    });
+    markServerRunning(name);
+    showToast(`隧道 [${name}] 已启动 (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`);
+  } catch (err: any) {
+    appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
+  }
+};
+
+// 修改隧道弹窗：协议 / 端口 + 密码锁。
+// 保存时依次做三件事：落库源站配置 → 按开关状态增删/更换密码锁 → 运行中的隧道用新配置自动重启。
+const showNamedEditModal = ref(false);
+const namedEditTarget = ref<TunnelInfo | null>(null);
+const namedEdit = ref({ protocol: 'http', port: '', unixSocket: '', lockOn: false, lockHostname: '' });
+const namedEditPortHasError = ref(false);
+
+const namedEditAddressMode = computed(() => addressModeOf(namedEdit.value.protocol));
+
+const openNamedEditModal = (tunnel: TunnelInfo) => {
+  soundManager.playClick();
+  const saved = loadTunnelCfg(tunnel.name.trim());
+  const lock = lockOf(tunnel.id);
+  namedEditTarget.value = tunnel;
+  namedEdit.value = {
+    protocol: saved?.protocol || 'http',
+    port: saved?.port || '',
+    unixSocket: saved?.unixSocket || '',
+    lockOn: !!lock,
+    // 已上锁的隧道锁定在当前域名上；未上锁则预选第一个绑定域名
+    lockHostname: lock?.hostname || tunnel.hostnames?.[0]?.name || '',
+  };
+  namedEditPortHasError.value = false;
+  showNamedEditModal.value = true;
+};
+
+const confirmNamedEdit = async () => {
+  const target = namedEditTarget.value;
+  if (!target) return;
+  const protocol = namedEdit.value.protocol;
+  const port = namedEdit.value.port.trim();
+  const unixSocket = namedEdit.value.unixSocket.trim();
+  const name = target.name.trim();
+
   if (protocol !== 'hello_world' && !isPortValid(port)) {
-    serverPortHasError.value = true;
+    namedEditPortHasError.value = true;
     appendLog(`[ERROR] 本地端口错误`, 'error', 'server');
     return;
   }
@@ -2228,82 +2809,88 @@ const handleStartServer = async () => {
     return;
   }
 
-  soundManager.playSuccess();
+  const saved = loadTunnelCfg(name);
+  const cfgChanged =
+    !saved ||
+    saved.protocol !== protocol ||
+    saved.port !== port ||
+    saved.unixSocket !== unixSocket;
+
+  // 1. 密码锁：开关与锁定域名的变化都先于配置落库处理，失败就留在弹窗里不改状态
+  const currentLock = lockOf(target.id);
+  isLockMutating.value = true;
   try {
-    // 仅当「当前这条」隧道在运行时才先停掉它（用于改配置重启），不影响其他并行运行的隧道
-    if (currentServerNameRunning.value) {
-      try {
-        await invoke<string>('stop_server_tunnel', { name });
-        markServerStopped(name);
-      } catch {}
-    }
-
-    await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
-    localStorage.setItem('server_tunnel_name', name);
-    localStorage.setItem('server_port', port);
-    localStorage.setItem('server_protocol', protocol);
-    localStorage.setItem('server_unix_socket', unixSocket);
-    // 记住该隧道的源站配置（供列表行内启动按钮复用），并本地标记为运行中
-    saveTunnelCfg(name);
-    markServerRunning(name);
-    showToast(`隧道 [${name}] 已启动 (${describeServerTarget(protocol, port, unixSocket)})`);
-  } catch (err: any) {
-    appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
-  }
-};
-
-// 切换协议/端口时，若隧道正在运行，自动停止旧隧道并切到新协议
-watch(
-  () => [serverConfig.value.protocol, serverConfig.value.port, serverConfig.value.unixSocket] as const,
-  (newVal, oldVal) => {
-    // 只有「表单里这条」隧道正在运行时才自动切换，避免多开时误动其他隧道
-    if (!currentServerNameRunning.value) return;
-    // 值未实际变化时不处理
-    if (newVal[0] === oldVal[0] && newVal[1] === oldVal[1] && newVal[2] === oldVal[2]) return;
-
-    const protocol = newVal[0];
-    const port = newVal[1].trim();
-    const unixSocket = newVal[2].trim();
-    const name = serverConfig.value.name.trim();
-
-    appendLog(
-      `[INFO] 检测到协议/端口变化 (${oldVal[0]}://127.0.0.1:${oldVal[1]} -> ${protocol}://127.0.0.1:${port})，自动切换隧道 [${name}]...`,
-      'info',
-      'server',
-    );
-
-    // 校验新配置是否合法，非法则仅停止旧隧道、不启动新隧道
-    const configValid =
-      (protocol === 'hello_world' || isPortValid(port)) &&
-      (!(protocol === 'unix' || protocol === 'unix+tls') || !!unixSocket);
-
-    (async () => {
-      try {
-        // 只停止当前名称的隧道，避免影响其他并行运行的隧道
+    if (!namedEdit.value.lockOn && currentLock) {
+      const ok = await doUnlock(currentLock);
+      if (!ok) return;
+    } else if (namedEdit.value.lockOn) {
+      const wantHost = namedEdit.value.lockHostname.trim();
+      if (!wantHost) {
+        appendLog(`[ERROR] ${t.value.server_tab.lock_need_domain}`, 'error', 'server');
+        return;
+      }
+      if (!currentLock) {
+        const ok = await doLock(target.id, wantHost);
+        if (!ok) return;
+      } else if (currentLock.hostname !== wantHost) {
+        // 锁换到了别的域名：换密码（旧锁删除、新域名重新上锁，旧访问密码作废）
         try {
-          await invoke<string>('stop_server_tunnel', { name });
-        } catch {}
-        markServerStopped(name);
-
-        if (!configValid) {
-          appendLog(`[WARN] 新协议配置不完整，已停止旧隧道，请补全后重新启动`, 'warn', 'server');
+          const res = await invoke<{
+            hostname: string; app_uid: string; app_name: string;
+            token_uid: string; client_id: string; client_secret: string;
+          }>('tunnel_rotate_password', {
+            hostname: wantHost,
+            appUid: currentLock.appUid,
+            tokenUid: currentLock.tokenUid,
+            accessToken: accessTokenInput.value || null,
+          });
+          tunnelLocks.value[target.id] = {
+            tunnelId: target.id,
+            hostname: res.hostname,
+            appUid: res.app_uid,
+            appName: res.app_name,
+            tokenUid: res.token_uid,
+            clientId: res.client_id,
+            clientSecret: res.client_secret,
+          };
+          persistTunnelLocks();
+          lockInfoDraft.value = { hostname: res.hostname, clientId: res.client_id, clientSecret: res.client_secret };
+          showLockInfoModal.value = true;
+          appendLog(`[SUCCESS] 密码锁已换到 [${res.hostname}]，访问密码已更换，旧密码作废`, 'success', 'server');
+        } catch (err: any) {
+          appendLog(`[ERROR] 更换密码锁失败: ${errorText(err)}`, 'error', 'server');
+          showToast(`${errorText(err)}`);
           return;
         }
-
-        await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
-        localStorage.setItem('server_tunnel_name', name);
-        localStorage.setItem('server_port', port);
-        localStorage.setItem('server_protocol', protocol);
-        localStorage.setItem('server_unix_socket', unixSocket);
-        saveTunnelCfg(name);
-        markServerRunning(name);
-        showToast(`隧道 [${name}] 已切换 (${describeServerTarget(protocol, port, unixSocket)})`);
-      } catch (err: any) {
-        appendLog(`[ERROR] 切换协议失败: ${err}`, 'error', 'server');
       }
-    })();
-  },
-);
+    }
+
+    // 2. 源站配置落库
+    if (cfgChanged) saveTunnelCfgValues(name, protocol, port, unixSocket);
+
+    // 3. 运行中的隧道用新配置自动重启（配置没变就不折腾）
+    if (cfgChanged && isTunnelRunning(name)) {
+      try {
+        await invoke<string>('stop_server_tunnel', { name });
+      } catch {}
+      markServerStopped(name);
+      try {
+        await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
+        markServerRunning(name);
+        appendLog(`[INFO] 隧道 [${name}] 已用新配置重启 (${describeServerTarget(protocol, port, unixSocket)})`, 'info', 'server');
+      } catch (err: any) {
+        appendLog(`[ERROR] 重启隧道失败: ${err}`, 'error', 'server');
+      }
+    }
+
+    soundManager.playSuccess();
+    showToast(`隧道 [${name}] 已保存`);
+    showNamedEditModal.value = false;
+    namedEditTarget.value = null;
+  } finally {
+    isLockMutating.value = false;
+  }
+};
 
 // 停止服务端隧道 (普通点击音效)
 // 省略 name 时停「表单里当前这条」；列表行内按钮会传入该行隧道名，多开时逐条停
@@ -2542,8 +3129,8 @@ const handleStopRemoteTunnel = async (tunnel: TunnelInfo) => {
   }
 };
 
-// 启动临时链接（临时域名）
-const handleStartQuick = async () => {
+// 启动临时链接（临时域名）。返回是否启动成功（创建弹窗据此决定是否关闭）。
+const handleStartQuick = async (): Promise<boolean> => {
   const port = quickConfig.value.port.trim();
   const protocol = quickConfig.value.protocol;
   const unixSocket = quickConfig.value.unixSocket.trim();
@@ -2551,12 +3138,12 @@ const handleStartQuick = async () => {
   if (protocol === 'unix' || protocol === 'unix+tls') {
     if (!unixSocket) {
       appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'quick');
-      return;
+      return false;
     }
   } else if (protocol !== 'hello_world' && !isPortValid(port)) {
     quickPortHasError.value = true;
     appendLog(`[ERROR] 本地端口错误`, 'error', 'quick');
-    return;
+    return false;
   }
   soundManager.playSuccess();
   // key 需与后端进程表一致：hello_world 固定 key；unix 用 协议:套接字路径
@@ -2576,9 +3163,25 @@ const handleStartQuick = async () => {
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
     quickTunnels.value.push({ key, protocol, port: displayPort, url: '', status: 'starting' });
     showToast('临时链接已启动，临时域名生成中...');
+    return true;
   } catch (err: any) {
     appendLog(`[ERROR] 启动临时链接失败: ${err}`, 'error', 'quick');
+    return false;
   }
+};
+
+// 临时链接创建弹窗：协议 + 端口/套接字，确认即启动（临时域名由 Cloudflare 随机分配）
+const showQuickCreateModal = ref(false);
+
+const openQuickCreateModal = () => {
+  soundManager.playClick();
+  quickPortHasError.value = false;
+  showQuickCreateModal.value = true;
+};
+
+const confirmQuickCreate = async () => {
+  const ok = await handleStartQuick();
+  if (ok) showQuickCreateModal.value = false;
 };
 
 // 刷新临时链接列表（从后端同步运行状态）
@@ -2658,15 +3261,31 @@ const copyHostname = async (hostname: string) => {
   }
 };
 
-// 删除隧道确认流程（固定域名隧道 / 云端托管隧道共用）
-const promptDeleteTunnel = () => {
-  if (!selectedTunnel.value) {
+// 通用复制（访问账号 / 访问密码等），成功与否都给一行提示
+const copyText = async (text: string) => {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(t.value.server_tab.copied_toast);
+  } catch {
+    appendLog('复制失败，请检查剪贴板权限', 'error', 'server');
+  }
+};
+
+// 删除隧道确认流程（固定域名隧道 / 云端托管隧道共用）。
+// 固定域名列表的删除按钮在每一行里，直接把该行隧道传进来；
+// 不带参数时（若有调用方）回退到当前选中的行。
+const promptDeleteTunnel = (tunnel?: TunnelInfo) => {
+  const target = tunnel ?? selectedTunnel.value;
+  if (!target) {
     showToast(t.value.server_tab.errors.no_selection);
     return;
   }
+  soundManager.playClick();
+  selectedTunnel.value = target;
   pendingDelete.value = {
-    id: selectedTunnel.value.id,
-    name: selectedTunnel.value.name,
+    id: target.id,
+    name: target.name,
     scope: 'local',
   };
   showDeleteModal.value = true;
@@ -2720,6 +3339,22 @@ const confirmDeleteTunnel = async () => {
     if (selectedTunnel.value?.id === target.id) selectedTunnel.value = null;
     if (selectedRemoteTunnel.value?.id === target.id) selectedRemoteTunnel.value = null;
     delete remoteConfigs.value[target.id];
+    // 隧道删了，密码锁还挂在它的域名上会变成云端孤儿：顺手清掉（失败不阻断，只记日志）
+    const lock = lockOf(target.id);
+    if (lock) {
+      try {
+        await invoke<string>('tunnel_unlock', {
+          appUid: lock.appUid,
+          tokenUid: lock.tokenUid,
+          accessToken: accessTokenInput.value || null,
+        });
+        appendLog(`[INFO] 已同步解除该隧道的密码锁 (${lock.hostname})`, 'info', 'server');
+      } catch (err: any) {
+        appendLog(`[WARN] 密码锁清理失败（${lock.hostname}）: ${errorText(err)}，可稍后在 Cloudflare 后台手动删除`, 'warn', 'server');
+      }
+      delete tunnelLocks.value[target.id];
+      persistTunnelLocks();
+    }
     await handleRefreshTunnels(target.scope === 'remote' ? 'remote' : 'local');
   } catch (err: any) {
     appendLog(`[ERROR] 删除隧道失败: ${err}`, 'error', 'server');
@@ -2764,6 +3399,8 @@ const openClientAddModal = () => {
   soundManager.playClick();
   editingClientKey.value = '';
   clientForm.value.domain = '';
+  clientForm.value.tokenId = '';
+  clientForm.value.tokenSecret = '';
   clientFormDomainHasError.value = false;
   clientFormPortHasError.value = false;
   showClientAddModal.value = true;
@@ -2775,6 +3412,8 @@ const openClientEditModal = (row: SavedClientTunnel) => {
   editingClientKey.value = row.key;
   clientForm.value.domain = row.domain;
   clientForm.value.port = row.port;
+  clientForm.value.tokenId = row.tokenId || '';
+  clientForm.value.tokenSecret = row.tokenSecret || '';
   clientFormDomainHasError.value = false;
   clientFormPortHasError.value = false;
   showClientAddModal.value = true;
@@ -2793,6 +3432,9 @@ const confirmClientAdd = async () => {
 
   const domain = clientForm.value.domain.trim();
   const port = clientForm.value.port.trim();
+  // 访问凭据：去空格后成对保留（只填其一会先被 clientTokenHasError 拦下）
+  const tokenId = clientForm.value.tokenId.trim();
+  const tokenSecret = clientForm.value.tokenSecret.trim();
 
   if (!isDomainValid(domain)) {
     clientFormDomainHasError.value = true;
@@ -2804,8 +3446,15 @@ const confirmClientAdd = async () => {
     appendLog(`[ERROR] 本地监听端口错误`, 'error', 'client');
     return;
   }
+  if (tokenId.length > 0 !== tokenSecret.length > 0) {
+    appendLog(`[ERROR] 访问账号与访问密码必须同时填写或同时留空`, 'error', 'client');
+    return;
+  }
 
   const key = clientTunnelKey(domain, port);
+  const entry: SavedClientTunnel = tokenId && tokenSecret
+    ? { key, domain, port, tokenId, tokenSecret }
+    : { key, domain, port };
 
   // 编辑模式：只改已保存的配置
   if (editingClientKey.value) {
@@ -2818,7 +3467,7 @@ const confirmClientAdd = async () => {
       return;
     }
     const idx = savedClientTunnels.value.findIndex(t => t.key === editingClientKey.value);
-    if (idx !== -1) savedClientTunnels.value[idx] = { key, domain, port };
+    if (idx !== -1) savedClientTunnels.value[idx] = entry;
     persistClientTunnels();
     soundManager.playSuccess();
     appendLog(`[SUCCESS] 客户端隧道配置已更新为 [${domain}:${port}]`, 'success', 'client');
@@ -2835,7 +3484,7 @@ const confirmClientAdd = async () => {
     return;
   }
 
-  savedClientTunnels.value.push({ key, domain, port });
+  savedClientTunnels.value.push(entry);
   persistClientTunnels();
   soundManager.playSuccess();
   appendLog(`[SUCCESS] 客户端隧道配置已保存 [${domain}:${port}]`, 'success', 'client');
@@ -2848,7 +3497,12 @@ const handleStartClient = async (row: SavedClientTunnel) => {
   soundManager.playClick();
   try {
     // 启动成功的日志由 Rust 侧统一广播，这里不再重复打印
-    await invoke<string>('start_client_tunnel', { domain: row.domain, port: row.port });
+    await invoke<string>('start_client_tunnel', {
+      domain: row.domain,
+      port: row.port,
+      serviceTokenId: row.tokenId || null,
+      serviceTokenSecret: row.tokenSecret || null,
+    });
     showToast(`客户端隧道 ${row.domain}:${row.port} 已连接`);
   } catch (err: any) {
     appendLog(`[ERROR] 启动客户端隧道失败: ${err}`, 'error', 'client');
@@ -4626,6 +5280,133 @@ onUnmounted(() => {
 
 .hostname-tag:active {
   background-color: #004578;
+}
+
+/* ============ 隧道密码锁（Cloudflare Access） ============ */
+
+/* 访问密码列：锁图标 + 明文凭据（点击复制），行宽不够时横向滚动 */
+.col-password {
+  min-width: 180px;
+  max-width: 260px;
+}
+
+.lock-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.lock-btn {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* 明文凭据：账号 / 密码各一行，小号等宽字体，溢出省略（点击复制全文） */
+.lock-cred {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lock-cred-line {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lock-cred-line:hover {
+  color: var(--text-primary);
+}
+
+.lock-cred-empty {
+  color: var(--text-disabled);
+  font-size: 12px;
+}
+
+/* 密码锁开关（创建 / 修改弹窗里的一行式 checkbox） */
+.lock-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lock-switch-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.lock-switch-row.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lock-switch-row input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+.lock-switch-icon {
+  font-size: 14px;
+}
+
+.lock-switch-text {
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+/* 弹窗底部提示行（普通 / 警告两种色） */
+.modal-hint {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.modal-hint.warn {
+  color: var(--warning-color, #c78a1d);
+}
+
+/* 凭据展示弹窗里的行内复制按钮 */
+.copy-inline {
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+/* ============ 配置页：Access Token 卡片 ============ */
+
+.access-token-card {
+  margin-bottom: 12px;
+}
+
+.access-token-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.access-token-field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.access-token-save {
+  height: 34px;
+  flex-shrink: 0;
 }
 
 .hostname-empty {

@@ -136,6 +136,43 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       // 客户端支持多开：返回当前所有在跑的桥接进程快照
       return [...mockClients] as unknown as T;
 
+    // ===== 隧道密码锁（Cloudflare Access）演示模拟 =====
+    // 与 Rust 侧 tunnel_lock / tunnel_unlock / tunnel_rotate_password 语义一致
+    case 'tunnel_lock': {
+      const hostname = ((args?.hostname as string) || '').trim();
+      if (!hostname) throw new Error('域名格式不正确，请先绑定一个合法域名');
+      await new Promise(r => setTimeout(r, 700));
+      emitMockLog(`[SUCCESS] 已为域名 [${hostname}] 开启密码锁（演示模式）`, 'success', 'server');
+      return {
+        hostname,
+        app_uid: `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
+        app_name: `CFTunnel-${hostname.split('.')[0]}-demo`,
+        token_uid: `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
+        client_id: `${Math.random().toString(16).slice(2, 34).padEnd(32, '0')}.access`,
+        client_secret: `cfast_demo_${Math.random().toString(36).slice(2, 58)}`,
+      } as unknown as T;
+    }
+
+    case 'tunnel_unlock': {
+      await new Promise(r => setTimeout(r, 500));
+      emitMockLog('[SUCCESS] 密码锁已解除，该域名恢复公开访问（演示模式）', 'success', 'server');
+      return '密码锁已解除，该域名恢复公开访问' as unknown as T;
+    }
+
+    case 'tunnel_rotate_password': {
+      const hostname = ((args?.hostname as string) || '').trim();
+      await new Promise(r => setTimeout(r, 800));
+      emitMockLog(`[SUCCESS] 访问密码已更换（演示模式）`, 'success', 'server');
+      return {
+        hostname,
+        app_uid: `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
+        app_name: `CFTunnel-${hostname.split('.')[0]}-demo`,
+        token_uid: `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
+        client_id: `${Math.random().toString(16).slice(2, 34).padEnd(32, '0')}.access`,
+        client_secret: `cfast_demo_${Math.random().toString(36).slice(2, 58)}`,
+      } as unknown as T;
+    }
+
     case 'start_remote_tunnel_by_id': {
       const tunnelId = ((args?.tunnelId as string) || '').trim();
       const tunnelName = ((args?.tunnelName as string) || tunnelId).trim();
