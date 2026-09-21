@@ -349,12 +349,12 @@
                             <span
                               class="lock-cred-line mono"
                               :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                              @click.stop="copyText(lockOf(tunnel.id)?.clientId)"
+                              @click.stop="copyText(lockOf(tunnel.id)?.clientId || '')"
                             >{{ lockOf(tunnel.id)?.clientId }}</span>
                             <span
                               class="lock-cred-line mono"
                               :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                              @click.stop="copyText(lockOf(tunnel.id)?.clientSecret)"
+                              @click.stop="copyText(lockOf(tunnel.id)?.clientSecret || '')"
                             >{{ lockOf(tunnel.id)?.clientSecret }}</span>
                           </div>
                         </div>
