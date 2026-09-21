@@ -349,13 +349,13 @@
                             <span
                               class="lock-cred-line mono"
                               :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                              @click.stop="copyText(lockOf(tunnel.id)?.client_id)"
-                            >{{ lockOf(tunnel.id)?.client_id }}</span>
+                              @click.stop="copyText(lockOf(tunnel.id)?.clientId)"
+                            >{{ lockOf(tunnel.id)?.clientId }}</span>
                             <span
                               class="lock-cred-line mono"
                               :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                              @click.stop="copyText(lockOf(tunnel.id)?.client_secret)"
-                            >{{ lockOf(tunnel.id)?.client_secret }}</span>
+                              @click.stop="copyText(lockOf(tunnel.id)?.clientSecret)"
+                            >{{ lockOf(tunnel.id)?.clientSecret }}</span>
                           </div>
                         </div>
                       </template>
@@ -1462,7 +1462,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
 import { LANG_ORDER, LANG_DATA } from './i18n';
 import { LangKey, TunnelInfo, QuickTunnelItem, ClientTunnelItem, LogEntry, DnsBinding } from './types';
