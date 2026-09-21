@@ -148,6 +148,9 @@ pub struct TunnelLockInfo {
     pub app_name: String,
     /// Service Token UID（换密码 / 解锁时用它删 Token）
     pub token_uid: String,
+    /// 访问策略 UID（解锁时必须先删它：账号级策略独立于应用存在，
+    /// 不删会一直引用 Token，导致 Token 报 service_token_in_use 删不掉）
+    pub policy_uid: String,
     /// 访问账号（Service Token 的 client_id）
     pub client_id: String,
     /// 访问密码（Service Token 的 client_secret）
@@ -2908,35 +2911,120 @@ fn lock_tunnel_impl(hostname: &str, token: &str, account_id: &str) -> Result<Tun
         app_uid,
         app_name,
         token_uid,
+        policy_uid: policy_id,
         client_id,
         client_secret,
     })
 }
 
-/// 删除一条密码锁（应用 + Token）。两个删除互相独立、尽力而为，
-/// 任一失败都如实带回错误信息，前端据此提示用户去面板手动清理。
+/// 判断 Cloudflare API 错误是否为「资源不存在（404）」。
+/// 404 在解锁流程里意味着「已经删掉了」，属于成功而非失败。
+fn is_cf_not_found(e: &str) -> bool {
+    e.contains("返回 404")
+}
+
+/// 删除一条密码锁（应用 + 策略 + Token）。
+///
+/// 三个资源都要删，且顺序有讲究：
+///   1. 应用（Access 拦截的载体，删掉后域名恢复公开）
+///   2. 策略（**关键**：策略是账号级资源，独立于应用存在。上一次实现漏删它，
+///      导致它一直引用 Token，删 Token 永远报 service_token_in_use）
+///   3. Token（最后删，此时已无引用）
+///
+/// 容错规则：任何一步的 404 都视为「已删除」，不算失败——
+/// 这样上次解锁删了一半（比如应用删了、策略没删）时，再点一次解锁能干净收尾。
+/// 老版本条目没记录 policy_uid，则按 include 里的 token_id 反查找到它。
 fn unlock_tunnel_impl(
     app_uid: &str,
     token_uid: &str,
+    policy_uid: Option<&str>,
     token: &str,
     account_id: &str,
 ) -> Result<String, String> {
-    // app_uid / token_uid 都是标准 UUID（会被拼进请求 URL，必须严格校验防路径注入）
+    // app_uid / token_uid / policy_uid 都是标准 UUID（会被拼进请求 URL，必须严格校验防路径注入）
     if !is_valid_tunnel_id(app_uid) || !is_valid_tunnel_id(token_uid) {
         return Err("锁资源 ID 格式不正确".to_string());
     }
+    if let Some(pid) = policy_uid {
+        let pid = pid.trim();
+        if !pid.is_empty() && !is_valid_tunnel_id(pid) {
+            return Err("锁资源 ID 格式不正确".to_string());
+        }
+    }
     let base = format!("https://api.cloudflare.com/client/v4/accounts/{}/access", account_id);
 
-    let app_res = cf_api_request("DELETE", &format!("{}/apps/{}", base, app_uid), token, None);
-    let token_res = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None);
-
     let mut failed: Vec<String> = Vec::new();
-    if let Err(e) = &app_res {
-        failed.push(format!("删除访问应用失败: {}", e));
+
+    // 1. 删应用（404 = 已删除，跳过）
+    if let Err(e) = cf_api_request("DELETE", &format!("{}/apps/{}", base, app_uid), token, None) {
+        if !is_cf_not_found(&e) {
+            failed.push(format!("删除访问应用失败: {}", e));
+        }
     }
-    if let Err(e) = &token_res {
-        failed.push(format!("删除访问凭据失败: {}", e));
+
+    // 2. 删策略：优先用记录里的 policy_uid；没有（老条目）就按 token_id 反查
+    let mut policy_ids: Vec<String> = Vec::new();
+    match policy_uid.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(pid) => policy_ids.push(pid.to_string()),
+        None => {
+            // 老条目兼容：全量拉账号级策略，找 include 里引用了该 Token 的那条
+            match cf_api_request("GET", &format!("{}/policies", base), token, None) {
+                Ok(body) => {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                        if let Some(arr) = json.get("result").and_then(|v| v.as_array()) {
+                            for p in arr {
+                                let refers_token = p
+                                    .get("include")
+                                    .and_then(|v| v.as_array())
+                                    .map(|inc| {
+                                        inc.iter().any(|x| {
+                                            x.get("service_token")
+                                                .and_then(|s| s.get("token_id"))
+                                                .and_then(|t| t.as_str())
+                                                .map(|t| t == token_uid)
+                                                .unwrap_or(false)
+                                        })
+                                    })
+                                    .unwrap_or(false);
+                                if refers_token {
+                                    if let Some(id) = p.get("id").and_then(|v| v.as_str()) {
+                                        policy_ids.push(id.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    // 拉不到策略列表不阻断后续：Token 若因此删不掉会单独报错
+                    if !is_cf_not_found(&e) {
+                        failed.push(format!("查找访问策略失败: {}", e));
+                    }
+                }
+            }
+        }
     }
+    for pid in &policy_ids {
+        if let Err(e) = cf_api_request("DELETE", &format!("{}/policies/{}", base, pid), token, None) {
+            if !is_cf_not_found(&e) {
+                failed.push(format!("删除访问策略失败: {}", e));
+            }
+        }
+    }
+
+    // 3. 删 Token（404 = 已删除，跳过；仍被引用 = 策略没删干净，给可操作提示）
+    if let Err(e) = cf_api_request("DELETE", &format!("{}/service_tokens/{}", base, token_uid), token, None) {
+        if !is_cf_not_found(&e) {
+            if e.contains("service_token_in_use") {
+                failed.push(
+                    "删除访问凭据失败: 该凭据仍被某个策略引用，请稍后重试，或到 Cloudflare 面板 Zero Trust > Access > Service Auth 手动删除".to_string(),
+                );
+            } else {
+                failed.push(format!("删除访问凭据失败: {}", e));
+            }
+        }
+    }
+
     if failed.is_empty() {
         Ok("密码锁已解除，该域名恢复公开访问".to_string())
     } else {
@@ -2955,34 +3043,48 @@ async fn tunnel_lock(hostname: String, access_token: Option<String>) -> Result<T
     .await
 }
 
-/// 解除密码锁：删掉 Access 应用与 Service Token，域名恢复公开。
+/// 解除密码锁：删掉 Access 应用、访问策略与 Service Token，域名恢复公开。
 #[tauri::command]
 async fn tunnel_unlock(
     app_uid: String,
     token_uid: String,
+    policy_uid: Option<String>,
     access_token: Option<String>,
 ) -> Result<String, String> {
     run_blocking("解除隧道密码锁", move || {
         let (token, account_id) = access_api_credentials(access_token.as_deref())?;
-        unlock_tunnel_impl(app_uid.trim(), token_uid.trim(), &token, &account_id)
+        unlock_tunnel_impl(
+            app_uid.trim(),
+            token_uid.trim(),
+            policy_uid.as_deref(),
+            &token,
+            &account_id,
+        )
     })
     .await
 }
 
-/// 换密码：删掉旧的锁（应用 + Token），重新走一遍上锁流程。
+/// 换密码：删掉旧的锁（应用 + 策略 + Token），重新走一遍上锁流程。
 /// 旧的访问密码随即作废，拿到过旧密码的连接全部失效。
 #[tauri::command]
 async fn tunnel_rotate_password(
     hostname: String,
     app_uid: String,
     token_uid: String,
+    policy_uid: Option<String>,
     access_token: Option<String>,
 ) -> Result<TunnelLockInfo, String> {
     run_blocking("更换隧道访问密码", move || {
         let host = hostname.trim().to_string();
         let (token, account_id) = access_api_credentials(access_token.as_deref())?;
-        // 旧锁删不干净不阻断换新：最坏情况是云端多一个孤儿应用，锁本身仍然有效
-        let _ = unlock_tunnel_impl(app_uid.trim(), token_uid.trim(), &token, &account_id);
+        // 旧锁删不干净不阻断换新：最坏情况是云端多一个孤儿资源，锁本身仍然有效
+        let _ = unlock_tunnel_impl(
+            app_uid.trim(),
+            token_uid.trim(),
+            policy_uid.as_deref(),
+            &token,
+            &account_id,
+        );
         lock_tunnel_impl(&host, &token, &account_id)
     })
     .await

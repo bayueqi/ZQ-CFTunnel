@@ -1339,15 +1339,27 @@
           <div class="fluent-form-group">
             <label class="form-label">{{ t.server_tab.lock_account_label }}</label>
             <div class="input-container">
-              <input type="text" :value="lockInfoDraft?.clientId" class="fluent-input mono" readonly />
-              <button class="fluent-btn small copy-inline" :title="t.server_tab.click_to_copy" @click="copyText(lockInfoDraft?.clientId || '')">📋</button>
+              <input
+                type="text"
+                :value="lockInfoDraft?.clientId"
+                class="fluent-input mono click-copy"
+                readonly
+                :title="t.server_tab.click_to_copy"
+                @click="copyText(lockInfoDraft?.clientId || '')"
+              />
             </div>
           </div>
           <div class="fluent-form-group">
             <label class="form-label">{{ t.server_tab.lock_secret_label }}</label>
             <div class="input-container">
-              <input type="text" :value="lockInfoDraft?.clientSecret" class="fluent-input mono" readonly />
-              <button class="fluent-btn small copy-inline" :title="t.server_tab.click_to_copy" @click="copyText(lockInfoDraft?.clientSecret || '')">📋</button>
+              <input
+                type="text"
+                :value="lockInfoDraft?.clientSecret"
+                class="fluent-input mono click-copy"
+                readonly
+                :title="t.server_tab.click_to_copy"
+                @click="copyText(lockInfoDraft?.clientSecret || '')"
+              />
             </div>
           </div>
         </div>
@@ -2136,6 +2148,8 @@ type TunnelLockEntry = {
   appUid: string;
   appName: string;
   tokenUid: string;
+  /** 访问策略 UID；老版本条目没有该字段（空串），解锁时后端会按 token_id 反查 */
+  policyUid: string;
   clientId: string;
   clientSecret: string;
 };
@@ -2165,6 +2179,7 @@ const loadTunnelLocks = (): Record<string, TunnelLockEntry> => {
           appUid: e.appUid,
           appName: String(e.appName || ''),
           tokenUid: e.tokenUid,
+          policyUid: typeof e.policyUid === 'string' ? e.policyUid : '',
           clientId: e.clientId,
           clientSecret: e.clientSecret,
         };
@@ -2208,7 +2223,7 @@ const doLock = async (tunnelId: string, hostname: string): Promise<boolean> => {
   try {
     const res = await invoke<{
       hostname: string; app_uid: string; app_name: string;
-      token_uid: string; client_id: string; client_secret: string;
+      token_uid: string; policy_uid: string; client_id: string; client_secret: string;
     }>('tunnel_lock', { hostname, accessToken: accessTokenInput.value || null });
     tunnelLocks.value[tunnelId] = {
       tunnelId,
@@ -2216,6 +2231,7 @@ const doLock = async (tunnelId: string, hostname: string): Promise<boolean> => {
       appUid: res.app_uid,
       appName: res.app_name,
       tokenUid: res.token_uid,
+      policyUid: res.policy_uid,
       clientId: res.client_id,
       clientSecret: res.client_secret,
     };
@@ -2237,6 +2253,7 @@ const doUnlock = async (entry: TunnelLockEntry): Promise<boolean> => {
     const res = await invoke<string>('tunnel_unlock', {
       appUid: entry.appUid,
       tokenUid: entry.tokenUid,
+      policyUid: entry.policyUid || null,
       accessToken: accessTokenInput.value || null,
     });
     delete tunnelLocks.value[entry.tunnelId];
@@ -2837,11 +2854,12 @@ const confirmNamedEdit = async () => {
         try {
           const res = await invoke<{
             hostname: string; app_uid: string; app_name: string;
-            token_uid: string; client_id: string; client_secret: string;
+            token_uid: string; policy_uid: string; client_id: string; client_secret: string;
           }>('tunnel_rotate_password', {
             hostname: wantHost,
             appUid: currentLock.appUid,
             tokenUid: currentLock.tokenUid,
+            policyUid: currentLock.policyUid || null,
             accessToken: accessTokenInput.value || null,
           });
           tunnelLocks.value[target.id] = {
@@ -2850,6 +2868,7 @@ const confirmNamedEdit = async () => {
             appUid: res.app_uid,
             appName: res.app_name,
             tokenUid: res.token_uid,
+            policyUid: res.policy_uid,
             clientId: res.client_id,
             clientSecret: res.client_secret,
           };
@@ -5323,6 +5342,16 @@ onUnmounted(() => {
 
 .lock-cred-line:hover {
   color: var(--text-primary);
+}
+
+/* 弹窗里的凭据输入框：点击即复制（无独立复制按钮），鼠标呈手型提示可点 */
+.click-copy {
+  cursor: pointer;
+  user-select: all;
+}
+
+.click-copy:hover {
+  border-color: var(--accent, #0078d4);
 }
 
 .lock-cred-empty {
