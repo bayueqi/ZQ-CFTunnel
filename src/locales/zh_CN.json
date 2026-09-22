@@ -310,7 +310,7 @@
     "open_link_failed": "打开链接失败: {err}",
     "config_dir_opened": "已打开配置目录: {dir}",
     "config_dir_open_failed": "打开配置文件目录失败: {err}",
-    "tunnel_list_refreshed": "已刷新隧道列表，共获取到 {count} 条隧道",
+    "tunnel_list_refreshed": "已刷新固定隧道列表，共获取到 {count} 条隧道",
     "tunnel_list_refresh_failed": "刷新隧道列表失败: {err}",
     "tunnel_need_config": "隧道 [{name}] 还没有配置协议和端口，请先点击「修改」补全",
     "unix_socket_required": "unix / unix+tls 协议必须填写套接字路径",

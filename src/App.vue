@@ -1513,14 +1513,6 @@ const switchServerView = (view: 'quick' | 'named') => {
 // 当前是否处于服务端某个子视图
 const isServerView = (view: 'quick' | 'named') => localSubMode.value === view;
 
-// 表单输入
-const serverConfig = ref({
-  name: localStorage.getItem('server_tunnel_name') || 'mc',
-  port: localStorage.getItem('server_port') || '25565',
-  protocol: localStorage.getItem('server_protocol') || 'http',
-  unixSocket: localStorage.getItem('server_unix_socket') || '',
-});
-
 const clientForm = ref({
   domain: '',
   port: localStorage.getItem('client_port') || '25566',
@@ -1530,8 +1522,9 @@ const clientForm = ref({
 });
 
 // DNS 路由绑定表单 (cloudflared tunnel route dns)
+// 隧道名不预填：弹窗打开时由 openDnsAddModal 预选列表里的第一条固定隧道
 const dnsRoute = ref({
-  name: localStorage.getItem('dns_route_name') || serverConfig.value.name || '',
+  name: '',
   domain: localStorage.getItem('dns_route_domain') || '',
 });
 
@@ -1893,24 +1886,12 @@ const errText = (key: string): string => {
   return map[key] || key;
 };
 
+// 新行一律留空：协议默认 http、端口空着，插在兜底行之前（兜底行永远待在最后）。
+// 不复用上一行、也不去翻「配置」页记的本机服务 —— 点「添加」冒出来的行自带 25565，
+// 用户还得先擦掉再填，等于替他做了决定。
 const addIngressRow = () => {
-  // 新行沿用上一条**普通行**的协议与端口（同一个隧道下多域名指向同一服务是常见做法），
-  // 只清域名；插在兜底行之前，保证兜底行永远待在最后。
-  // 上面没有普通行时（刚打开、只有兜底行）退回「配置」页记的本机服务，省得从头填。
   const rows = tunnelFormRows.value;
-  const prev = rows[rows.length - 2];
-  if (prev) {
-    rows.splice(rows.length - 1, 0, { ...prev, hostname: '' });
-    return;
-  }
-  const proto = serverConfig.value.protocol || 'http';
-  const mode = addressModeOf(proto);
-  rows.splice(Math.max(rows.length - 1, 0), 0, {
-    ...emptyIngressRow(),
-    protocol: mode === 'none' ? 'http' : proto,
-    port: mode === 'port' ? serverConfig.value.port || '' : '',
-    unixSocket: mode === 'socket' ? serverConfig.value.unixSocket || '' : '',
-  });
+  rows.splice(Math.max(rows.length - 1, 0), 0, emptyIngressRow());
 };
 
 // 兜底行不可删（它在数组末尾，模板也不给它删除按钮），其余行随便删 ——
@@ -1970,7 +1951,9 @@ const openTunnelCreateModal = () => {
   soundManager.playClick();
   tunnelFormMode.value = 'create';
   tunnelFormTarget.value = null;
-  tunnelFormName.value = serverConfig.value.name || 'mc';
+  // 隧道名留空由用户自己起：以前会沿用本会话上一次创建的名字，
+  // 再点「创建」就带着上一条隧道的名字，容易稀里糊涂建出重名隧道。
+  tunnelFormName.value = '';
   // 初始只有末尾那条常驻的「默认兜底」：默认档就是 http_status:404（未匹配回 404），
   // 不预置任何普通行 —— 要按域名转发就点「添加」，自己填域名与端口。
   // （以前预置一行填好协议端口的普通行，用户一打开就得先删它 / 改它，等于替他做了决定。）
@@ -2266,7 +2249,6 @@ const confirmTunnelForm = async () => {
       null;
     if (first) {
       saveTunnelCfgValues(name, first.protocol, first.port.trim(), first.unixSocket.trim());
-      if (isCreate) serverConfig.value.name = name;
     }
 
     await handleRefreshTunnels(true);
@@ -2960,10 +2942,9 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
   }
 };
 
-// 停止服务端隧道 (普通点击音效)
-// 省略 name 时停「表单里当前这条」；列表行内按钮会传入该行隧道名，多开时逐条停
-const handleStopServer = async (name?: string) => {
-  const target = (typeof name === 'string' ? name : serverConfig.value.name).trim();
+// 停止服务端隧道 (普通点击音效)；列表行内按钮传入该行隧道名，多开时逐条停
+const handleStopServer = async (name: string) => {
+  const target = name.trim();
   if (!target) {
     appendLog(`[ERROR] ${t.value.logs.no_tunnel_to_stop}`, 'error', 'server');
     return;
