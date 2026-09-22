@@ -78,17 +78,6 @@
 
 创建后填入「⚙️ 配置」页的「Access Token（密码锁凭证）」。
 
-## 协议
-
-| 协议 | 适用服务 |
-| --- | --- |
-| HTTP | 网站 |
-| HTTPS | 本机已启用 TLS 的服务 |
-| TCP | 游戏服务、SSH、数据库等 |
-| UNIX | 本机套接字（仅 Linux / macOS） |
-| UNIX + TLS | 本机套接字，叠加 TLS（仅 Linux / macOS） |
-| Hello World | cloudflared 自带的测试服务 |
-
 
 ### 客户端配置
 
@@ -102,12 +91,16 @@
 
 启动后访问 `127.0.0.1:<监听端口>` 即可，支持同时运行多条连接。
 
-不使用客户端时，可执行等价命令：
+## 协议
 
-```bash
-cloudflared access tcp --hostname mc.example.com --url tcp://127.0.0.1:25566 \
-  --service-token-id <访问账号> --service-token-secret <访问密码>
-```
+| 协议 | 适用服务 |
+| --- | --- |
+| HTTP | 网站 |
+| HTTPS | 本机已启用 TLS 的服务 |
+| TCP | 游戏服务、SSH、数据库等 |
+| UNIX | 本机套接字（仅 Linux / macOS） |
+| UNIX + TLS | 本机套接字，叠加 TLS（仅 Linux / macOS） |
+| Hello World | cloudflared 自带的测试服务 |
 
 ## 开发
 
