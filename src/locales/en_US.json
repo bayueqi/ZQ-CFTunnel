@@ -86,6 +86,8 @@
     "config_none": "None",
     "config_load_failed": "Failed to read",
     "delete_force_hint": "Force delete: the tunnel will be removed even if it is running or still has active connections.",
+    "delete_cascade_hint": "The {domains} domain(s) bound to this tunnel and their {locks} password lock(s) will be deleted as well.",
+    "dns_unbind_lock_hint": "This domain is locked: unbinding also deletes its password lock (the access account and password stop working immediately).",
     "remote_add_btn": "Add",
     "remote_add_title": "Add Cloud-Hosted Tunnel",
     "remote_edit_title": "Edit Cloud-Hosted Tunnel",

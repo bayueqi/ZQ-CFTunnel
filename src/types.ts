@@ -173,6 +173,10 @@ export interface LangPack {
     rotate_confirm_title: string;
     /** 换密码二次确认弹窗正文，{hostname} 会被替换为域名 */
     rotate_confirm_msg: string;
+    /** 删除隧道确认框里的连带删除提示，{domains} / {locks} 会被替换为数量 */
+    delete_cascade_hint: string;
+    /** 解绑域名确认框里的提示：该域名的密码锁会一并删除 */
+    dns_unbind_lock_hint: string;
     copied_toast: string;
     edit_need_config: string;
     edit_restart_hint: string;

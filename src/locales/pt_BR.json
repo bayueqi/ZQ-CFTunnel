@@ -86,6 +86,8 @@
     "config_none": "Nenhuma",
     "config_load_failed": "Falha na leitura",
     "delete_force_hint": "Exclusão forçada: o túnel será removido mesmo em execução ou com conexões ativas.",
+    "delete_cascade_hint": "Os {domains} domínio(s) vinculados a este túnel e seus {locks} bloqueio(s) de senha também serão excluídos.",
+    "dns_unbind_lock_hint": "Este domínio está bloqueado: desvincular também exclui o bloqueio de senha dele (a conta e a senha de acesso param de funcionar imediatamente).",
     "remote_add_btn": "Adicionar",
     "remote_add_title": "Adicionar túnel hospedado na nuvem",
     "remote_edit_title": "Editar túnel hospedado na nuvem",

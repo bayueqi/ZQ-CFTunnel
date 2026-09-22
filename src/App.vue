@@ -880,6 +880,8 @@
         </div>
         <div class="modal-body">
           <p>{{ deleteConfirmMessage }}</p>
+          <!-- 连带删除范围：该隧道绑定的域名（后端会一并删 CNAME）与其上的密码锁 -->
+          <p v-if="deleteCascadeHint" class="modal-danger-hint">{{ deleteCascadeHint }}</p>
           <!-- 删除一律走 cloudflared tunnel delete -f：不管有没有服务在跑 / 还有没有活动连接 -->
           <p class="modal-danger-hint">{{ t.server_tab.delete_force_hint }}</p>
         </div>
@@ -995,6 +997,11 @@
         </div>
         <div class="modal-body">
           <p>{{ t.server_tab.errors.dns_unbind_confirm_msg.replace('{name}', dnsUnbindTarget?.hostname || '').replace('{tunnel}', dnsUnbindTarget?.tunnelName || '') }}</p>
+          <!-- 该域名若上过锁，解绑会连带把它删掉（锁只能挂在域名上，域名没了锁就成孤儿） -->
+          <p
+            v-if="dnsUnbindTarget && lockOf(dnsUnbindTarget.hostname)"
+            class="modal-danger-hint"
+          >{{ t.server_tab.dns_unbind_lock_hint }}</p>
         </div>
         <div class="modal-footer">
           <button class="fluent-btn" @click="cancelUnbindDnsRoute">{{ t.exit_modal.btn_cancel }}</button>
@@ -2241,8 +2248,9 @@ const doLock = async (hostname: string): Promise<boolean> => {
   }
 };
 
-// 解锁（底层）：删掉云端的 Access 应用与 Service Token，恢复公开访问
-const doUnlock = async (entry: TunnelLockEntry): Promise<boolean> => {
+// 解锁（底层）：删掉云端的 Access 应用与 Service Token，恢复公开访问。
+// quiet：批量清理（解绑域名 / 删除隧道）时不逐个弹失败 toast，由调用方汇总提示。
+const doUnlock = async (entry: TunnelLockEntry, opts: { quiet?: boolean } = {}): Promise<boolean> => {
   try {
     const res = await invoke<string>('tunnel_unlock', {
       appUid: entry.appUid,
@@ -2256,7 +2264,7 @@ const doUnlock = async (entry: TunnelLockEntry): Promise<boolean> => {
     return true;
   } catch (err: any) {
     appendLog(`[ERROR] 解锁失败: ${errorText(err)}`, 'error', 'server');
-    showToast(`${errorText(err)}`);
+    if (!opts.quiet) showToast(`${errorText(err)}`);
     return false;
   }
 };
@@ -2387,6 +2395,73 @@ const dnsBoundGroups = computed<DnsBoundGroup[]>(() =>
     .filter(g => g.records.length > 0),
 );
 
+// ================ 域名清理：解绑单个域名 / 删除整条隧道共用 ================
+//
+// 密码锁挂在「域名」上（Access 应用按域名建），所以域名一旦被解绑、或它所属的隧道
+// 被删除，这把锁就必须跟着消失 —— 否则云端会残留一个仍在拦截该域名的 Access 应用，
+// 而软件里再也定位不到它（域名记录没了，锁记录也成了孤儿）。
+// 下面三个函数把这段逻辑收在一处，两条删除路径走同一套代码。
+
+/** 一条绑定域名：清锁只需要 hostname，兜底补删 DNS 记录需要 recordId */
+type BoundDomain = { recordId: string; hostname: string };
+
+/** 取某条隧道当前绑定的域名（按域名去重）。
+ *  **必须在删隧道之前调用** —— 隧道一删，列表里就查不到它绑了哪些域名了。 */
+const collectBoundDomains = (tunnelId: string): BoundDomain[] => {
+  const out = new Map<string, BoundDomain>();
+  for (const h of tunnelList.value.find(x => x.id === tunnelId)?.hostnames || []) {
+    out.set(h.name, { recordId: h.id, hostname: h.name });
+  }
+  // 隧道列表与 DNS 绑定面板是两份视图，取并集，避免其中一处没刷新时漏掉域名
+  for (const g of dnsBoundGroups.value) {
+    if (g.tunnelId !== tunnelId) continue;
+    for (const r of g.records) {
+      if (!out.has(r.hostname)) out.set(r.hostname, { recordId: r.recordId, hostname: r.hostname });
+    }
+  }
+  return [...out.values()];
+};
+
+/** 核对这些域名里还有哪些 DNS 记录残留在云端：删隧道时后端会顺手清理绑定的域名，
+ *  但拿不到 tunnel id（未授权登录等）时会跳过，这里按快照兜底。查询失败就交给调用方硬删。 */
+const findLeftoverDomains = async (domains: BoundDomain[]): Promise<BoundDomain[]> => {
+  if (domains.length === 0) return [];
+  try {
+    const map = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
+    const alive = new Set<string>();
+    for (const list of Object.values(map)) for (const b of list) alive.add(b.id);
+    return domains.filter(d => alive.has(d.recordId));
+  } catch (err: any) {
+    appendLog(`[WARN] 核对残留域名失败，将直接尝试补删: ${errorText(err)}`, 'warn', 'server');
+    return domains;
+  }
+};
+
+/** 清掉这些域名上的密码锁：云端的 Access 应用 + 策略 + Service Token，成功后连本地记录一起删。
+ *  云端删失败时**保留**本地记录 —— 里面存着资源 ID，该域名重新绑定后还能再点解锁重试。 */
+const purgeDomainLocks = async (
+  domains: BoundDomain[],
+): Promise<{ done: string[]; failed: string[] }> => {
+  const done: string[] = [];
+  const failed: string[] = [];
+  if (domains.length === 0) return { done, failed };
+  const locked = domains.filter(d => lockOf(d.hostname));
+  if (locked.length === 0) return { done, failed };
+  isLockMutating.value = true;
+  try {
+    for (const d of locked) {
+      const lock = lockOf(d.hostname);
+      if (!lock) continue;
+      // quiet：批量清理不逐个弹 toast，成败由调用方汇总成一行日志 + 一条提示
+      const ok = await doUnlock(lock, { quiet: true });
+      (ok ? done : failed).push(d.hostname);
+    }
+  } finally {
+    isLockMutating.value = false;
+  }
+  return { done, failed };
+};
+
 // 控制台高度与拖拽调整逻辑
 const consoleHeight = ref(Number(localStorage.getItem('console_height')) || 170);
 let isResizing = false;
@@ -2434,6 +2509,19 @@ const deleteConfirmMessage = computed(() => {
       ? t.value.server_tab.remote_delete_confirm_msg
       : t.value.server_tab.errors.delete_confirm_msg;
   return String(tpl).replace('{name}', name).replace('{target}', name);
+});
+
+// 删除确认框里的「连带删除」提示：这条隧道绑了几个域名、其中几把密码锁会被一起删掉。
+// 域名一条都没有、也没锁时不显示这行。
+const deleteCascadeHint = computed(() => {
+  const id = pendingDelete.value?.id;
+  if (!id) return '';
+  const domains = collectBoundDomains(id);
+  const locks = domains.filter(d => lockOf(d.hostname)).length;
+  if (domains.length === 0) return '';
+  return t.value.server_tab.delete_cascade_hint
+    .replace('{domains}', String(domains.length))
+    .replace('{locks}', String(locks));
 });
 
 const showExitConfirmModal = ref(false);
@@ -3037,26 +3125,30 @@ const cancelUnbindDnsRoute = () => {
   dnsUnbindTarget.value = null;
 };
 
-// 解绑：删除 Cloudflare 侧的 CNAME 记录，不影响隧道本身与 ingress 配置
+// 解绑：先删掉该域名的密码锁（锁是挂在域名上的，DNS 记录删掉后就再也定位不到
+// 它对应的 Access 应用了），再删 Cloudflare 侧的 CNAME 记录。隧道本身与 ingress 不受影响。
 const confirmUnbindDnsRoute = async () => {
   const target = dnsUnbindTarget.value;
   if (!target || isDnsMutating.value) return;
 
   isDnsMutating.value = true;
   try {
-    // 该域名若有密码锁，先解锁再解绑：否则云端会残留一个拦截该域名的 Access 应用
-    const lock = lockOf(target.hostname);
-    if (lock && !isLockMutating.value) {
-      isLockMutating.value = true;
-      try {
-        await doUnlock(lock);
-      } finally {
-        isLockMutating.value = false;
-      }
+    const { done, failed } = await purgeDomainLocks([
+      { recordId: target.recordId, hostname: target.hostname },
+    ]);
+    if (failed.length) {
+      appendLog(
+        `[WARN] 域名 [${target.hostname}] 的密码锁未能清除，云端可能残留拦截该域名的 Access 应用，可稍后到 Cloudflare 面板手动删除`,
+        'warn',
+        'server',
+      );
     }
+
     const res = await invoke<string>('delete_dns_route', { recordId: target.recordId });
     appendLog(`[SUCCESS] ${res} (${target.hostname})`, 'success', 'server');
-    showToast(`${target.hostname} 已解除绑定`);
+    showToast(
+      `${target.hostname} 已解除绑定${done.length ? '，密码锁已一并删除' : ''}`,
+    );
     cancelUnbindDnsRoute();
     await refreshHostnamesOnly();
   } catch (err: any) {
@@ -3313,6 +3405,10 @@ const confirmDeleteTunnel = async () => {
   showDeleteModal.value = false;
   pendingDelete.value = null;
 
+  // 隧道一删，列表里就查不到它绑过哪些域名了，而密码锁是按域名存的 ——
+  // 所以先把「域名 + DNS 记录 ID」快照下来，后面补删域名、清密码锁都要靠它。
+  const bound = collectBoundDomains(target.id);
+
   // 先停掉本机正在跑的那个进程：强制删除只是把隧道从 Cloudflare 侧摘掉，
   // 本机进程不主动停会一直重连报错，日志里刷屏。
   try {
@@ -3329,35 +3425,46 @@ const confirmDeleteTunnel = async () => {
     // 停不掉也不影响强制删除，继续往下走
   }
 
-  appendLog(`[INFO] 正在强制删除隧道 [${target.name}]...`, 'info', 'server');
+  const domainNote = bound.length ? `（含 ${bound.length} 条绑定域名）` : '';
+  appendLog(`[INFO] 正在强制删除隧道 [${target.name}]${domainNote}...`, 'info', 'server');
   try {
     const res = await invoke<string>('delete_tunnel', { name: target.name });
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(`隧道 [${target.name}] 已删除`);
+
+    // 1. 域名：后端删隧道时会顺带清掉绑定的 CNAME，但拿不到 tunnel id 时会跳过，
+    //    这里按快照核对一次，只补删真正还留在云端的那些。
+    let dnsDeleted = 0;
+    for (const d of await findLeftoverDomains(bound)) {
+      try {
+        await invoke<string>('delete_dns_route', { recordId: d.recordId });
+        dnsDeleted += 1;
+      } catch (err: any) {
+        appendLog(`[WARN] 残留域名 [${d.hostname}] 清理失败: ${errorText(err)}`, 'warn', 'server');
+      }
+    }
+    if (dnsDeleted) appendLog(`[INFO] 已补删 ${dnsDeleted} 条残留在云端的域名绑定`, 'info', 'server');
+
+    // 2. 密码锁：逐域名删掉云端的 Access 应用 / 策略 / Service Token（含本地记录），
+    //    否则域名没了、锁还在云端拦着，软件里也再定位不到它。
+    const { done, failed } = await purgeDomainLocks(bound);
+    if (failed.length) {
+      appendLog(
+        `[WARN] 以下域名的密码锁未能清除，云端可能残留 Access 应用，可稍后到 Cloudflare 面板手动删除: ${failed.join('、')}`,
+        'warn',
+        'server',
+      );
+    }
+
+    const noteParts: string[] = [];
+    if (bound.length || dnsDeleted) noteParts.push(`域名 ${Math.max(bound.length, dnsDeleted)} 条`);
+    if (done.length) noteParts.push(`密码锁 ${done.length} 把`);
+    showToast(
+      `隧道 [${target.name}] 已删除${noteParts.length ? `，已连带清理${noteParts.join('、')}` : ''}`,
+    );
+
     if (selectedTunnel.value?.id === target.id) selectedTunnel.value = null;
     if (selectedRemoteTunnel.value?.id === target.id) selectedRemoteTunnel.value = null;
     delete remoteConfigs.value[target.id];
-    // 隧道删了，密码锁还挂在它的域名上会变成云端孤儿：逐域名清掉（失败不阻断，只记日志）
-    // 绑定域名从隧道列表取（云端托管隧道也在 tunnelList 里，scope 不用分支）
-    const boundHostnames = (tunnelList.value.find(x => x.id === target.id)?.hostnames || [])
-      .map(h => h.name);
-    for (const hostname of boundHostnames) {
-      const lock = lockOf(hostname);
-      if (!lock) continue;
-      try {
-        await invoke<string>('tunnel_unlock', {
-          appUid: lock.appUid,
-          tokenUid: lock.tokenUid,
-          policyUid: lock.policyUid || null,
-          accessToken: accessTokenInput.value || null,
-        });
-        appendLog(`[INFO] 已同步解除域名密码锁 (${lock.hostname})`, 'info', 'server');
-      } catch (err: any) {
-        appendLog(`[WARN] 密码锁清理失败（${lock.hostname}）: ${errorText(err)}，可稍后在 Cloudflare 后台手动删除`, 'warn', 'server');
-      }
-      delete tunnelLocks.value[hostname];
-    }
-    persistTunnelLocks();
     await handleRefreshTunnels(target.scope === 'remote' ? 'remote' : 'local');
   } catch (err: any) {
     appendLog(`[ERROR] 删除隧道失败: ${err}`, 'error', 'server');

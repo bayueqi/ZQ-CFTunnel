@@ -86,6 +86,8 @@
     "config_none": "なし",
     "config_load_failed": "読み取り失敗",
     "delete_force_hint": "強制削除：実行中、または有効な接続が残っていても削除されます。",
+    "delete_cascade_hint": "このトンネルに紐づく {domains} 個のドメインと、そのうち {locks} 個のパスワードロックも一緒に削除されます。",
+    "dns_unbind_lock_hint": "このドメインはロック済みです：バインド解除するとパスワードロックも削除されます（アクセスアカウントとパスワードは即時に無効になります）。",
     "remote_add_btn": "追加",
     "remote_add_title": "クラウドホスト型トンネルを追加",
     "remote_edit_title": "クラウドホスト型トンネルを編集",
