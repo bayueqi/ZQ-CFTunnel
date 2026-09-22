@@ -386,26 +386,14 @@
                     </span>
                   </div>
 
-                  <!-- 该域名的访问密码锁设置：状态徽标 + 掩码凭据 + 锁操作。
-                       展开「显示凭据」时凭据不留在这一行 —— 32 位账号 + 40 位密码会把这一行
-                       折成三四段、按钮被挤到最底下。展开态改由下面独立的整行块承载。 -->
+                  <!-- 该域名的访问密码锁设置：状态徽标 + 锁操作在同一行，凭据不挤进来
+                       —— 32 位账号 + 40 位密码放行内会把这一行折成三四段、按钮被挤到最底下。
+                       凭据固定由下面独立的整行块承载（账号一行、密码一行），与展开与否无关。 -->
                   <div class="dns-domain-row dns-lock-row">
                     <span class="dns-lock-label">{{ t.server_tab.headers.lock }}</span>
 
                     <template v-if="lockOf(rec.hostname)">
                       <span class="dns-lock-state on">{{ t.server_tab.lock_on }}</span>
-                      <template v-if="!isLockCredExpanded(rec.hostname)">
-                        <span
-                          class="dns-cred"
-                          :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                          @click="copyText(lockOf(rec.hostname)?.clientId || '')"
-                        >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
-                        <span
-                          class="dns-cred"
-                          :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                          @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
-                        >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname) }}</span>
-                      </template>
                       <span class="dns-row-actions">
                         <button
                           class="dns-mini-btn"
@@ -439,19 +427,18 @@
                     </template>
                   </div>
 
-                  <!-- 展开的凭据：整行、账号与密码各占一行（标签 + 值，点击即复制）。
-                       放在锁行下面而不是行内，按钮才不会被超长凭据挤到第三、四行 -->
-                  <div
-                    v-if="lockOf(rec.hostname) && isLockCredExpanded(rec.hostname)"
-                    class="dns-cred-block"
-                  >
+                  <!-- 凭据：整行、账号与密码各占一行（标签 + 值，点击即复制）。
+                       **常驻两行**：隐藏态只是把值换成掩码，不收起这两行 —— 否则整块一会儿两行
+                       一会儿一行、上面按钮的位置跟着跳。放在锁行下面而不是行内，按钮就不会被
+                       超长凭据挤到第三、四行 -->
+                  <div v-if="lockOf(rec.hostname)" class="dns-cred-block">
                     <div class="dns-cred-item">
                       <span class="dns-cred-key">{{ t.server_tab.lock_account_label }}</span>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
                         @click="copyText(lockOf(rec.hostname)?.clientId || '')"
-                      >{{ lockOf(rec.hostname)?.clientId || '' }}</span>
+                      >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
                     </div>
                     <div class="dns-cred-item">
                       <span class="dns-cred-key">{{ t.server_tab.lock_secret_label }}</span>
@@ -459,7 +446,7 @@
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
                         @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
-                      >{{ lockOf(rec.hostname)?.clientSecret || '' }}</span>
+                      >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname) }}</span>
                     </div>
                   </div>
                 </div>
@@ -571,28 +558,6 @@
 
       <!-- 3. 杂项 Tab (保留上下滑动 Slider) -->
       <section v-if="currentTab === 'misc'" class="tab-view misc-view animated-view">
-        <!-- 访问密码锁凭证：上锁 / 解锁 / 换密码走 Cloudflare Access API 时使用。
-             留空 = 使用「授权登录」的凭证；获取方式见项目 README。 -->
-        <div class="fluent-card form-card access-token-card">
-          <div class="access-token-row">
-            <div class="fluent-form-group access-token-field">
-              <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="accessTokenInput"
-                  :placeholder="t.misc_tab.access_token_placeholder"
-                  class="fluent-input mono"
-                />
-              </div>
-            </div>
-            <button class="fluent-btn primary access-token-save" @click="saveAccessToken">
-              {{ t.server_tab.btn_save }}
-            </button>
-          </div>
-          <div class="modal-hint">{{ t.misc_tab.access_token_hint }}</div>
-        </div>
-
         <!-- 快捷操作区 -->
         <div class="fluent-card action-tiles-card">
           <div class="tile-grid">
@@ -656,6 +621,29 @@
             <span class="warning-icon">⚠️</span>
             <span class="warning-text">{{ t.misc_tab.config_dir_warning }}</span>
           </div>
+        </div>
+
+        <!-- 访问密码锁凭证：上锁 / 解锁 / 换密码走 Cloudflare Access API 时使用。
+             留空 = 使用「授权登录」的凭证；获取方式见项目 README。
+             摆在快捷操作卡片下面 —— 它是低频的进阶配置，不该压在最常用的一排按钮上面。 -->
+        <div class="fluent-card form-card access-token-card">
+          <div class="access-token-row">
+            <div class="fluent-form-group access-token-field">
+              <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
+              <div class="input-container">
+                <input
+                  type="text"
+                  v-model="accessTokenInput"
+                  :placeholder="t.misc_tab.access_token_placeholder"
+                  class="fluent-input mono"
+                />
+              </div>
+            </div>
+            <button class="fluent-btn primary access-token-save" @click="saveAccessToken">
+              {{ t.server_tab.btn_save }}
+            </button>
+          </div>
+          <div class="modal-hint">{{ t.misc_tab.access_token_hint }}</div>
         </div>
 
       </section>
@@ -1907,10 +1895,22 @@ const errText = (key: string): string => {
 
 const addIngressRow = () => {
   // 新行沿用上一条**普通行**的协议与端口（同一个隧道下多域名指向同一服务是常见做法），
-  // 只清域名；插在兜底行之前，保证兜底行永远待在最后
+  // 只清域名；插在兜底行之前，保证兜底行永远待在最后。
+  // 上面没有普通行时（刚打开、只有兜底行）退回「配置」页记的本机服务，省得从头填。
   const rows = tunnelFormRows.value;
   const prev = rows[rows.length - 2];
-  rows.splice(Math.max(rows.length - 1, 0), 0, prev ? { ...prev, hostname: '' } : emptyIngressRow());
+  if (prev) {
+    rows.splice(rows.length - 1, 0, { ...prev, hostname: '' });
+    return;
+  }
+  const proto = serverConfig.value.protocol || 'http';
+  const mode = addressModeOf(proto);
+  rows.splice(Math.max(rows.length - 1, 0), 0, {
+    ...emptyIngressRow(),
+    protocol: mode === 'none' ? 'http' : proto,
+    port: mode === 'port' ? serverConfig.value.port || '' : '',
+    unixSocket: mode === 'socket' ? serverConfig.value.unixSocket || '' : '',
+  });
 };
 
 // 兜底行不可删（它在数组末尾，模板也不给它删除按钮），其余行随便删 ——
@@ -1971,29 +1971,10 @@ const openTunnelCreateModal = () => {
   tunnelFormMode.value = 'create';
   tunnelFormTarget.value = null;
   tunnelFormName.value = serverConfig.value.name || 'mc';
-  // 一行普通行 + 末尾那条常驻的兜底行（创建时就把兜底行摆出来，而不是等保存时程序偷偷补
-  // 一条 —— 它是什么、能不能改，用户得看得见）。
-  // 兜底行直接预置成本机服务：它是唯一会被写成「不带域名」的规则，
-  // 所以「没有域名、未匹配的请求都转到本机」这件事在这儿明明白白摆着，不用靠留空普通行的域名去暗示。
-  const catchAll = emptyCatchAllRow();
-  const cfgProto = serverConfig.value.protocol || '';
-  const cfgPort = (serverConfig.value.port || '').trim();
-  const cfgSocket = (serverConfig.value.unixSocket || '').trim();
-  if (addressModeOf(cfgProto) === 'port' && cfgPort) {
-    catchAll.protocol = cfgProto;
-    catchAll.port = cfgPort;
-  } else if (addressModeOf(cfgProto) === 'socket' && cfgSocket) {
-    catchAll.protocol = cfgProto;
-    catchAll.unixSocket = cfgSocket;
-  }
-  tunnelFormRows.value = [
-    {
-      ...emptyIngressRow(),
-      protocol: serverConfig.value.protocol || 'http',
-      port: serverConfig.value.port || '',
-    },
-    catchAll,
-  ];
+  // 初始只有末尾那条常驻的「默认兜底」：默认档就是 http_status:404（未匹配回 404），
+  // 不预置任何普通行 —— 要按域名转发就点「添加」，自己填域名与端口。
+  // （以前预置一行填好协议端口的普通行，用户一打开就得先删它 / 改它，等于替他做了决定。）
+  tunnelFormRows.value = [emptyCatchAllRow()];
   tunnelFormHostRoutes.value = [];
   tunnelFormCidrRoutes.value = [];
   originalHostRoutes.value = {};
@@ -2012,8 +1993,8 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
   tunnelFormMode.value = 'edit';
   tunnelFormTarget.value = tunnel;
   tunnelFormName.value = tunnel.name.trim();
-  // 先摆一行普通行 + 兜底行占位，读回云端配置后再整体替换
-  tunnelFormRows.value = [emptyIngressRow(), emptyCatchAllRow()];
+  // 先只摆兜底行占位，读回云端配置后再整体替换
+  tunnelFormRows.value = [emptyCatchAllRow()];
   tunnelFormHostRoutes.value = [];
   tunnelFormCidrRoutes.value = [];
   originalHostRoutes.value = {};
@@ -2033,12 +2014,10 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
     if (cfgRes.status === 'fulfilled') {
       const rows = (cfgRes.value?.rules ?? []).map(rowOfRule);
       // 末尾那条不带域名的规则就是兜底行，原样留在最后（它的 service 是用户定的，别覆盖）；
-      // 云端如果没有兜底（最后一条带域名），补一条默认的摆出来让用户自己改
+      // 云端如果没有兜底（最后一条带域名 / 一条规则都没有），补一条默认 404 的摆出来
       const last = rows[rows.length - 1];
       if (!last || last.hostname.trim()) rows.push(emptyCatchAllRow());
-      // 云端一条规则都没有（或只有一条不带域名的）：补一行空普通行，别让表单只剩兜底行，
-      // 跟创建时的初始形态保持一致
-      if (rows.length === 1 && !rows[0].hostname.trim()) rows.unshift(emptyIngressRow());
+      // 不额外补空普通行：初始形态就是「只有默认兜底」，要加就点「添加」
       tunnelFormRows.value = rows;
     } else {
       tunnelFormLoadError.value = errorText(cfgRes.reason);
@@ -4614,27 +4593,9 @@ onUnmounted(() => {
   margin-left: auto;
 }
 
-/* 凭据：行内只显示掩码，点击复制完整值。
-   展开（显示凭据）后不走这里 —— 由下面的 .dns-cred-block 整行块承载 */
-.dns-cred {
-  flex-shrink: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.dns-cred:hover {
-  text-decoration: underline;
-}
-
-/* 展开的凭据块：整行、账号与密码各一行（标签 + 值），缩进挂在域名竖线里侧。
-   从锁行里挪出来独占整行，32 位账号 + 40 位密码就不会把锁行折成三四段、
-   把「隐藏凭据 / 换密码 / 解锁」挤到最下面 —— 那是之前最难看的形态 */
+/* 凭据块：常驻整行（账号一行、密码一行，标签 + 值），缩进挂在域名竖线里侧。
+   不放进锁行 —— 32 位账号 + 40 位密码会把锁行折成三四段、把「换密码 / 解锁」挤到最下面；
+   也不随「显示/隐藏凭据」收起，隐藏只换掩码，整块高度与按钮位置都保持不变 */
 .dns-cred-block {
   display: flex;
   flex-direction: column;
