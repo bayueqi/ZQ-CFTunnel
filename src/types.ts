@@ -177,6 +177,8 @@ export interface LangPack {
     delete_cascade_hint: string;
     /** 解绑域名确认框里的提示：该域名的密码锁会一并删除 */
     dns_unbind_lock_hint: string;
+    /** 改域名弹窗里的提示：旧域名的密码锁会被删除，新域名需重新上锁 */
+    dns_rename_lock_hint: string;
     copied_toast: string;
     edit_need_config: string;
     edit_restart_hint: string;

@@ -88,6 +88,7 @@
     "delete_force_hint": "Eliminación forzada: el túnel se eliminará aunque esté en ejecución o tenga conexiones activas.",
     "delete_cascade_hint": "También se eliminarán los {domains} dominio(s) vinculados a este túnel y sus {locks} bloqueo(s) de contraseña.",
     "dns_unbind_lock_hint": "Este dominio está bloqueado: al desvincularlo se elimina también su bloqueo de contraseña (la cuenta y la contraseña de acceso dejan de funcionar de inmediato).",
+    "dns_rename_lock_hint": "Este dominio está bloqueado: al cambiar el nombre se elimina el bloqueo antiguo, así que el nuevo dominio debe bloquearse de nuevo.",
     "remote_add_btn": "Añadir",
     "remote_add_title": "Añadir túnel alojado en la nube",
     "remote_edit_title": "Editar túnel alojado en la nube",

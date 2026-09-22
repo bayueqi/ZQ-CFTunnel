@@ -981,6 +981,11 @@
               {{ t.server_tab.errors.dns_domain_invalid }}
             </div>
           </div>
+          <!-- 该域名上过锁时提示：锁绑在域名上，改名等于换了个域名，旧锁会被删掉 -->
+          <p
+            v-if="dnsEditTarget && lockOf(dnsEditTarget.hostname)"
+            class="modal-danger-hint"
+          >{{ t.server_tab.dns_rename_lock_hint }}</p>
         </div>
         <div class="modal-footer">
           <button class="fluent-btn" @click="cancelEditDnsRoute">{{ t.exit_modal.btn_cancel }}</button>
@@ -3078,7 +3083,9 @@ const cancelEditDnsRoute = () => {
   dnsEditHasError.value = false;
 };
 
-// 提交改名：只 PATCH DNS 记录的 name 字段，不改动隧道 ingress 配置
+// 提交改名：只 PATCH DNS 记录的 name 字段，不改动隧道 ingress 配置。
+// 密码锁挂在域名上，改了名就等于换了一个域名：旧域名的锁必须删掉（Access 应用是
+// 按域名建的，留着只会变成云端孤儿）；新域名要保护就重新点一次「上锁」。
 const confirmEditDnsRoute = async () => {
   const target = dnsEditTarget.value;
   if (!target || isDnsMutating.value) return;
@@ -3102,7 +3109,22 @@ const confirmEditDnsRoute = async () => {
       hostname: next,
     });
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(`${target.hostname} → ${next}`);
+
+    // 改名成功后才清旧锁：万一改名失败，锁还挂在那儿，不会出现「名字没换成、保护先没了」
+    const { done, failed } = await purgeDomainLocks([
+      { recordId: target.recordId, hostname: target.hostname },
+    ]);
+    if (failed.length) {
+      appendLog(
+        `[WARN] 旧域名 [${target.hostname}] 的密码锁未能清除，云端可能残留拦截它的 Access 应用，可稍后到 Cloudflare 面板手动删除`,
+        'warn',
+        'server',
+      );
+    }
+
+    showToast(
+      `${target.hostname} → ${next}${done.length ? '，旧域名的密码锁已删除' : ''}`,
+    );
     cancelEditDnsRoute();
     await refreshHostnamesOnly();
   } catch (err: any) {
