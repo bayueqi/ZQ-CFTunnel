@@ -1039,110 +1039,110 @@
               </button>
             </div>
 
-            <div
-              v-for="(row, i) in tunnelFormRows"
-              :key="'ing-' + i"
-              class="ingress-row"
-              :class="{ 'is-catch-all': isCatchAllIndex(i) }"
-            >
-              <!-- 末尾兜底行：它不靠域名匹配，标一下免得被当成普通规则（标签单独占一行，
-                   跟下面字段列对齐才不会看成协议那一格的标题） -->
-              <div v-if="isCatchAllIndex(i)" class="catch-all-head">
-                <span class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
-              </div>
-              <div class="ingress-row-line">
-                <div class="ingress-field protocol">
-                  <span class="ingress-field-label">{{ t.server_tab.protocol_label }}</span>
-                  <select
-                    v-model="row.protocol"
-                    class="fluent-input fluent-select"
-                    @change="onIngressProtocolChange(row)"
-                  >
-                    <!-- 兜底行的默认档：未匹配就回 404。普通行不给这一项 —— 带域名回 404 没意义。
-                         第二个条件是给存量数据留的：极少数老配置会给域名配 http_status:404，
-                         那时它已是这一档，下拉得能选中它，否则界面显示会跟真实值对不上 -->
-                    <option
-                      v-if="isCatchAllIndex(i) || row.protocol === 'http_status_404'"
-                      value="http_status_404"
+            <template v-for="(row, i) in tunnelFormRows" :key="'ing-' + i">
+              <div
+                v-if="!(ingressShadowedTail && i === tunnelFormRows.length - 1)"
+                class="ingress-row"
+                :class="{ 'is-catch-all': isCatchAllIndex(i) }"
+              >
+                <!-- 末尾兜底行：它不靠域名匹配，标一下免得被当成普通规则（标签单独占一行，
+                     跟下面字段列对齐才不会看成协议那一格的标题） -->
+                <div v-if="isCatchAllIndex(i)" class="catch-all-head">
+                  <span class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
+                </div>
+                <div class="ingress-row-line">
+                  <div class="ingress-field protocol">
+                    <span class="ingress-field-label">{{ t.server_tab.protocol_label }}</span>
+                    <select
+                      v-model="row.protocol"
+                      class="fluent-input fluent-select"
+                      @change="onIngressProtocolChange(row)"
                     >
-                      {{ t.server_tab.protocol_catch_all_404 }}
-                    </option>
-                    <option value="http">{{ t.server_tab.protocol_http }}</option>
-                    <option value="https">{{ t.server_tab.protocol_https }}</option>
-                    <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
-                    <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
-                    <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
-                    <option value="smb">{{ t.server_tab.protocol_smb }}</option>
-                    <option value="unix">{{ t.server_tab.protocol_unix }}</option>
-                    <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
-                    <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
-                    <!-- 反解不出协议+端口的存量规则：保留原样，别把云端已有的配置改掉 -->
-                    <option v-if="row.protocol === 'raw'" value="raw">{{ t.server_tab.protocol_raw }}</option>
-                  </select>
+                      <!-- 兜底行的默认档：未匹配就回 404。普通行不给这一项 —— 带域名回 404 没意义。
+                           第二个条件是给存量数据留的：极少数老配置会给域名配 http_status:404，
+                           那时它已是这一档，下拉得能选中它，否则界面显示会跟真实值对不上 -->
+                      <option
+                        v-if="isCatchAllIndex(i) || row.protocol === 'http_status_404'"
+                        value="http_status_404"
+                      >
+                        {{ t.server_tab.protocol_catch_all_404 }}
+                      </option>
+                      <option value="http">{{ t.server_tab.protocol_http }}</option>
+                      <option value="https">{{ t.server_tab.protocol_https }}</option>
+                      <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                      <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
+                      <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
+                      <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                      <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                      <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                      <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
+                      <!-- 反解不出协议+端口的存量规则：保留原样，别把云端已有的配置改掉 -->
+                      <option v-if="row.protocol === 'raw'" value="raw">{{ t.server_tab.protocol_raw }}</option>
+                    </select>
+                  </div>
+
+                  <div
+                    v-if="row.protocol !== 'raw' && addressModeOf(row.protocol) !== 'none'"
+                    class="ingress-field port"
+                  >
+                    <span class="ingress-field-label">
+                      {{ addressModeOf(row.protocol) === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
+                    </span>
+                    <input
+                      v-if="addressModeOf(row.protocol) === 'port'"
+                      type="text"
+                      v-model="row.port"
+                      :placeholder="t.server_tab.port_placeholder"
+                      class="fluent-input"
+                    />
+                    <input
+                      v-else
+                      type="text"
+                      v-model="row.unixSocket"
+                      :placeholder="t.server_tab.unix_socket_placeholder"
+                      class="fluent-input"
+                    />
+                  </div>
+
+                  <div v-if="row.protocol === 'raw'" class="ingress-field service">
+                    <span class="ingress-field-label">{{ t.server_tab.form_service_label }}</span>
+                    <input type="text" v-model="row.rawService" class="fluent-input mono" />
+                  </div>
+                  <!-- 兜底行没有域名输入框：它按定义就不带域名 -->
+                  <div v-else-if="!isCatchAllIndex(i)" class="ingress-field hostname">
+                    <!-- 域名可以留空：留空的那条自己就成了兜底（匹配所有 hostname），
+                         代价是排在它后面的规则永远轮不到 —— 校验见 ingressRowErrorKey -->
+                    <span class="ingress-field-label">{{ t.server_tab.form_hostname_label }}</span>
+                    <input
+                      type="text"
+                      v-model="row.hostname"
+                      :placeholder="t.server_tab.form_route_hostname_placeholder"
+                      class="fluent-input"
+                    />
+                  </div>
+
+                  <!-- 兜底行不可删：ingress 最后一条必须不带域名，删了得上哪找一条 -->
+                  <button
+                    v-if="!isCatchAllIndex(i)"
+                    class="row-action-btn danger ingress-remove"
+                    :title="t.server_tab.form_remove_route"
+                    @click="removeIngressRow(i)"
+                  >🗑</button>
                 </div>
 
-                <div
-                  v-if="row.protocol !== 'raw' && addressModeOf(row.protocol) !== 'none'"
-                  class="ingress-field port"
-                >
-                  <span class="ingress-field-label">
-                    {{ addressModeOf(row.protocol) === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
+                <!-- 兜底行下面说明它是干什么的，并把最终会写进云端的 service 原文亮出来 -->
+                <div v-if="isCatchAllIndex(i)" class="catch-all-hint">
+                  {{ t.server_tab.form_catch_all_hint }}
+                  <span v-if="!ingressRowErrorKey(row, i)" class="catch-all-service mono">
+                    {{ serviceOfRow(row) }}
                   </span>
-                  <input
-                    v-if="addressModeOf(row.protocol) === 'port'"
-                    type="text"
-                    v-model="row.port"
-                    :placeholder="t.server_tab.port_placeholder"
-                    class="fluent-input"
-                  />
-                  <input
-                    v-else
-                    type="text"
-                    v-model="row.unixSocket"
-                    :placeholder="t.server_tab.unix_socket_placeholder"
-                    class="fluent-input"
-                  />
                 </div>
-
-                <div v-if="row.protocol === 'raw'" class="ingress-field service">
-                  <span class="ingress-field-label">{{ t.server_tab.form_service_label }}</span>
-                  <input type="text" v-model="row.rawService" class="fluent-input mono" />
+                <div v-if="tunnelFormSubmitted && ingressRowErrorKey(row, i)" class="error-tip">
+                  <span class="error-icon">⚠️</span>
+                  {{ errText(ingressRowErrorKey(row, i)) }}
                 </div>
-                <!-- 兜底行没有域名输入框：它按定义就不带域名 -->
-                <div v-else-if="!isCatchAllIndex(i)" class="ingress-field hostname">
-                  <!-- 必填：不带域名的规则会吃掉它后面的所有规则，所以只允许最下面那条兜底行不带域名 -->
-                  <span class="ingress-field-label">
-                    {{ t.server_tab.form_hostname_label }}<span class="required">*</span>
-                  </span>
-                  <input
-                    type="text"
-                    v-model="row.hostname"
-                    :placeholder="t.server_tab.form_route_hostname_placeholder"
-                    class="fluent-input"
-                  />
-                </div>
-
-                <!-- 兜底行不可删：ingress 最后一条必须不带域名，删了得上哪找一条 -->
-                <button
-                  v-if="!isCatchAllIndex(i)"
-                  class="row-action-btn danger ingress-remove"
-                  :title="t.server_tab.form_remove_route"
-                  @click="removeIngressRow(i)"
-                >🗑</button>
               </div>
-
-              <!-- 兜底行下面说明它是干什么的，并把最终会写进云端的 service 原文亮出来 -->
-              <div v-if="isCatchAllIndex(i)" class="catch-all-hint">
-                {{ t.server_tab.form_catch_all_hint }}
-                <span v-if="!ingressRowErrorKey(row, i)" class="catch-all-service mono">
-                  {{ serviceOfRow(row) }}
-                </span>
-              </div>
-              <div v-if="tunnelFormSubmitted && ingressRowErrorKey(row, i)" class="error-tip">
-                <span class="error-icon">⚠️</span>
-                {{ errText(ingressRowErrorKey(row, i)) }}
-              </div>
-            </div>
+            </template>
           </div>
 
           <!-- ② 主机名路由（WARP 私网访问，一般留空） -->
@@ -1919,6 +1919,26 @@ const originalCidrRoutes = ref<Record<string, { network: string; comment: string
 // （默认 http_status:404，也可以换成转发到本机某个端口）。
 const isCatchAllIndex = (i: number): boolean => i === tunnelFormRows.value.length - 1;
 
+// 「本该有域名、却留空」的普通行 —— 域名一空，这条规则就匹配所有 hostname，它自己成了兜底。
+// raw 行与 404 档不算：raw 是原样保留的存量规则（反解不出协议端口，谈不上按域名匹配），
+// 404 档根本没有域名输入框。
+const isBlankHostRow = (row: IngressRow): boolean =>
+  row.protocol !== CATCH_ALL_PROTOCOL && row.protocol !== 'raw' && !row.hostname.trim();
+
+// 倒数第二行留空域名 → 末尾那条兜底行永远轮不到：不渲染、保存也不写出去。
+// 依据 cloudflared 自己的校验（ingress/ingress.go validateHostname）：非最后一条的
+// 「匹配所有 hostname」规则会报 "the rules which follow it will never be triggered"。
+// 加载中不隐藏 —— 占位行本来就没有域名，藏了会让兜底行在读回配置时闪一下。
+const ingressShadowedTail = computed(
+  () =>
+    !tunnelFormLoading.value &&
+    tunnelFormRows.value.length >= 2 &&
+    // 末行必须真的没有域名（也就是真的兜底行）才谈得上被遮蔽 ——
+    // 否则宁可不隐藏：把用户填了域名的行藏掉、保存时又不写出去，那是静默丢数据
+    !tunnelFormRows.value[tunnelFormRows.value.length - 1].hostname.trim() &&
+    isBlankHostRow(tunnelFormRows.value[tunnelFormRows.value.length - 2]),
+);
+
 // 逐行校验：返回错误文案键（空串 = 合法）。只有点过「保存」之后才显示，免得一打开满屏红。
 const ingressRowErrorKey = (row: IngressRow, i: number): string => {
   if (row.protocol === CATCH_ALL_PROTOCOL) return ''; // 404 档没有地址可填，也不可能填错
@@ -1926,13 +1946,13 @@ const ingressRowErrorKey = (row: IngressRow, i: number): string => {
   const mode = addressModeOf(row.protocol);
   if (mode === 'socket' && !row.unixSocket.trim()) return 'err_socket_required';
   if (mode === 'port' && !isPortValid(row.port.trim())) return 'err_port_required';
-  // 兜底行也没有域名输入框（它按定义就不带域名），所以只有普通行才要求填域名 ——
-  // 不带域名的规则会吃掉它后面的所有规则，与其让用户踩这个坑，不如只允许出现在兜底行
+  // 兜底行没有域名输入框，也不参与域名校验
   if (isCatchAllIndex(i)) return '';
   const host = row.hostname.trim();
-  if (!host) return 'err_hostname_required';
-  if (!isDomainValid(host)) return 'err_hostname_invalid';
-  return '';
+  if (host) return isDomainValid(host) ? '' : 'err_hostname_invalid';
+  // 留空是允许的：这条自己就是兜底。但它后面的规则永远轮不到，所以只能放在倒数第二行
+  // （末尾兜底行上面那一行）—— 兜底行固定占着数组最后一位，没有比它更靠后的位置。
+  return i < tunnelFormRows.value.length - 2 ? 'err_catch_all_last' : '';
 };
 
 // 语言包里 errors 是手写接口，没有索引签名 —— 动态键必须这样取，
@@ -1979,7 +1999,7 @@ const addCidrRoute = () => {
 // 表单行 → 云端 ingress 数组。兜底行也在 rows 里（永远在末尾），不再由程序偷偷补
 const buildIngress = (): Record<string, string>[] => {
   const rows = tunnelFormRows.value;
-  return rows.map((row, i) => {
+  const rules = rows.map((row, i) => {
     const rule: Record<string, string> = { service: serviceOfRow(row) };
     // 最后一条（兜底行）不写 hostname：Cloudflare 要求数组最后一条不带域名
     const host = row.hostname.trim();
@@ -1988,6 +2008,10 @@ const buildIngress = (): Record<string, string>[] => {
     if (row.path) rule.path = row.path;
     return rule;
   });
+  // 上面有一条普通行留空域名 → 它自己就是兜底；末尾那条兜底行永远轮不到，
+  // 原样写上去 Cloudflare 会判非法（匹配所有 hostname 的规则后面不能再有规则），只写到那一条为止。
+  if (ingressShadowedTail.value && rules.length > 1) rules.pop();
+  return rules;
 };
 
 // invoke 被拒绝时抛出来的既可能是字符串（Rust 侧 Result<_, String>），也可能是别的对象，

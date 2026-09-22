@@ -256,7 +256,7 @@ export interface LangPack {
       err_socket_required: string;
       err_port_required: string;
       err_hostname_invalid: string;
-      err_hostname_required: string;
+      err_catch_all_last: string;
       err_hostname_dup: string;
       err_host_required: string;
       err_cidr_required: string;
