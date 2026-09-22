@@ -2163,7 +2163,7 @@ const loadTunnelLocks = (): Record<string, TunnelLockEntry> => {
     // 老版本条目按隧道 ID 存（e.tunnelId），本版改为按 hostname 存 —— 迁移时
     // 以 hostname 为键重建，键重复时后写覆盖，保证每个域名只有一条锁。
     const out: Record<string, TunnelLockEntry> = {};
-    for (const [id, v] of Object.entries(obj as Record<string, unknown>)) {
+    for (const v of Object.values(obj as Record<string, unknown>)) {
       const e = v as Partial<TunnelLockEntry> & { tunnelId?: string };
       if (
         typeof e?.hostname === 'string' && e.hostname &&
@@ -3338,7 +3338,9 @@ const confirmDeleteTunnel = async () => {
     if (selectedRemoteTunnel.value?.id === target.id) selectedRemoteTunnel.value = null;
     delete remoteConfigs.value[target.id];
     // 隧道删了，密码锁还挂在它的域名上会变成云端孤儿：逐域名清掉（失败不阻断，只记日志）
-    const boundHostnames = (target.hostnames || []).map(h => h.name);
+    // 绑定域名从隧道列表取（云端托管隧道也在 tunnelList 里，scope 不用分支）
+    const boundHostnames = (tunnelList.value.find(x => x.id === target.id)?.hostnames || [])
+      .map(h => h.name);
     for (const hostname of boundHostnames) {
       const lock = lockOf(hostname);
       if (!lock) continue;

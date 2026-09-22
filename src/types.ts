@@ -163,6 +163,16 @@ export interface LangPack {
     unlock_confirm_title: string;
     unlock_confirm_msg: string;
     unlocked_toast: string;
+    /** 锁状态徽标：已上锁 */
+    lock_on: string;
+    /** 锁状态徽标：未上锁 */
+    lock_off: string;
+    /** 「换密码」按钮 */
+    btn_rotate_password: string;
+    /** 换密码二次确认弹窗标题 */
+    rotate_confirm_title: string;
+    /** 换密码二次确认弹窗正文，{hostname} 会被替换为域名 */
+    rotate_confirm_msg: string;
     copied_toast: string;
     edit_need_config: string;
     edit_restart_hint: string;
@@ -176,6 +186,8 @@ export interface LangPack {
       status: string;
       actions: string;
       password: string;
+      /** DNS 路由绑定表里「访问密码锁」列的表头 */
+      lock: string;
     };
     errors: {
       tunnel_invalid: string;
