@@ -2053,8 +2053,8 @@ const syncHostnameRoutes = async (tunnelId: string, name: string) => {
         };
       } catch (err: any) {
         return {
-          message: `[WARN] ${fmt(t.value.logs.host_route_delete_failed, { err: errorText(err) })}`,
-          level: 'warn',
+          message: `[ERROR] ${fmt(t.value.logs.host_route_delete_failed, { err: errorText(err) })}`,
+          level: 'error',
         };
       }
     }),
@@ -2071,8 +2071,8 @@ const syncHostnameRoutes = async (tunnelId: string, name: string) => {
           await invoke<string>('delete_hostname_route', { routeId: r.id });
         } catch (err: any) {
           return {
-            message: `[WARN] ${fmt(t.value.logs.host_route_delete_failed_named, { route: originalHostRoutes.value[r.id], err: errorText(err) })}`,
-            level: 'warn',
+            message: `[ERROR] ${fmt(t.value.logs.host_route_delete_failed_named, { route: originalHostRoutes.value[r.id], err: errorText(err) })}`,
+            level: 'error',
           };
         }
       }
@@ -2085,8 +2085,8 @@ const syncHostnameRoutes = async (tunnelId: string, name: string) => {
         return { message: `[SUCCESS] ${res}`, level: 'success' };
       } catch (err: any) {
         return {
-          message: `[WARN] ${fmt(t.value.logs.host_route_create_failed, { route: host, err: errorText(err) })}`,
-          level: 'warn',
+          message: `[ERROR] ${fmt(t.value.logs.host_route_create_failed, { route: host, err: errorText(err) })}`,
+          level: 'error',
         };
       }
     }),
@@ -2110,8 +2110,8 @@ const syncCidrRoutes = async (tunnelId: string, name: string) => {
         };
       } catch (err: any) {
         return {
-          message: `[WARN] ${fmt(t.value.logs.cidr_route_delete_failed, { err: errorText(err) })}`,
-          level: 'warn',
+          message: `[ERROR] ${fmt(t.value.logs.cidr_route_delete_failed, { err: errorText(err) })}`,
+          level: 'error',
         };
       }
     }),
@@ -2133,8 +2133,8 @@ const syncCidrRoutes = async (tunnelId: string, name: string) => {
         return { message: `[SUCCESS] ${res}`, level: 'success' };
       } catch (err: any) {
         return {
-          message: `[WARN] ${fmt(t.value.logs.cidr_route_save_failed, { network, err: errorText(err) })}`,
-          level: 'warn',
+          message: `[ERROR] ${fmt(t.value.logs.cidr_route_save_failed, { network, err: errorText(err) })}`,
+          level: 'error',
         };
       }
     }),
@@ -2212,14 +2212,56 @@ const confirmTunnelForm = async () => {
     await invoke<string>('update_tunnel_config', { tunnelId, ingress: buildIngress() });
     appendLog(`[SUCCESS] ${fmt(t.value.logs.ingress_written, { name })}`, 'success', 'server');
 
-    // ② 新增的域名补 DNS 路由。
-    //    只补不删：删域名不连带删 DNS 记录，免得误删别处在用的 CNAME，
-    //    要解绑请去「DNS 路由绑定」面板（那里会连带清掉该域名的密码锁）。
-    const bound = new Set(
-      (tunnelList.value.find(tn => tn.id === tunnelId)?.hostnames ?? []).map(h => h.name),
-    );
-    // 新增的域名彼此独立 → 并发补 DNS；日志收集回来按顺序打
+    // ② DNS 记录与密码锁按差集同步：
+    //    新增域名 → 补 DNS；不再绑定的域名 → 删 DNS 记录 + 清密码锁；
+    //    行内改域名 → 旧锁跟着搬：旧锁删、新域名上锁（新凭据照常弹窗展示）。
+    const prevBindings = tunnelList.value.find(tn => tn.id === tunnelId)?.hostnames ?? [];
+    const bound = new Set(prevBindings.map(h => h.name));
+    const hostSet = new Set(hosts);
     const newHosts = hosts.filter(h => !bound.has(h));
+    const removed = prevBindings.filter(h => !hostSet.has(h.name.trim()));
+
+    // 行内改域名：路由 id 没变、hostname 变了 —— 精确配对，用于锁迁移
+    const renamedPairs = tunnelFormHostRoutes.value
+      .filter(r => r.id && originalHostRoutes.value[r.id] && originalHostRoutes.value[r.id] !== r.hostname.trim())
+      .map(r => ({ oldHost: originalHostRoutes.value[r.id], newHost: r.hostname.trim() }));
+    const renamedOldSet = new Set(renamedPairs.map(p => p.oldHost));
+
+    // 不再绑定的域名：删 DNS 记录（彼此独立，并发）。这些记录在保存前都指向本隧道，
+    // 删它不会误伤别处在用的 CNAME。
+    const removalLogs = await Promise.all(
+      removed.map(async (h): Promise<PendingLog> => {
+        try {
+          const res = await invoke<string>('delete_dns_route', { recordId: h.id });
+          return { message: `[SUCCESS] ${res} (${h.name})`, level: 'success' };
+        } catch (err: any) {
+          return {
+            message: `[ERROR] ${fmt(t.value.logs.dns_route_delete_failed, { host: h.name, err: errorText(err) })}`,
+            level: 'error',
+          };
+        }
+      }),
+    );
+    removalLogs.forEach(l => appendLog(l.message, l.level, 'server'));
+
+    // 不再绑定的域名清锁（改名对的旧锁由下面的迁移段处理，避免重复解锁）
+    await purgeDomainLocks(
+      removed
+        .filter(h => !renamedOldSet.has(h.name.trim()))
+        .map(h => ({ recordId: h.id, hostname: h.name })),
+    );
+
+    // 锁迁移：旧锁删、新域名上锁。串行执行 —— 新锁要等旧锁真正删完再建。
+    // doLock 失败时内部已记日志，这里不吞错也不中断后续保存步骤。
+    for (const pair of renamedPairs) {
+      const oldEntry = lockOf(pair.oldHost);
+      if (!oldEntry) continue;
+      if (await doUnlock(oldEntry, { quiet: true })) {
+        await doLock(pair.newHost);
+      }
+    }
+
+    // 新增的域名彼此独立 → 并发补 DNS；日志收集回来按顺序打
     const dnsLogs = await Promise.all(
       newHosts.map(async (host): Promise<PendingLog> => {
         try {
@@ -2227,8 +2269,8 @@ const confirmTunnelForm = async () => {
           return { message: `[SUCCESS] ${dnsRes}`, level: 'success' };
         } catch (err: any) {
           return {
-            message: `[WARN] ${fmt(t.value.logs.dns_route_create_failed, { host, err: errorText(err) })}`,
-            level: 'warn',
+            message: `[ERROR] ${fmt(t.value.logs.dns_route_create_failed, { host, err: errorText(err) })}`,
+            level: 'error',
           };
         }
       }),

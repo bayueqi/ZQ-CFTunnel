@@ -296,6 +296,7 @@
     "ingress_written": "已发布应用程序路由已写入云端 ({name})",
     "blank_host_rows_skipped": "第 {rows} 行没填域名，不会写入云端（未匹配的请求走末尾那条「默认兜底」）",
     "dns_route_create_failed": "域名 {host} 的 DNS 路由创建失败: {err}",
+    "dns_route_delete_failed": "域名 {host} 的 DNS 记录删除失败: {err}",
     "tunnel_save_failed": "保存隧道配置失败: {err}",
     "access_token_saved_log": "访问密码锁凭证（Access Token）已保存",
     "lock_ok": "已为域名 [{host}] 开启密码锁，只有携带访问密码的客户端能连接",

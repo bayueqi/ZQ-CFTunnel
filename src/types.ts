@@ -388,6 +388,7 @@ export interface LangPack {
     ingress_written: string;
     blank_host_rows_skipped: string;
     dns_route_create_failed: string;
+    dns_route_delete_failed: string;
     tunnel_save_failed: string;
     access_token_saved_log: string;
     lock_ok: string;
