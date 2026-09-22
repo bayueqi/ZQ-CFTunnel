@@ -2790,7 +2790,8 @@ const openUrl = async (url: string) => {
     await invoke('open_external_url', { url });
     appendLog(`[INFO] ${fmt(t.value.logs.opened_in_browser, { url })}`, 'info', 'misc');
   } catch (err) {
-    appendLog(`${fmt(t.value.logs.open_link_failed, { err })}`, 'error', 'misc');
+    // err 是 unknown（TS 4.4+ 的 catch 默认类型），不能直接塞进 fmt —— 走 errorText 转字符串
+    appendLog(`${fmt(t.value.logs.open_link_failed, { err: errorText(err) })}`, 'error', 'misc');
   }
 };
 
