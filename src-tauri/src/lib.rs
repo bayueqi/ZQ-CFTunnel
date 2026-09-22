@@ -89,6 +89,9 @@ pub struct TunnelConfig {
 /// 面板上是单独一页、单独一套 API。
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TunnelHostnameRoute {
+    /// Cloudflare 侧的这条路由资源 ID。
+    /// **删除时必须用它**：新路径 `zerotrust/routes/hostname/{id}`；按域名去删没有可用端点。
+    pub id: String,
     pub hostname: String,
     pub comment: String,
 }
@@ -96,6 +99,8 @@ pub struct TunnelHostnameRoute {
 /// 一条「CIDR 路由」（= 私有网络网段经 WARP 访问）。
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TunnelCidrRoute {
+    /// Cloudflare 侧的路由 ID，修改与删除都以它为操作对象（`teamnet/routes/{route_id}`）。
+    pub id: String,
     pub network: String,
     pub comment: String,
 }
@@ -523,7 +528,22 @@ fn read_list_tunnels() -> Result<Vec<TunnelInfo>, String> {
 }
 
 #[tauri::command]
-fn create_tunnel(name: String) -> Result<String, String> {
+async fn create_tunnel(name: String) -> Result<String, String> {
+    run_blocking("创建隧道", move || create_tunnel_blocking(name)).await
+}
+
+/// `create_tunnel` 的实现：先 `cloudflared tunnel create` 建隧道，再往云端写一次配置。
+///
+/// **为什么建完要写配置**：`cloudflared tunnel create` 建出来的隧道是「本地托管」
+/// （`config_src` 字段不存在、`remote_config = false`），配置只认本机 config.yml。
+/// 只要往云端写一次 configurations，Cloudflare 就把这条隧道登记为云端托管 ——
+/// 实测 `config_src` 由「字段不存在」直接变成 `cloudflare`、`remote_config` 由 false 变 true，
+/// **且与写入内容无关**（哪怕只写一条 `http_status:404` 兜底也照样生效）。
+/// 这样用户不必再去 Cloudflare 面板手动创建隧道或手动挂配置。
+///
+/// 写配置失败**不**回滚隧道创建：隧道本身确实建出来了，把它当失败会让用户
+/// 以为没建成功而重复创建。改为在返回文本末尾附一句提示。
+fn create_tunnel_blocking(name: String) -> Result<String, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() || !trimmed.chars().all(|c| c.is_ascii_alphabetic()) {
         return Err("隧道名不能为空且只能包含纯字母 (a-z, A-Z)".to_string());
@@ -538,17 +558,37 @@ fn create_tunnel(name: String) -> Result<String, String> {
     let out_str = String::from_utf8_lossy(&output.stdout).to_string();
     let err_str = String::from_utf8_lossy(&output.stderr).to_string();
 
-    if output.status.success() {
-        // 新建隧道生成的 <隧道ID>.json 密钥就落在 cert.pem 同目录（~/.cloudflared），
-        // 与软件读取的位置一致，不需要额外搬运。
-        Ok(if out_str.trim().is_empty() { err_str } else { out_str })
-    } else {
-        Err(if !err_str.trim().is_empty() {
+    if !output.status.success() {
+        return Err(if !err_str.trim().is_empty() {
             tidy_cloudflared_error(&err_str)
         } else {
             tidy_cloudflared_error(&out_str)
-        })
+        });
     }
+
+    // 新建隧道生成的 <隧道ID>.json 密钥就落在 cert.pem 同目录（~/.cloudflared），
+    // 与软件读取的位置一致，不需要额外搬运。
+    let mut message = if out_str.trim().is_empty() { err_str } else { out_str };
+
+    // 立刻转成云端托管。定位不到 ID 或写失败都只做提示，不影响创建结果本身。
+    let provision = find_tunnel_id_by_name(trimmed)
+        .ok_or_else(|| "未能定位刚创建的隧道 ID".to_string())
+        .and_then(|id| {
+            let ingress = serde_json::json!([{ "service": DEFAULT_INGRESS_SERVICE }]);
+            put_tunnel_ingress(&id, &ingress).map(|_| id)
+        });
+    match provision {
+        Ok(id) => message.push_str(&format!(
+            "\n已写入云端配置，隧道转为云端托管模式 (ID: {})",
+            id
+        )),
+        Err(e) => message.push_str(&format!(
+            "\n注意：隧道已创建，但云端配置写入失败，仍是本地托管模式（{}）",
+            e
+        )),
+    }
+
+    Ok(message)
 }
 
 #[tauri::command]
@@ -562,6 +602,7 @@ fn delete_tunnel(name: String) -> Result<String, String> {
     // 避免留下指向已删除隧道的孤儿域名。找不到 tunnel_id（例如从未绑定过域名、
     // 或未完成授权登录没有 cert.pem）时不做清理，也不阻断删除隧道本身。
     let mut dns_cleanup_note = String::new();
+    let mut route_cleanup_note = String::new();
     if let Some(tunnel_id) = find_tunnel_id_by_name(trimmed) {
         match get_hostnames_for_tunnel(&tunnel_id) {
             Ok(bindings) => {
@@ -593,6 +634,23 @@ fn delete_tunnel(name: String) -> Result<String, String> {
                 dns_cleanup_note = format!("；域名清理跳过（{}）", e);
             }
         }
+
+        // 再清三块云端配置里带路由性质的两块（主机名 + CIDR）。
+        // 隧道只要还挂着私网路由，`tunnel delete` 就会被 Cloudflare 以
+        // `1023 This tunnel has private network routes` 直接拒绝，
+        // 所以这一步必须排在删除之前，否则「删除」按钮在某些隧道上永远点不动。
+        // 失败不阻断删除（多半是 token 权限不足），把原因带回提示即可。
+        let (route_removed, route_failures) = purge_tunnel_routes(&tunnel_id);
+        if route_removed > 0 {
+            route_cleanup_note = format!("；已清理路由 {} 条", route_removed);
+        }
+        if let Some(first) = route_failures.first() {
+            route_cleanup_note.push_str(&format!(
+                "；有 {} 条路由未能清理（{}）",
+                route_failures.len(),
+                first
+            ));
+        }
     }
 
     // 一律带 `--force` 强删：只要云端还有任意一个 cloudflared 副本连着这条隧道
@@ -609,7 +667,10 @@ fn delete_tunnel(name: String) -> Result<String, String> {
     let err_str = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        Ok(format!("隧道 {} 已成功删除{}", trimmed, dns_cleanup_note))
+        Ok(format!(
+            "隧道 {} 已成功删除{}{}",
+            trimmed, dns_cleanup_note, route_cleanup_note
+        ))
     } else {
         Err(if !err_str.trim().is_empty() {
             tidy_cloudflared_error(&err_str)
@@ -2352,6 +2413,35 @@ fn read_tunnel_config(tunnel_id: String) -> Result<TunnelConfig, String> {
     })
 }
 
+/// 新隧道的默认 ingress：只有一条兜底规则，不带 hostname。
+/// 它的作用只是「让云端存在一份配置」—— 写进去隧道就变成云端托管，
+/// 具体路由由用户之后在「修改隧道」里补。
+const DEFAULT_INGRESS_SERVICE: &str = "http_status:404";
+
+/// 把一条隧道的 ingress 写回云端（PUT configurations）。
+///
+/// `ingress` 直接是 Cloudflare 要求的规则数组，例如
+/// `[{"hostname":"a.example.com","service":"http://127.0.0.1:8080"},{"service":"http_status:404"}]`。
+/// 只发 `config.ingress`、不带 `warp-routing`：实测 PUT 不会清掉未提供的字段，
+/// 因此隧道上原有的 `warp-routing.enabled` 会被完整保留。
+///
+/// 调用方负责保证数组最后一条是不带 hostname 的兜底规则（Cloudflare 要求）。
+fn put_tunnel_ingress(tunnel_id: &str, ingress: &serde_json::Value) -> Result<(), String> {
+    let id = tunnel_id.trim();
+    if !is_valid_tunnel_id(id) {
+        return Err("隧道 ID 格式不正确".to_string());
+    }
+
+    let (api_token, account_id) = cloudflare_account_credentials()?;
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel/{}/configurations",
+        account_id, id
+    );
+    let body = serde_json::json!({ "config": { "ingress": ingress } }).to_string();
+    cf_api_request("PUT", &url, &api_token, Some(&body))?;
+    Ok(())
+}
+
 /// 读取某条隧道在面板另外两页里的路由（只读）：「主机名路由」与「CIDR 路由」。
 ///
 /// 这两页与 ingress 是**三份彼此独立的数据**，端点也各不相同：
@@ -2413,6 +2503,223 @@ fn read_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
     })
 }
 
+// ============================ 云端配置写入（三块路由） ============================
+//
+// 下面这几个命令把面板上三块云端配置从「只读」变成「可写」。
+// 全部复用 cf_api_request（它本来就支持任意方法与 body），不另造网络层。
+//
+// 端点与坑（均为实测结论）：
+// - ingress：`PUT /accounts/{aid}/cfd_tunnel/{tid}/configurations`，body `{config:{ingress:[...]}}`；
+// - 主机名路由：新增用 `POST /accounts/{aid}/teamnet/routes/hostname`，
+//   **删除必须用 `DELETE /accounts/{aid}/zerotrust/routes/hostname/{id}`**。
+//   旧的 `teamnet/` 前缀是兼容路径、只挂了 GET/POST，用它发 DELETE 会返回
+//   `405 {code:10405,"Method not allowed for this authentication scheme"}` ——
+//   报错文案会让人以为是认证或权限问题，实际只是路径旧了；
+// - CIDR 路由：新增 `POST /accounts/{aid}/teamnet/routes`，改与删走 `/teamnet/routes/{route_id}`。
+
+/// 写入 ingress（面板上的「已发布应用程序路由」）。
+///
+/// 前端直接传完整的规则数组，这里只做格式校验后原样 PUT。
+/// **兜底规则由前端保证**（数组最后一条不带 hostname）：哪条算兜底是界面语义，
+/// 后端不该替用户改动他编排好的顺序。
+#[tauri::command]
+async fn update_tunnel_config(
+    tunnel_id: String,
+    ingress: serde_json::Value,
+) -> Result<String, String> {
+    run_blocking("写入云端配置", move || {
+        if !ingress.is_array() {
+            return Err("ingress 必须是数组".to_string());
+        }
+        put_tunnel_ingress(&tunnel_id, &ingress)?;
+        Ok("云端配置已更新".to_string())
+    })
+    .await
+}
+
+/// 新增一条主机名路由。
+#[tauri::command]
+async fn create_hostname_route(
+    tunnel_id: String,
+    hostname: String,
+    comment: String,
+) -> Result<String, String> {
+    run_blocking("新增主机名路由", move || {
+        let host = hostname.trim();
+        if host.is_empty() {
+            return Err("主机名不能为空".to_string());
+        }
+        let (api_token, account_id) = cloudflare_account_credentials()?;
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes/hostname",
+            account_id
+        );
+        let body = serde_json::json!({
+            "hostname": host,
+            "tunnel_id": tunnel_id.trim(),
+            "comment": comment.trim(),
+        })
+        .to_string();
+        cf_api_request("POST", &url, &api_token, Some(&body))?;
+        Ok(format!("主机名路由 {} 已创建", host))
+    })
+    .await
+}
+
+/// 删除一条主机名路由。**必须用 zerotrust 路径**，原因见本节开头。
+#[tauri::command]
+async fn delete_hostname_route(route_id: String) -> Result<String, String> {
+    run_blocking("删除主机名路由", move || {
+        let id = route_id.trim();
+        if id.is_empty() {
+            return Err("路由 ID 不能为空".to_string());
+        }
+        let (api_token, account_id) = cloudflare_account_credentials()?;
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/zerotrust/routes/hostname/{}",
+            account_id, id
+        );
+        cf_api_request("DELETE", &url, &api_token, None)?;
+        Ok("主机名路由已删除".to_string())
+    })
+    .await
+}
+
+/// 新增一条 CIDR 路由（私有网段经 WARP 访问）。
+#[tauri::command]
+async fn create_cidr_route(
+    tunnel_id: String,
+    network: String,
+    comment: String,
+) -> Result<String, String> {
+    run_blocking("新增 CIDR 路由", move || {
+        let net = network.trim();
+        if net.is_empty() {
+            return Err("网段不能为空".to_string());
+        }
+        let (api_token, account_id) = cloudflare_account_credentials()?;
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes",
+            account_id
+        );
+        let body = serde_json::json!({
+            "network": net,
+            "tunnel_id": tunnel_id.trim(),
+            "comment": comment.trim(),
+        })
+        .to_string();
+        cf_api_request("POST", &url, &api_token, Some(&body))?;
+        Ok(format!("CIDR 路由 {} 已创建", net))
+    })
+    .await
+}
+
+/// 修改一条 CIDR 路由（改网段或备注）。
+#[tauri::command]
+async fn update_cidr_route(
+    route_id: String,
+    network: String,
+    comment: String,
+) -> Result<String, String> {
+    run_blocking("修改 CIDR 路由", move || {
+        let id = route_id.trim();
+        if id.is_empty() {
+            return Err("路由 ID 不能为空".to_string());
+        }
+        let (api_token, account_id) = cloudflare_account_credentials()?;
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes/{}",
+            account_id, id
+        );
+        let body = serde_json::json!({
+            "network": network.trim(),
+            "comment": comment.trim(),
+        })
+        .to_string();
+        cf_api_request("PATCH", &url, &api_token, Some(&body))?;
+        Ok("CIDR 路由已更新".to_string())
+    })
+    .await
+}
+
+/// 删除一条 CIDR 路由。
+#[tauri::command]
+async fn delete_cidr_route(route_id: String) -> Result<String, String> {
+    run_blocking("删除 CIDR 路由", move || {
+        let id = route_id.trim();
+        if id.is_empty() {
+            return Err("路由 ID 不能为空".to_string());
+        }
+        let (api_token, account_id) = cloudflare_account_credentials()?;
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes/{}",
+            account_id, id
+        );
+        cf_api_request("DELETE", &url, &api_token, None)?;
+        Ok("CIDR 路由已删除".to_string())
+    })
+    .await
+}
+
+/// 删除一条隧道名下的全部路由（主机名 + CIDR）。
+///
+/// **用途**：`DELETE /cfd_tunnel/{id}` 在隧道还有私网路由时会直接拒绝 ——
+/// `1023: This tunnel has private network routes. Please remove all routes before deleting the tunnel.`，
+/// 所以删隧道前必须先清干净。
+///
+/// 返回 `(已删条数, 失败说明)`。**失败不阻断删隧道**，只作为提示带回：
+/// 残留路由通常是权限不足（token 缺 Cloudflare One Networks 编辑权）造成的，
+/// 把原因告诉用户比让整个删除操作失败更有用。
+fn purge_tunnel_routes(tunnel_id: &str) -> (usize, Vec<String>) {
+    let mut removed = 0usize;
+    let mut failures: Vec<String> = Vec::new();
+
+    let (api_token, account_id) = match cloudflare_account_credentials() {
+        Ok(v) => v,
+        Err(e) => return (0, vec![e]),
+    };
+
+    let hostname_url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/zerotrust/routes/hostname?tunnel_id={}&per_page=100",
+        account_id, tunnel_id
+    );
+    if let Ok(body) = cf_api_request("GET", &hostname_url, &api_token, None) {
+        if let Ok(list) = parse_hostname_routes(&body, tunnel_id) {
+            for r in list.iter().filter(|r| !r.id.is_empty()) {
+                let del_url = format!(
+                    "https://api.cloudflare.com/client/v4/accounts/{}/zerotrust/routes/hostname/{}",
+                    account_id, r.id
+                );
+                match cf_api_request("DELETE", &del_url, &api_token, None) {
+                    Ok(_) => removed += 1,
+                    Err(e) => failures.push(format!("主机名路由 {}: {}", r.hostname, e)),
+                }
+            }
+        }
+    }
+
+    let cidr_url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes?tunnel_id={}&per_page=100",
+        account_id, tunnel_id
+    );
+    if let Ok(body) = cf_api_request("GET", &cidr_url, &api_token, None) {
+        if let Ok(list) = parse_cidr_routes(&body, tunnel_id) {
+            for r in list.iter().filter(|r| !r.id.is_empty()) {
+                let del_url = format!(
+                    "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes/{}",
+                    account_id, r.id
+                );
+                match cf_api_request("DELETE", &del_url, &api_token, None) {
+                    Ok(_) => removed += 1,
+                    Err(e) => failures.push(format!("CIDR 路由 {}: {}", r.network, e)),
+                }
+            }
+        }
+    }
+
+    (removed, failures)
+}
+
 /// 解析主机名路由列表：`{ result: [{ hostname, comment, tunnel_id, deleted_at }] }`。
 fn parse_hostname_routes(body: &str, tunnel_id: &str) -> Result<Vec<TunnelHostnameRoute>, String> {
     let json: serde_json::Value =
@@ -2424,6 +2731,7 @@ fn parse_hostname_routes(body: &str, tunnel_id: &str) -> Result<Vec<TunnelHostna
                 continue;
             }
             out.push(TunnelHostnameRoute {
+                id: json_str_field(item, "id"),
                 hostname: json_str_field(item, "hostname"),
                 comment: json_str_field(item, "comment"),
             });
@@ -2443,6 +2751,7 @@ fn parse_cidr_routes(body: &str, tunnel_id: &str) -> Result<Vec<TunnelCidrRoute>
                 continue;
             }
             out.push(TunnelCidrRoute {
+                id: json_str_field(item, "id"),
                 network: json_str_field(item, "network"),
                 comment: json_str_field(item, "comment"),
             });
@@ -3195,6 +3504,12 @@ pub fn run() {
             delete_tunnel,
             fetch_tunnel_config,
             fetch_tunnel_routes,
+            update_tunnel_config,
+            create_hostname_route,
+            delete_hostname_route,
+            create_cidr_route,
+            update_cidr_route,
+            delete_cidr_route,
             route_dns_tunnel,
             start_server_tunnel,
             stop_server_tunnel,

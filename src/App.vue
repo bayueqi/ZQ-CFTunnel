@@ -168,15 +168,6 @@
                 <span class="mode-dot local"></span>
                 <span class="sidebar-text">{{ t.server_tab.nav_named }}</span>
               </button>
-
-              <button
-                :class="['sidebar-sub-item', { active: currentTab === 'server' && isServerView('remote') }]"
-                @click="switchServerView('remote')"
-                :title="t.server_tab.nav_remote"
-              >
-                <span class="mode-dot remote"></span>
-                <span class="sidebar-text">{{ t.server_tab.nav_remote }}</span>
-              </button>
             </div>
           </transition>
         </div>
@@ -213,9 +204,11 @@
            隐藏页面的节点既占内存，也参与每个响应式更新周期的 diff。这里各视图天然互斥，
            改用 v-if 后只挂载当前可见的那一份，其余整棵卸载。表单值都走 ref / localStorage，切换不丢。 -->
       <section v-if="currentTab === 'server'" class="tab-view server-view animated-view">
-        <!-- ============ 固定域名视图 ============ -->
-        <div v-if="serverMode === 'local'" class="server-sub-view">
-          <!-- ============ 临时链接（临时域名） ============ -->
+        <!-- 服务端只有两个子视图：临时隧道 / 固定隧道。
+             原「云端托管」视图已并入固定隧道 —— 隧道在云端还是本地托管，是它的属性，
+             不该是另一个列表（同一个隧道会因为它而出现在两处）。 -->
+        <div class="server-sub-view">
+          <!-- ============ 临时隧道 ============ -->
           <div v-if="localSubMode === 'quick'" class="server-sub-view">
           <!-- 运行中的临时链接列表卡片：创建入口收进右上角，不再放常驻表单 -->
           <div class="fluent-card table-card">
@@ -267,22 +260,22 @@
           </div>
           </div>
 
-          <!-- ============ 绑定域名（命名隧道） ============ -->
+          <!-- ============ 固定隧道 ============ -->
           <div v-if="localSubMode === 'named'" class="server-sub-view">
-          <!-- 固定域名列表卡片：创建 / 刷新 / 运行中(N) 收进右上角，
-               每行的启停、修改、删除与密码锁都做进行内操作 -->
+          <!-- 固定隧道列表卡片：创建 / 刷新 / 运行中(N) 收进右上角，
+               每行的启停、修改、删除都做进行内操作 -->
           <div class="fluent-card table-card">
             <div class="client-title-row">
               <h3 class="card-title client-title">{{ t.server_tab.local_list_title }}</h3>
               <div class="client-title-actions">
-                <button class="fluent-btn small primary" @click="openNamedCreateModal">
+                <button class="fluent-btn small primary" @click="openTunnelCreateModal">
                   <span class="btn-icon">＋</span>
                   {{ t.server_tab.btn_create }}
                 </button>
                 <button
                   class="fluent-btn small"
                   :disabled="refreshingTunnels.local"
-                  @click="handleRefreshTunnels('local')"
+                  @click="handleRefreshTunnels()"
                 >
                   <span class="btn-icon" :class="{ spinning: refreshingTunnels.local }">🔄</span>
                   {{ refreshingTunnels.local ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
@@ -301,7 +294,6 @@
                   <tr>
                     <th class="col-id">{{ t.server_tab.headers.id }}</th>
                     <th class="col-name">{{ t.server_tab.headers.name }}</th>
-                    <th class="col-type">{{ t.server_tab.headers.type }}</th>
                     <th class="col-created">{{ t.server_tab.headers.created }}</th>
                     <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
                     <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
@@ -310,17 +302,17 @@
                   </tr>
                 </thead>
                 <tbody>
+                  <!-- 这一份是账号下的全部隧道：不再按「本机有没有凭据文件」拆成两个列表 ——
+                       那个判定跟「是不是云端托管」是两回事，会让同一条隧道出现在两处、
+                       或明明云端托管却标成「本地」。 -->
                   <tr
-                    v-for="tunnel in localTunnelList"
+                    v-for="tunnel in serverTunnelList"
                     :key="tunnel.id"
                     :class="{ selected: selectedTunnel?.id === tunnel.id }"
                     @click="selectTunnel(tunnel)"
                   >
                     <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
                     <td class="col-name font-bold">{{ tunnel.name }}</td>
-                    <td class="col-type">
-                      <span class="type-badge type-local">{{ t.server_tab.type_local }}</span>
-                    </td>
                     <td class="col-created mono">{{ tunnel.created }}</td>
                     <td class="col-hostname">
                       <template v-if="tunnel.hostnames && tunnel.hostnames.length">
@@ -354,7 +346,7 @@
                       <button
                         class="row-action-btn"
                         :title="t.server_tab.named_edit_title"
-                        @click.stop="openNamedEditModal(tunnel)"
+                        @click.stop="openTunnelEditModal(tunnel)"
                       >✎</button>
                       <button
                         class="row-action-btn danger"
@@ -363,8 +355,8 @@
                       >🗑</button>
                     </td>
                   </tr>
-                  <tr v-if="localTunnelList.length === 0">
-                    <td colspan="8" class="empty-table">
+                  <tr v-if="serverTunnelList.length === 0">
+                    <td colspan="7" class="empty-table">
                       {{ refreshingTunnels.local ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
@@ -485,154 +477,6 @@
           </div>
         </div>
 
-        <!-- ============ 云端托管视图 ============ -->
-        <div v-if="serverMode === 'remote'" class="server-sub-view">
-          <!-- 云端托管列表卡片：一条隧道一行，行内 ▶/⏹ 直接启停。
-               启动用的 Token 由后端拿 cert.pem 现取，界面上不出现 Token，也不落盘。 -->
-          <div class="fluent-card table-card">
-            <div class="client-title-row">
-              <h3 class="card-title client-title">{{ t.server_tab.remote_list_title }}</h3>
-              <div class="client-title-actions">
-                <button
-                  class="fluent-btn small"
-                  :disabled="refreshingTunnels.remote"
-                  @click="handleRefreshTunnels('remote')"
-                >
-                  <span class="btn-icon" :class="{ spinning: refreshingTunnels.remote }">🔄</span>
-                  {{ refreshingTunnels.remote ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
-                </button>
-                <!-- 删除按钮就放在刷新旁边，作用于列表里选中的那条隧道，点开先弹确认框 -->
-                <button
-                  class="fluent-btn small danger-outline"
-                  @click="promptDeleteRemoteTunnel()"
-                  :disabled="!selectedRemoteTunnel"
-                >
-                  <span class="btn-icon">🗑️</span>
-                  {{ t.server_tab.btn_delete }}
-                </button>
-                <div class="status-pill" :class="remoteRunningCount > 0 ? 'online' : 'offline'">
-                  {{ remoteRunningCount > 0
-                    ? `${t.server_tab.status_remote_running} (${remoteRunningCount})`
-                    : t.server_tab.status_remote_stopped }}
-                </div>
-              </div>
-            </div>
-
-            <div class="fluent-table-wrapper">
-              <table class="fluent-table">
-                <thead>
-                  <tr>
-                    <th class="col-id">{{ t.server_tab.headers.id }}</th>
-                    <th class="col-name">{{ t.server_tab.headers.name }}</th>
-                    <th class="col-type">{{ t.server_tab.headers.type }}</th>
-                    <th class="col-created">{{ t.server_tab.headers.created }}</th>
-                    <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
-                    <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
-                    <th class="col-status">{{ t.server_tab.headers.status }}</th>
-                    <th class="col-actions">{{ t.server_tab.headers.actions }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="tunnel in remoteTunnelList"
-                    :key="tunnel.id"
-                    :class="{ selected: selectedRemoteTunnel?.id === tunnel.id }"
-                    @click="selectedRemoteTunnel = tunnel"
-                  >
-                    <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
-                    <td class="col-name font-bold">{{ tunnel.name }}</td>
-                    <td class="col-type">
-                      <span class="type-badge type-remote">{{ t.server_tab.type_remote }}</span>
-                    </td>
-                    <td class="col-created mono">{{ tunnel.created }}</td>
-                    <td class="col-hostname">
-                      <template v-if="tunnel.hostnames && tunnel.hostnames.length">
-                        <span
-                          class="hostname-tag"
-                          v-for="h in tunnel.hostnames"
-                          :key="h.id"
-                          :title="t.server_tab.click_to_copy"
-                          @click.stop="copyHostname(h.name)"
-                        >{{ h.name }}</span>
-                      </template>
-                      <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
-                    </td>
-                    <td class="col-connections">{{ tunnel.connections || '-' }}</td>
-                    <td class="col-status">
-                      <span class="tunnel-status" :class="{ online: isRemoteRunning(tunnel.id) }">
-                        <span
-                          class="status-dot"
-                          :class="isRemoteRunning(tunnel.id) ? 'green' : 'gray'"
-                        ></span>
-                        {{ isRemoteRunning(tunnel.id) ? t.server_tab.status_remote_running : t.server_tab.status_remote_stopped }}
-                      </span>
-                    </td>
-                    <td class="col-actions">
-                      <button
-                        class="row-action-btn"
-                        :class="isRemoteRunning(tunnel.id) ? 'danger' : 'primary'"
-                        :title="isRemoteRunning(tunnel.id) ? t.server_tab.btn_stop_remote : t.server_tab.btn_start_remote"
-                        @click.stop="isRemoteRunning(tunnel.id) ? handleStopRemoteTunnel(tunnel) : handleStartRemoteTunnel(tunnel)"
-                      >
-                        <span v-if="isRemoteRunning(tunnel.id)" class="icon-square"></span>
-                        <span v-else class="icon-triangle"></span>
-                      </button>
-                    </td>
-                  </tr>
-                  <tr v-if="remoteTunnelList.length === 0">
-                    <td colspan="8" class="empty-table">
-                      {{ refreshingTunnels.remote ? '正在刷新列表...' : '未发现隧道' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- 云端配置卡片：按隧道名称分组，每条隧道下三块 —— 已发布应用程序路由 / 主机名路由 / CIDR 路由。
-               这三块是 Cloudflare 面板上三个独立页面的数据、三个不同接口，互不相关，所以分开列。 -->
-          <div class="fluent-card form-card remote-config-card">
-            <h3 class="card-title">{{ t.server_tab.remote_config_title }}</h3>
-            <div class="remote-config-body">
-              <template v-if="remoteConfigGroups.length">
-                <div
-                  v-for="g in remoteConfigGroups"
-                  :key="g.key"
-                  class="remote-config-group"
-                >
-                  <!-- 这里只放隧道名（ID 在 tooltip 里）：API 的 source 与 version 都是噪音
-                       （一个语义是「配置托管方」，放进「云端配置」卡片里自相矛盾；另一个长得像软件版本号），
-                       前端已不接收这两个字段。 -->
-                  <div class="remote-config-group-title" :title="g.tooltip">
-                    <span class="remote-config-group-name">{{ g.name }}</span>
-                  </div>
-                  <!-- 1. 已发布应用程序路由（= ingress，/cfd_tunnel/{id}/configurations） -->
-                  <div class="remote-config-section">
-                    <div class="remote-config-section-title">{{ t.server_tab.config_sec_published }}</div>
-                    <pre v-if="g.published">{{ g.published }}</pre>
-                    <div v-else-if="g.ingressError" class="remote-config-section-error">{{ t.server_tab.config_load_failed }}：{{ g.ingressError }}</div>
-                    <div v-else class="remote-config-section-empty">{{ t.server_tab.config_none }}</div>
-                  </div>
-                  <!-- 2. 主机名路由（/zerotrust/routes/hostname，独立于 ingress） -->
-                  <div class="remote-config-section">
-                    <div class="remote-config-section-title">{{ t.server_tab.config_sec_hostname }}</div>
-                    <pre v-if="g.hostname">{{ g.hostname }}</pre>
-                    <div v-else-if="g.hostnameError" class="remote-config-section-error">{{ t.server_tab.config_load_failed }}：{{ g.hostnameError }}</div>
-                    <div v-else class="remote-config-section-empty">{{ t.server_tab.config_none }}</div>
-                  </div>
-                  <!-- 3. CIDR 路由（/teamnet/routes） -->
-                  <div class="remote-config-section">
-                    <div class="remote-config-section-title">{{ t.server_tab.config_sec_cidr }}</div>
-                    <pre v-if="g.cidr">{{ g.cidr }}</pre>
-                    <div v-else-if="g.cidrError" class="remote-config-section-error">{{ t.server_tab.config_load_failed }}：{{ g.cidrError }}</div>
-                    <div v-else class="remote-config-section-empty">{{ t.server_tab.config_none }}</div>
-                  </div>
-                </div>
-              </template>
-              <div v-else class="remote-config-empty">{{ t.server_tab.remote_config_empty }}</div>
-            </div>
-          </div>
-        </div>
       </section>
 
       <!-- 2. 客户端 Tab：支持多开，一条隧道一行，可同时桥接多条 -->
@@ -867,14 +711,12 @@
       </div>
     </footer>
 
-    <!-- Win11 确认删除隧道模态弹窗（固定域名隧道 / 云端托管隧道共用） -->
+    <!-- Win11 确认删除隧道模态弹窗 -->
     <div v-if="showDeleteModal" class="fluent-modal-overlay" @click.self="cancelDelete">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
           <h3 class="modal-title">
-            ⚠️ {{ pendingDelete?.scope === 'remote'
-              ? t.server_tab.remote_delete_confirm_title
-              : t.server_tab.errors.delete_confirm_title }}
+            ⚠️ {{ t.server_tab.errors.delete_confirm_title }}
           </h3>
         </div>
         <div class="modal-body">
@@ -908,12 +750,12 @@
               <!-- 固定域名列表为空时不渲染空的 select（会出现一个空输入格子），
                    改为一行提示；正常路径由 openDnsAddModal 提前拦截。 -->
               <select
-                v-if="localTunnelList.length > 0"
+                v-if="serverTunnelList.length > 0"
                 v-model="dnsRoute.name"
                 class="fluent-input fluent-select"
               >
                 <option
-                  v-for="tn in localTunnelList"
+                  v-for="tn in serverTunnelList"
                   :key="tn.id"
                   :value="tn.name"
                 >{{ tn.name }}</option>
@@ -1142,172 +984,226 @@
       </div>
     </div>
 
-    <!-- 固定域名：创建隧道弹窗（创建 + 可选绑定域名 + 可选上锁，一步到位） -->
-    <div v-if="showNamedCreateModal" class="fluent-modal-overlay">
-      <div class="fluent-modal-dialog">
+    <!-- 固定隧道：创建与修改**共用同一个弹窗**。
+         固定隧道的全部内容都住在云端 ingress 里，「创建一条隧道」和「改一条隧道」要填的
+         是同一批东西（协议 / 本地端口 / 域名），拆成两个界面只会让两边慢慢长歪。
+         唯一的区别是标题、隧道名可编辑性，以及修改态要先读云端已有配置把表单填上。 -->
+    <div v-if="showTunnelModal" class="fluent-modal-overlay">
+      <div class="fluent-modal-dialog tunnel-form-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">🔗 {{ t.server_tab.named_create_title }}</h3>
+          <h3 class="modal-title">
+            {{ tunnelFormMode === 'create' ? t.server_tab.named_create_title : t.server_tab.named_edit_title }}
+          </h3>
         </div>
-        <div class="modal-body">
+        <div class="modal-body tunnel-form-body">
+          <div v-if="tunnelFormLoading" class="route-loading">
+            ⏳ {{ t.server_tab.form_loading_config }}
+          </div>
+
+          <!-- 隧道名字：创建时填写；修改时只读 —— 隧道名就是凭据文件名，改名要连带搬凭据、
+               删旧锁，代价远大于收益，不如干脆不给改。 -->
           <div class="fluent-form-group">
             <label class="form-label">
               {{ t.server_tab.tunnel_name }}
-              <span class="required">*</span>
+              <span v-if="tunnelFormMode === 'create'" class="required">*</span>
             </label>
             <div class="input-container">
               <input
+                v-if="tunnelFormMode === 'create'"
                 type="text"
-                v-model="serverConfig.name"
+                v-model="tunnelFormName"
                 :placeholder="t.server_tab.tunnel_name_placeholder"
-                :class="['fluent-input', { 'input-error': serverNameHasError }]"
-                @input="onServerNameInput"
-                @keydown.enter="confirmNamedCreate"
+                :class="['fluent-input', { 'input-error': tunnelFormNameHasError }]"
+                @input="tunnelFormNameHasError = tunnelFormName.length > 0 && !isTunnelNameValid(tunnelFormName)"
+                @keydown.enter="confirmTunnelForm"
               />
+              <div v-else class="tunnel-form-name mono">{{ tunnelFormName }}</div>
             </div>
-            <div v-if="serverNameHasError" class="error-tip">
+            <div v-if="tunnelFormMode === 'create' && tunnelFormNameHasError" class="error-tip">
               <span class="error-icon">⚠️</span>
               {{ t.server_tab.errors.tunnel_invalid }}
             </div>
-          </div>
-
-          <div class="fluent-form-group">
-            <label class="form-label">{{ t.server_tab.protocol_label }}</label>
-            <div class="input-container">
-              <select v-model="serverConfig.protocol" class="fluent-input fluent-select">
-                <option value="http">{{ t.server_tab.protocol_http }}</option>
-                <option value="https">{{ t.server_tab.protocol_https }}</option>
-                <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
-                <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
-                <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
-                <option value="smb">{{ t.server_tab.protocol_smb }}</option>
-                <option value="unix">{{ t.server_tab.protocol_unix }}</option>
-                <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
-                <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
-              </select>
+            <div v-else-if="tunnelFormMode === 'edit'" class="form-hint">
+              {{ t.server_tab.form_name_readonly_hint }}
             </div>
           </div>
 
-          <div v-if="serverAddressMode !== 'none'" class="fluent-form-group">
-            <label class="form-label">
-              {{ serverAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
-              <span class="required">*</span>
-            </label>
-            <div class="input-container">
+          <!-- ① 已发布应用程序路由 = 云端 ingress。
+               一行 = 一条规则，用户只「选协议 + 填端口 + 填域名」，service 字符串由程序拼
+               （http://127.0.0.1:8080 这种手写太容易错，也读不出来是哪台机器哪个服务）。 -->
+          <div class="route-section">
+            <div class="route-section-head">
+              <span class="route-section-title">{{ t.server_tab.config_sec_published }}</span>
+              <button class="fluent-btn small" @click="addIngressRow">
+                <span class="btn-icon">＋</span>{{ t.server_tab.form_add_route }}
+              </button>
+            </div>
+
+            <div v-for="(row, i) in tunnelFormRows" :key="'ing-' + i" class="ingress-row">
+              <div class="ingress-row-line">
+                <div class="ingress-field protocol">
+                  <span class="ingress-field-label">{{ t.server_tab.protocol_label }}</span>
+                  <select
+                    v-model="row.protocol"
+                    class="fluent-input fluent-select"
+                    @change="onIngressProtocolChange(row)"
+                  >
+                    <option value="http">{{ t.server_tab.protocol_http }}</option>
+                    <option value="https">{{ t.server_tab.protocol_https }}</option>
+                    <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
+                    <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
+                    <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
+                    <option value="smb">{{ t.server_tab.protocol_smb }}</option>
+                    <option value="unix">{{ t.server_tab.protocol_unix }}</option>
+                    <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
+                    <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
+                    <!-- 反解不出协议+端口的存量规则：保留原样，别把云端已有的配置改掉 -->
+                    <option v-if="row.protocol === 'raw'" value="raw">{{ t.server_tab.protocol_raw }}</option>
+                  </select>
+                </div>
+
+                <div
+                  v-if="row.protocol !== 'raw' && addressModeOf(row.protocol) !== 'none'"
+                  class="ingress-field port"
+                >
+                  <span class="ingress-field-label">
+                    {{ addressModeOf(row.protocol) === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
+                  </span>
+                  <input
+                    v-if="addressModeOf(row.protocol) === 'port'"
+                    type="text"
+                    v-model="row.port"
+                    :placeholder="t.server_tab.port_placeholder"
+                    class="fluent-input"
+                  />
+                  <input
+                    v-else
+                    type="text"
+                    v-model="row.unixSocket"
+                    :placeholder="t.server_tab.unix_socket_placeholder"
+                    class="fluent-input"
+                  />
+                </div>
+
+                <div v-if="row.protocol === 'raw'" class="ingress-field service">
+                  <span class="ingress-field-label">{{ t.server_tab.form_service_label }}</span>
+                  <input type="text" v-model="row.rawService" class="fluent-input mono" />
+                </div>
+                <div v-else class="ingress-field hostname">
+                  <span class="ingress-field-label">{{ t.server_tab.form_hostname_label }}</span>
+                  <input
+                    type="text"
+                    v-model="row.hostname"
+                    :placeholder="t.server_tab.form_route_hostname_placeholder"
+                    class="fluent-input"
+                  />
+                </div>
+
+                <button
+                  class="row-action-btn danger ingress-remove"
+                  :disabled="tunnelFormRows.length <= 1"
+                  :title="t.server_tab.form_remove_route"
+                  @click="removeIngressRow(i)"
+                >🗑</button>
+              </div>
+              <div
+                v-if="tunnelFormSubmitted && (ingressRowErrorKey(row) || ingressRowOrderError(i))"
+                class="error-tip"
+              >
+                <span class="error-icon">⚠️</span>
+                {{ errText(ingressRowErrorKey(row) || ingressRowOrderError(i)) }}
+              </div>
+            </div>
+
+            <!-- 末尾兜底：ingress 的最后一条必须不带域名，否则未匹配的请求无处可去。
+                 用户最后一行填了域名就自动补一条 404；他自己留了一条无域名的规则则不补。 -->
+            <div class="ingress-catch-all">
+              <span class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
+              <template v-if="ingressNeedsCatchAll">
+                <span class="catch-all-service mono">{{ CATCH_ALL_SERVICE }}</span>
+                <span class="catch-all-hint">{{ t.server_tab.form_catch_all_hint }}</span>
+              </template>
+              <span v-else class="catch-all-hint">{{ t.server_tab.form_catch_all_inline }}</span>
+            </div>
+          </div>
+
+          <!-- ② 主机名路由（WARP 私网访问，一般留空） -->
+          <div class="route-section">
+            <div class="route-section-head">
+              <span class="route-section-title">{{ t.server_tab.config_sec_hostname }}</span>
+              <button class="fluent-btn small" @click="addHostRoute">
+                <span class="btn-icon">＋</span>{{ t.server_tab.form_add_host_route }}
+              </button>
+            </div>
+            <div v-if="tunnelFormHostRoutes.length === 0" class="route-empty">
+              {{ t.server_tab.form_host_routes_hint }}
+            </div>
+            <div v-for="(r, i) in tunnelFormHostRoutes" :key="'host-' + i" class="route-row">
               <input
-                v-if="serverAddressMode === 'port'"
                 type="text"
-                v-model="serverConfig.port"
-                :placeholder="t.server_tab.port_placeholder"
-                :class="['fluent-input', { 'input-error': serverPortHasError }]"
-                @input="onServerPortInput"
-                @keydown.enter="confirmNamedCreate"
+                v-model="r.hostname"
+                :placeholder="t.server_tab.form_host_label"
+                class="fluent-input mono"
               />
               <input
-                v-else
                 type="text"
-                v-model="serverConfig.unixSocket"
-                :placeholder="t.server_tab.unix_socket_placeholder"
+                v-model="r.comment"
+                :placeholder="t.server_tab.form_comment_label"
                 class="fluent-input"
-                @input="onServerUnixSocketInput"
-                @keydown.enter="confirmNamedCreate"
               />
+              <button class="row-action-btn danger" @click="tunnelFormHostRoutes.splice(i, 1)">🗑</button>
             </div>
-            <div v-if="serverAddressMode === 'port' && serverPortHasError" class="error-tip">
-              <span class="error-icon">⚠️</span>
-              {{ t.server_tab.errors.port_invalid }}
+            <div v-if="tunnelFormSubmitted && tunnelFormHostRoutes.some(r => !r.hostname.trim())" class="error-tip">
+              <span class="error-icon">⚠️</span>{{ errText('err_host_required') }}
             </div>
           </div>
 
-          <!-- 可选：创建后顺手绑定域名（cloudflared tunnel route dns） -->
-          <div class="fluent-form-group">
-            <label class="form-label">{{ t.server_tab.named_create_domain_label }}</label>
-            <div class="input-container">
+          <!-- ③ CIDR 路由（WARP 私网访问，一般留空） -->
+          <div class="route-section">
+            <div class="route-section-head">
+              <span class="route-section-title">{{ t.server_tab.config_sec_cidr }}</span>
+              <button class="fluent-btn small" @click="addCidrRoute">
+                <span class="btn-icon">＋</span>{{ t.server_tab.form_add_cidr_route }}
+              </button>
+            </div>
+            <div v-if="tunnelFormCidrRoutes.length === 0" class="route-empty">
+              {{ t.server_tab.form_cidr_routes_hint }}
+            </div>
+            <div v-for="(r, i) in tunnelFormCidrRoutes" :key="'cidr-' + i" class="route-row">
               <input
                 type="text"
-                v-model="namedCreateDomain"
-                :placeholder="t.server_tab.named_create_domain_placeholder"
-                :class="['fluent-input', { 'input-error': namedCreateDomainHasError }]"
-                @input="onNamedCreateDomainInput"
-                @keydown.enter="confirmNamedCreate"
+                v-model="r.network"
+                :placeholder="t.server_tab.form_cidr_label"
+                class="fluent-input mono"
               />
+              <input
+                type="text"
+                v-model="r.comment"
+                :placeholder="t.server_tab.form_comment_label"
+                class="fluent-input"
+              />
+              <button class="row-action-btn danger" @click="tunnelFormCidrRoutes.splice(i, 1)">🗑</button>
             </div>
-            <div v-if="namedCreateDomainHasError" class="error-tip">
-              <span class="error-icon">⚠️</span>
-              {{ t.server_tab.errors.dns_domain_invalid }}
+            <div v-if="tunnelFormSubmitted && tunnelFormCidrRoutes.some(r => !r.network.trim())" class="error-tip">
+              <span class="error-icon">⚠️</span>{{ errText('err_cidr_required') }}
             </div>
+          </div>
+
+          <div v-if="tunnelFormLoadError" class="modal-hint warn">
+            {{ t.server_tab.form_load_failed }}：{{ tunnelFormLoadError }}
+          </div>
+          <div v-else class="modal-hint">
+            {{ t.server_tab.form_live_hint }}
           </div>
         </div>
         <div class="modal-footer">
-          <button class="fluent-btn" @click="showNamedCreateModal = false">{{ t.exit_modal.btn_cancel }}</button>
-          <button class="fluent-btn primary" @click="confirmNamedCreate" :disabled="isCreatingTunnel || isLockMutating">
-            {{ t.server_tab.btn_create }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 固定域名：修改隧道弹窗（协议 / 端口 + 密码锁，保存后运行中的隧道自动重启生效） -->
-    <div v-if="showNamedEditModal" class="fluent-modal-overlay">
-      <div class="fluent-modal-dialog">
-        <div class="modal-header">
-          <h3 class="modal-title">✎ {{ t.server_tab.named_edit_title }}</h3>
-        </div>
-        <div class="modal-body">
-          <p v-if="namedEditTarget" class="modal-context font-bold">{{ namedEditTarget.name }}</p>
-
-          <div class="fluent-form-group">
-            <label class="form-label">{{ t.server_tab.protocol_label }}</label>
-            <div class="input-container">
-              <select v-model="namedEdit.protocol" class="fluent-input fluent-select">
-                <option value="http">{{ t.server_tab.protocol_http }}</option>
-                <option value="https">{{ t.server_tab.protocol_https }}</option>
-                <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
-                <option value="ssh">{{ t.server_tab.protocol_ssh }}</option>
-                <option value="rdp">{{ t.server_tab.protocol_rdp }}</option>
-                <option value="smb">{{ t.server_tab.protocol_smb }}</option>
-                <option value="unix">{{ t.server_tab.protocol_unix }}</option>
-                <option value="unix+tls">{{ t.server_tab.protocol_unix_tls }}</option>
-                <option value="hello_world">{{ t.server_tab.protocol_hello_world }}</option>
-              </select>
-            </div>
-          </div>
-
-          <div v-if="namedEditAddressMode !== 'none'" class="fluent-form-group">
-            <label class="form-label">
-              {{ namedEditAddressMode === 'socket' ? t.server_tab.unix_socket_label : t.server_tab.port }}
-              <span class="required">*</span>
-            </label>
-            <div class="input-container">
-              <input
-                v-if="namedEditAddressMode === 'port'"
-                type="text"
-                v-model="namedEdit.port"
-                :placeholder="t.server_tab.port_placeholder"
-                :class="['fluent-input', { 'input-error': namedEditPortHasError }]"
-                @input="namedEditPortHasError = namedEdit.port.length > 0 && !isPortValid(namedEdit.port)"
-              />
-              <input
-                v-else
-                type="text"
-                v-model="namedEdit.unixSocket"
-                :placeholder="t.server_tab.unix_socket_placeholder"
-                class="fluent-input"
-              />
-            </div>
-            <div v-if="namedEditAddressMode === 'port' && namedEditPortHasError" class="error-tip">
-              <span class="error-icon">⚠️</span>
-              {{ t.server_tab.errors.port_invalid }}
-            </div>
-          </div>
-
-          <div v-if="namedEditTarget && isTunnelRunning(namedEditTarget.name)" class="modal-hint warn">
-            {{ t.server_tab.edit_restart_hint }}
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="fluent-btn" @click="showNamedEditModal = false">{{ t.exit_modal.btn_cancel }}</button>
-          <button class="fluent-btn primary" @click="confirmNamedEdit" :disabled="isCreatingTunnel || isLockMutating">
-            {{ t.server_tab.btn_save }}
+          <button class="fluent-btn" @click="showTunnelModal = false">{{ t.exit_modal.btn_cancel }}</button>
+          <button
+            class="fluent-btn primary"
+            @click="confirmTunnelForm"
+            :disabled="tunnelFormSaving || tunnelFormLoading"
+          >
+            {{ tunnelFormMode === 'create' ? t.server_tab.btn_create : t.server_tab.btn_save }}
           </button>
         </div>
       </div>
@@ -1646,23 +1542,16 @@ const handleSidebarClick = (tab: string) => {
   switchTab(tab);
 };
 
-// 服务端下边栏的三视图切换：临时链接 / 固定域名 / 云端托管
-const switchServerView = (view: 'quick' | 'named' | 'remote') => {
-  if (view === 'remote') {
-    switchServerMode('remote');
-  } else {
-    switchServerMode('local');
-    switchLocalSubMode(view);
-  }
+// 服务端下边栏的二视图切换：临时隧道 / 固定隧道
+// （原「云端托管」入口已取消：托管模式是隧道的属性，不是另一个列表）
+const switchServerView = (view: 'quick' | 'named') => {
+  switchLocalSubMode(view);
   sidebarOpen.value.server = true;
   switchTab('server');
 };
 
 // 当前是否处于服务端某个子视图
-const isServerView = (view: 'quick' | 'named' | 'remote') => {
-  if (view === 'remote') return serverMode.value === 'remote';
-  return serverMode.value === 'local' && localSubMode.value === view;
-};
+const isServerView = (view: 'quick' | 'named') => localSubMode.value === view;
 
 // 表单输入
 const serverConfig = ref({
@@ -1686,9 +1575,7 @@ const dnsRoute = ref({
   domain: localStorage.getItem('dns_route_domain') || '',
 });
 
-// 输入错误校验状态
-const serverNameHasError = ref(false);
-const serverPortHasError = ref(false);
+// 输入错误校验状态（服务端的隧道名校验已并入统一弹窗：tunnelFormNameHasError）
 const clientFormDomainHasError = ref(false);
 const clientFormPortHasError = ref(false);
 const dnsRouteNameHasError = ref(false);
@@ -1710,9 +1597,6 @@ const dnsEditValue = ref('');
 const dnsEditHasError = ref(false);
 // 改名 / 解绑进行中，避免重复提交
 const isDnsMutating = ref(false);
-
-// 判断服务端表单是否满足启动条件（hello_world 无需端口，unix 协议需要套接字路径）
-// 注：顶部常驻表单已移除，创建/修改都走弹窗，这里保留给弹窗复用的校验逻辑见 confirmNamedCreate
 
 // 运行状态：命名隧道支持多开，后端 is_server_running 返回正在运行的隧道名列表（key = 隧道名）
 const serverRunningNames = ref<string[]>([]);
@@ -1828,26 +1712,11 @@ const canSubmitClientAdd = computed(
     !!clientForm.value.domain.trim() &&
     !!clientForm.value.port.trim()
 );
-// 刷新态按列表分开：固定域名 / 云端托管各一份。
-// 早先两处共用一个布尔值，于是「固定域名」正在刷新时，「云端托管」的刷新按钮
-// 也会一起变灰 —— 而且这个刷新会去等 Cloudflare API（网络不通时长达二三十秒），
-// 表现出来就是「明明没在刷这个列表，按钮却点不动」。
-const refreshingTunnels = ref<{ local: boolean; remote: boolean; quick: boolean }>({ local: false, remote: false, quick: false });
-const isCreatingTunnel = ref(false);
+// 刷新态按列表分开：固定隧道 / 临时隧道各一份，互不牵连
+const refreshingTunnels = ref<{ local: boolean; quick: boolean }>({ local: false, quick: false });
 const isDownloadingCloudflared = ref(false);
 
-// 服务端模式：本地 / 远程 切换
-const serverMode = ref<'local' | 'remote'>(localStorage.getItem('server_mode') === 'remote' ? 'remote' : 'local');
-
-const switchServerMode = (mode: 'local' | 'remote') => {
-  serverMode.value = mode;
-  localStorage.setItem('server_mode', mode);
-  // 切到云端托管时取云端配置：走 API 读取，隧道没跑起来也能看到规则。
-  // 这里**不**强刷 —— 缓存没过期就直接用，否则每次切视图都会重拉全部隧道，白白卡一下。
-  if (mode === 'remote') void refreshRemoteConfigs();
-};
-
-// 固定域名二级模式：临时链接(临时域名) / 命名隧道(绑定域名)
+// 固定隧道二级模式：临时隧道 / 固定隧道
 const localSubMode = ref<'quick' | 'named'>(localStorage.getItem('local_sub_mode') === 'quick' ? 'quick' : 'named');
 
 const switchLocalSubMode = (mode: 'quick' | 'named') => {
@@ -1894,7 +1763,6 @@ const addressModeOf = (protocol: string): AddressMode => {
 };
 
 const quickAddressMode = computed(() => addressModeOf(quickConfig.value.protocol));
-const serverAddressMode = computed(() => addressModeOf(serverConfig.value.protocol));
 
 const canStartQuick = computed(() => {
   const mode = quickAddressMode.value;
@@ -1921,229 +1789,451 @@ const quickTargetLabel = (qt: QuickTunnelItem) => {
   return `${qt.protocol}://127.0.0.1:${qt.port}`;
 };
 
-// 云端托管不再需要用户填 Token：启动时由 Rust 侧拿 cert.pem 现取，
-// 进程表 key 就是隧道 ID，前端靠它跟隧道列表里的行对上号，Token 全程不落盘。
-const remoteRunningKeys = ref<string[]>([]);
-const isRemoteRunning = (tunnelId: string) => remoteRunningKeys.value.includes(tunnelId);
-const remoteRunningCount = computed(() => remoteRunningKeys.value.length);
-
-// 云端配置（只读）。面板上这些数据其实分三块，来源是三个互不相关的接口：
-//   1. 已发布应用程序路由 → GET .../cfd_tunnel/{id}/configurations 的 ingress
-//   2. 主机名路由        → GET .../zerotrust/routes/hostname
-//   3. CIDR 路由         → GET .../teamnet/routes
-// 数据都来自 Cloudflare API 而不是 cloudflared 的运行日志 —— 隧道没跑起来也能看到配置。
+// ======================== 固定隧道表单（创建 / 修改共用） ========================
+//
+// 固定隧道的全部内容都住在云端 ingress 里，一条规则就是
+//   { "hostname": "mc.example.com", "service": "tcp://127.0.0.1:25565" }
+// 界面只让用户「选协议 + 填端口 + 填域名」，service 字符串由这里拼 ——
+// 手写 service 既容易写错，也看不出到底是谁在监听哪个端口。
+//
+// 三块数据彼此独立、端点也各不相同，所以弹窗里分成三块编辑：
+//   ① 已发布应用程序路由 → PUT .../cfd_tunnel/{id}/configurations 的 ingress
+//   ② 主机名路由        → POST teamnet/routes/hostname，DELETE zerotrust/routes/hostname/{id}
+//   ③ CIDR 路由         → POST / PATCH / DELETE teamnet/routes
 type TunnelIngressRule = { hostname: string; path: string; service: string };
-type TunnelHostnameRoute = { hostname: string; comment: string };
-type TunnelCidrRoute = { network: string; comment: string };
+type TunnelHostnameRoute = { id: string; hostname: string; comment: string };
+type TunnelCidrRoute = { id: string; network: string; comment: string };
 type TunnelRouteSet = {
   hostname_routes: TunnelHostnameRoute[];
   cidr_routes: TunnelCidrRoute[];
   hostname_error: string | null;
   cidr_error: string | null;
 };
-type TunnelCloudInfo = {
-  rules: TunnelIngressRule[];
-  hostnameRoutes: TunnelHostnameRoute[];
-  cidrRoutes: TunnelCidrRoute[];
-  // 三块各自的读取失败原因，空串表示读到了（列表本身可能为空）
-  ingressError: string;
-  hostnameError: string;
-  cidrError: string;
+
+type IngressRow = {
+  /** 'raw' = 这条规则的 service 反解不出「协议 + 端口」，只能原文编辑 */
+  protocol: string;
+  port: string;
+  unixSocket: string;
+  /** 留空即「不带域名的规则」，它只能有一条且必须在最末（那条就是兜底） */
+  hostname: string;
+  /** protocol === 'raw' 时使用 */
+  rawService: string;
+  /** ingress 的 path 字段：界面不暴露，但读回来必须原样带回去 */
+  path: string;
 };
-const remoteConfigs = ref<Record<string, TunnelCloudInfo>>({});
+
+/** ingress 末尾的兜底规则：不带域名，接住所有未匹配的请求 */
+const CATCH_ALL_SERVICE = 'http_status:404';
+
+// 协议 → service 字符串。unix / hello_world 的写法跟普通协议不同，
+// 与 Rust 侧 start_server_tunnel 拼 --url 的规则保持一字不差。
+const serviceOfRow = (row: IngressRow): string => {
+  if (row.protocol === 'raw') return row.rawService.trim();
+  if (row.protocol === 'hello_world') return 'hello_world';
+  if (row.protocol === 'unix' || row.protocol === 'unix+tls') {
+    return `${row.protocol}:${row.unixSocket.trim()}`;
+  }
+  return `${row.protocol}://127.0.0.1:${row.port.trim()}`;
+};
+
+// service → 表单行。反解不了就退化成 raw 行原文照存：宁可让用户看到一串看不懂的
+// service，也不能把云端已有的规则悄悄改掉。
+// host 部分同时接受 127.0.0.1 与 localhost —— 云端存量配置里两种都出现过。
+const rowOfRule = (rule: TunnelIngressRule): IngressRow => {
+  const base: IngressRow = {
+    protocol: 'http',
+    port: '',
+    unixSocket: '',
+    hostname: rule.hostname || '',
+    rawService: '',
+    path: rule.path || '',
+  };
+  const service = (rule.service || '').trim();
+  if (service === 'hello_world') return { ...base, protocol: 'hello_world' };
+  const socket = service.match(/^(unix\+tls|unix):(.+)$/);
+  if (socket) return { ...base, protocol: socket[1], unixSocket: socket[2] };
+  const tcp = service.match(/^([a-z][a-z0-9]*):\/\/(?:127\.0\.0\.1|localhost):(\d+)$/i);
+  if (tcp) return { ...base, protocol: tcp[1].toLowerCase(), port: tcp[2] };
+  return { ...base, protocol: 'raw', rawService: service };
+};
+
+const emptyIngressRow = (): IngressRow => ({
+  protocol: 'http',
+  port: '',
+  unixSocket: '',
+  hostname: '',
+  rawService: '',
+  path: '',
+});
+
+// 弹窗状态：create 与 edit 共用同一套，靠 tunnelFormMode 分辨
+const showTunnelModal = ref(false);
+const tunnelFormMode = ref<'create' | 'edit'>('create');
+const tunnelFormTarget = ref<TunnelInfo | null>(null);
+const tunnelFormName = ref('');
+const tunnelFormRows = ref<IngressRow[]>([]);
+const tunnelFormHostRoutes = ref<TunnelHostnameRoute[]>([]);
+const tunnelFormCidrRoutes = ref<TunnelCidrRoute[]>([]);
+const tunnelFormLoading = ref(false);
+const tunnelFormSaving = ref(false);
+const tunnelFormSubmitted = ref(false);
+const tunnelFormNameHasError = ref(false);
+const tunnelFormLoadError = ref('');
+// 编辑态读回来的原始路由：保存时靠这两个快照算出「删了哪些 / 改了哪些」
+const originalHostRoutes = ref<Record<string, string>>({});
+const originalCidrRoutes = ref<Record<string, { network: string; comment: string }>>({});
+
+// 最后一条有域名 → 需要程序补一条 404 兜底；最后一条本身没域名 → 它就是兜底
+const ingressNeedsCatchAll = computed(() => {
+  const rows = tunnelFormRows.value;
+  return rows.length > 0 && !!rows[rows.length - 1].hostname.trim();
+});
+
+// 逐行校验：返回错误文案键（空串 = 合法）。只有点过「保存」之后才显示，免得一打开满屏红。
+const ingressRowErrorKey = (row: IngressRow): string => {
+  if (row.protocol === 'raw') return row.rawService.trim() ? '' : 'err_service_required';
+  const mode = addressModeOf(row.protocol);
+  if (mode === 'socket' && !row.unixSocket.trim()) return 'err_socket_required';
+  if (mode === 'port' && !isPortValid(row.port.trim())) return 'err_port_required';
+  const host = row.hostname.trim();
+  if (host && !isDomainValid(host)) return 'err_hostname_invalid';
+  return '';
+};
+
+// 不带域名的规则会吃掉它后面的所有规则，所以只允许出现在最后一条
+const ingressRowOrderError = (i: number): string => {
+  if (i === tunnelFormRows.value.length - 1) return '';
+  return tunnelFormRows.value[i].hostname.trim() ? '' : 'err_catch_all_last';
+};
+
+// 语言包里 errors 是手写接口，没有索引签名 —— 动态键必须这样取，
+// 否则模板里 errText(...) 会被 vue-tsc 判成隐式 any。
+const errText = (key: string): string => {
+  const map = t.value.server_tab.errors as unknown as Record<string, string>;
+  return map[key] || key;
+};
+
+const addIngressRow = () => {
+  // 新行沿用上一行的协议与端口（同一个隧道下多域名指向同一服务是常见做法），只清域名
+  const last = tunnelFormRows.value[tunnelFormRows.value.length - 1];
+  tunnelFormRows.value.push(last ? { ...last, hostname: '' } : emptyIngressRow());
+};
+
+const removeIngressRow = (i: number) => {
+  if (tunnelFormRows.value.length <= 1) return;
+  tunnelFormRows.value.splice(i, 1);
+};
+
+// 换协议时清掉上一个协议留下的值：unix 的套接字路径带进 http 行毫无意义
+const onIngressProtocolChange = (row: IngressRow) => {
+  const mode = addressModeOf(row.protocol);
+  if (mode === 'port') row.unixSocket = '';
+  else if (mode === 'socket') row.port = '';
+  else if (mode === 'none') {
+    row.port = '';
+    row.unixSocket = '';
+  }
+};
+
+const addHostRoute = () => {
+  tunnelFormHostRoutes.value.push({ id: '', hostname: '', comment: '' });
+};
+
+const addCidrRoute = () => {
+  tunnelFormCidrRoutes.value.push({ id: '', network: '', comment: '' });
+};
+
+// 表单行 → 云端 ingress 数组
+const buildIngress = (): Record<string, string>[] => {
+  const rules = tunnelFormRows.value.map((row) => {
+    const rule: Record<string, string> = { service: serviceOfRow(row) };
+    const host = row.hostname.trim();
+    if (host) rule.hostname = host;
+    // path 只有存量规则才有；空值不往请求体里塞，免得云端把它当成「匹配空路径」
+    if (row.path) rule.path = row.path;
+    return rule;
+  });
+  // 兜底：Cloudflare 要求数组最后一条不带域名。用户最后一行填了域名就补一条 404；
+  // 他自己留了无域名的规则则不补 —— 否则 404 排在它后面永远轮不到，反而把配置搞乱。
+  const last = rules[rules.length - 1];
+  if (last && last.hostname) rules.push({ service: CATCH_ALL_SERVICE });
+  return rules;
+};
 
 // invoke 被拒绝时抛出来的既可能是字符串（Rust 侧 Result<_, String>），也可能是别的对象，
 // 统一转成能直接显示的一行文本。
 const errorText = (e: unknown): string =>
   typeof e === 'string' ? e : String((e as Error)?.message ?? e);
 
-// 拉一条隧道的云端配置：已发布应用程序路由 + 主机名路由 + CIDR 路由。
-// 三块分别容错：某一块失败只在那块里显示「读取失败」，另外两块照常显示 ——
-// 否则主机名路由缺权限（403）会把已经拿到的已发布应用程序路由一起遮掉。
-const fetchOneTunnelConfig = async (
-  tn: TunnelInfo
-): Promise<readonly [string, TunnelCloudInfo]> => {
-  const [cfgRes, routeRes] = await Promise.allSettled([
-    invoke<{ rules: TunnelIngressRule[] }>('fetch_tunnel_config', {
-      tunnelId: tn.id,
-    }),
-    invoke<TunnelRouteSet>('fetch_tunnel_routes', { tunnelId: tn.id }),
-  ]);
-  const info: TunnelCloudInfo = {
-    rules: cfgRes.status === 'fulfilled' ? cfgRes.value.rules : [],
-    ingressError: cfgRes.status === 'rejected' ? errorText(cfgRes.reason) : '',
-    // 演示模式（浏览器里跑）可能返回 null，这里兜一层，别让整条刷新链炸掉
-    hostnameRoutes: routeRes.status === 'fulfilled' ? routeRes.value?.hostname_routes ?? [] : [],
-    cidrRoutes: routeRes.status === 'fulfilled' ? routeRes.value?.cidr_routes ?? [] : [],
-    hostnameError:
-      routeRes.status === 'fulfilled'
-        ? routeRes.value?.hostname_error || ''
-        : errorText(routeRes.reason),
-    cidrError:
-      routeRes.status === 'fulfilled'
-        ? routeRes.value?.cidr_error || ''
-        : errorText(routeRes.reason),
-  };
-  return [tn.id, info] as const;
+// 打开「创建固定隧道」：与修改是同一个弹窗，只是标题、隧道名可编辑性、以及不去读云端不同
+const openTunnelCreateModal = () => {
+  soundManager.playClick();
+  tunnelFormMode.value = 'create';
+  tunnelFormTarget.value = null;
+  tunnelFormName.value = serverConfig.value.name || 'mc';
+  tunnelFormRows.value = [
+    {
+      ...emptyIngressRow(),
+      protocol: serverConfig.value.protocol || 'http',
+      port: serverConfig.value.port || '',
+    },
+  ];
+  tunnelFormHostRoutes.value = [];
+  tunnelFormCidrRoutes.value = [];
+  originalHostRoutes.value = {};
+  originalCidrRoutes.value = {};
+  tunnelFormSubmitted.value = false;
+  tunnelFormNameHasError.value = false;
+  tunnelFormLoadError.value = '';
+  showTunnelModal.value = true;
 };
 
-// 云端配置的缓存：**切视图不该打网络请求**。
-//
-// 每拉一轮要对每条隧道发 2 个 IPC，每个 IPC 背后是一次阻塞式 HTTPS，实测单次约 340ms 且
-// 不复用连接 —— 6 条隧道就是 12 个请求。原先切到「云端托管」必然重拉一遍，
-// 于是「从云端托管切到固定域名 / 临时链接」永远卡在等待里（隧道全删光就不卡，正是这个原因）。
-//
-// 三条规矩：
-//   * TTL 内且隧道集合没变 → 直接用缓存，0 次 IPC，切视图瞬时完成
-//   * 已有在途请求 → 等它落地，连点也不会堆出一串
-//   * force（手动点刷新 / 启停隧道）才强制重拉
-const REMOTE_CONFIG_TTL_MS = 60_000;
-// 一轮并发几条隧道：每条要发 2 个 HTTPS（每次还都新建连接），一次全铺开容易被限流
-const REMOTE_CONFIG_CONCURRENCY = 3;
-let remoteConfigsFetchedAt = 0;
-let remoteConfigsSignature = '';
-let remoteConfigsInFlight: Promise<void> | null = null;
+// 打开「修改隧道」：先把云端三块都读回来填进表单。
+// 读失败不挡保存 —— 读不到（隧道没有云端配置 / 权限不足）时给一张空表，
+// 用户照样能填完写上去，那正好把隧道变成云端托管。
+const openTunnelEditModal = async (tunnel: TunnelInfo) => {
+  soundManager.playClick();
+  tunnelFormMode.value = 'edit';
+  tunnelFormTarget.value = tunnel;
+  tunnelFormName.value = tunnel.name.trim();
+  tunnelFormRows.value = [emptyIngressRow()];
+  tunnelFormHostRoutes.value = [];
+  tunnelFormCidrRoutes.value = [];
+  originalHostRoutes.value = {};
+  originalCidrRoutes.value = {};
+  tunnelFormSubmitted.value = false;
+  tunnelFormNameHasError.value = false;
+  tunnelFormLoadError.value = '';
+  tunnelFormLoading.value = true;
+  showTunnelModal.value = true;
 
-// 隧道集合的指纹：增删隧道后配置会变，缓存必须跟着失效
-const tunnelSetSignature = (items: TunnelInfo[]) => items.map(t => t.id).sort().join(',');
+  try {
+    const [cfgRes, routeRes] = await Promise.allSettled([
+      invoke<{ rules: TunnelIngressRule[] }>('fetch_tunnel_config', { tunnelId: tunnel.id }),
+      invoke<TunnelRouteSet>('fetch_tunnel_routes', { tunnelId: tunnel.id }),
+    ]);
 
-// 让缓存立即失效，下次读取时重拉（隧道增删、启停之后调用）
-const invalidateRemoteConfigs = () => {
-  remoteConfigsFetchedAt = 0;
-};
-
-const refreshRemoteConfigs = async (opts: { force?: boolean } = {}): Promise<void> => {
-  const items = remoteTunnelList.value;
-  if (!items.length) {
-    remoteConfigs.value = {};
-    remoteConfigsFetchedAt = 0;
-    remoteConfigsSignature = '';
-    return;
-  }
-  const signature = tunnelSetSignature(items);
-  const cacheValid =
-    !opts.force &&
-    remoteConfigsSignature === signature &&
-    remoteConfigsFetchedAt > 0 &&
-    Date.now() - remoteConfigsFetchedAt < REMOTE_CONFIG_TTL_MS;
-  if (cacheValid) return;
-  // 已经有一轮在路上：先等它，别叠加请求
-  if (remoteConfigsInFlight) {
-    await remoteConfigsInFlight;
-    // 强刷时那一轮可能基于旧的隧道集合，落地后按最新签名再来一次
-    if (opts.force) await refreshRemoteConfigs(opts);
-    return;
-  }
-
-  // 用局部 job 承接，别直接 return 那个可变的模块级引用：
-  // 它在 finally 里会被置回 null，TS 无法窄化 `Promise<void> | null`
-  const job: Promise<void> = (async () => {
-    const next: Record<string, TunnelCloudInfo> = {};
-    // 分批串行：每批 REMOTE_CONFIG_CONCURRENCY 条隧道并发，避免一次铺开 2N 个请求
-    for (let i = 0; i < items.length; i += REMOTE_CONFIG_CONCURRENCY) {
-      const batch = items.slice(i, i + REMOTE_CONFIG_CONCURRENCY);
-      const done = await Promise.all(batch.map(fetchOneTunnelConfig));
-      for (const [id, info] of done) next[id] = info;
+    if (cfgRes.status === 'fulfilled') {
+      const rows = (cfgRes.value?.rules ?? []).map(rowOfRule);
+      // 末尾那条无域名的 404 是程序自动补的，不要让它占一行 —— 否则每改一次就多一条
+      const last = rows[rows.length - 1];
+      if (last && !last.hostname && !last.path && last.rawService === CATCH_ALL_SERVICE) rows.pop();
+      tunnelFormRows.value = rows.length ? rows : [emptyIngressRow()];
+    } else {
+      tunnelFormLoadError.value = errorText(cfgRes.reason);
     }
-    remoteConfigs.value = next;
-    remoteConfigsFetchedAt = Date.now();
-    remoteConfigsSignature = signature;
-  })().finally(() => {
-    remoteConfigsInFlight = null;
-  });
-  remoteConfigsInFlight = job;
-  return job;
-};
 
-// 规则渲染成「匹配目标 → 源站」的文本行。hostname 为空即 ingress 末尾的兜底规则，
-// 显示成「(默认)」；带 path 的规则把 path 缀在域名后面一起显示。
-const formatIngressRules = (cfg?: TunnelCloudInfo) => {
-  if (!cfg || !cfg.rules.length) return '';
-  return cfg.rules
-    .map(r => {
-      const target = r.path ? `${r.hostname || '(默认)'}${r.path}` : r.hostname || '(默认)';
-      return `${target}  →  ${r.service}`;
-    })
-    .join('\n');
-};
-
-// 主机名路由 / CIDR 路由：一行一条，有「描述」就缀在后面。
-const formatRouteLines = (rows: { value: string; comment: string }[]) =>
-  rows
-    .map(r => {
-      const value = r.value.trim();
-      if (!value) return '';
-      return r.comment.trim() ? `${value}  ·  ${r.comment.trim()}` : value;
-    })
-    .filter(Boolean)
-    .join('\n');
-
-// 配置卡片按隧道分组：标题用隧道名称，隧道 ID 只放进 tooltip，
-// 否则一列 8e1b8616 / 511e2469 根本分不清是哪条隧道。
-type RemoteConfigGroup = {
-  key: string;
-  name: string;
-  tooltip: string;
-  published: string;
-  hostname: string;
-  cidr: string;
-  ingressError: string;
-  hostnameError: string;
-  cidrError: string;
-};
-
-const toConfigGroup = (key: string, name: string, cfg?: TunnelCloudInfo): RemoteConfigGroup => {
-  const info: TunnelCloudInfo = cfg ?? {
-    rules: [],
-    hostnameRoutes: [],
-    cidrRoutes: [],
-    ingressError: '',
-    hostnameError: '',
-    cidrError: '',
-  };
-  return {
-    key,
-    name,
-    tooltip: `隧道 ID: ${key}`,
-    published: formatIngressRules(cfg),
-    hostname: formatRouteLines(
-      info.hostnameRoutes.map(r => ({ value: r.hostname, comment: r.comment })),
-    ),
-    cidr: formatRouteLines(info.cidrRoutes.map(r => ({ value: r.network, comment: r.comment }))),
-    ingressError: info.ingressError,
-    hostnameError: info.hostnameError,
-    cidrError: info.cidrError,
-  };
-};
-
-// 列表里的每条隧道都出组，哪怕三块全空 —— 否则「这条隧道没有主机名路由」
-// 跟「压根没拉到」看起来一模一样，分不清。
-const remoteConfigGroups = computed(() => {
-  const groups = remoteTunnelList.value.map(tn =>
-    toConfigGroup(tn.id, tn.name || tn.id, remoteConfigs.value[tn.id]),
-  );
-  // 后端在跑但隧道列表里还没有的（刚启动就刷新失败等）：按 ID 兜底显示
-  const known = new Set(groups.map(g => g.key));
-  for (const key of remoteRunningKeys.value) {
-    if (known.has(key)) continue;
-    groups.push(toConfigGroup(key, key, remoteConfigs.value[key]));
+    if (routeRes.status === 'fulfilled') {
+      tunnelFormHostRoutes.value = routeRes.value?.hostname_routes ?? [];
+      tunnelFormCidrRoutes.value = routeRes.value?.cidr_routes ?? [];
+      originalHostRoutes.value = Object.fromEntries(
+        tunnelFormHostRoutes.value.map(r => [r.id, r.hostname]),
+      );
+      originalCidrRoutes.value = Object.fromEntries(
+        tunnelFormCidrRoutes.value.map(r => [r.id, { network: r.network, comment: r.comment }]),
+      );
+      // 某一块读失败（多为 token 缺 Cloudflare One Networks 权限）只提示，不挡另外两块
+      if (!tunnelFormLoadError.value) {
+        tunnelFormLoadError.value = routeRes.value?.hostname_error || routeRes.value?.cidr_error || '';
+      }
+    } else if (!tunnelFormLoadError.value) {
+      tunnelFormLoadError.value = errorText(routeRes.reason);
+    }
+  } catch (err: any) {
+    tunnelFormLoadError.value = errorText(err);
+  } finally {
+    tunnelFormLoading.value = false;
   }
-  return groups;
-});
+};
 
+// 主机名路由：按「原始名单 / 当前名单」的差集增删。
+// 改名 = 删旧建新（这个资源没有 PATCH）。删除必须走后端的 zerotrust 路径，
+// 旧 teamnet 前缀对 DELETE 回 405，报错文案还骗人说「认证方案不支持」。
+const syncHostnameRoutes = async (tunnelId: string, name: string) => {
+  const keep = new Set(tunnelFormHostRoutes.value.map(r => r.id).filter(Boolean));
+  for (const id of Object.keys(originalHostRoutes.value)) {
+    if (keep.has(id)) continue;
+    try {
+      await invoke<string>('delete_hostname_route', { routeId: id });
+      appendLog(
+        `[SUCCESS] 已删除主机名路由 ${originalHostRoutes.value[id]} (${name})`,
+        'success',
+        'server',
+      );
+    } catch (err: any) {
+      appendLog(`[WARN] 主机名路由删除失败: ${errorText(err)}`, 'warn', 'server');
+    }
+  }
+  for (const r of tunnelFormHostRoutes.value) {
+    const host = r.hostname.trim();
+    if (r.id && originalHostRoutes.value[r.id] === host) continue;
+    if (r.id) {
+      // 名字改过：先把旧的删掉，再按新名字建
+      try {
+        await invoke<string>('delete_hostname_route', { routeId: r.id });
+      } catch (err: any) {
+        appendLog(`[WARN] 主机名路由 ${originalHostRoutes.value[r.id]} 删除失败: ${errorText(err)}`, 'warn', 'server');
+        continue;
+      }
+    }
+    try {
+      const res = await invoke<string>('create_hostname_route', {
+        tunnelId,
+        hostname: host,
+        comment: r.comment.trim(),
+      });
+      appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+    } catch (err: any) {
+      appendLog(`[WARN] 主机名路由 ${host} 创建失败: ${errorText(err)}`, 'warn', 'server');
+    }
+  }
+};
+
+// CIDR 路由：同上，但这个资源支持 PATCH，改网段/备注走更新而不是删了重建
+const syncCidrRoutes = async (tunnelId: string, name: string) => {
+  const keep = new Set(tunnelFormCidrRoutes.value.map(r => r.id).filter(Boolean));
+  for (const id of Object.keys(originalCidrRoutes.value)) {
+    if (keep.has(id)) continue;
+    try {
+      await invoke<string>('delete_cidr_route', { routeId: id });
+      appendLog(
+        `[SUCCESS] 已删除 CIDR 路由 ${originalCidrRoutes.value[id].network} (${name})`,
+        'success',
+        'server',
+      );
+    } catch (err: any) {
+      appendLog(`[WARN] CIDR 路由删除失败: ${errorText(err)}`, 'warn', 'server');
+    }
+  }
+  for (const r of tunnelFormCidrRoutes.value) {
+    const network = r.network.trim();
+    const comment = r.comment.trim();
+    const before = r.id ? originalCidrRoutes.value[r.id] : undefined;
+    if (before && before.network === network && before.comment === comment) continue;
+    try {
+      if (before) {
+        const res = await invoke<string>('update_cidr_route', { routeId: r.id, network, comment });
+        appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+      } else {
+        const res = await invoke<string>('create_cidr_route', { tunnelId, network, comment });
+        appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+      }
+    } catch (err: any) {
+      appendLog(`[WARN] CIDR 路由 ${network} 保存失败: ${errorText(err)}`, 'warn', 'server');
+    }
+  }
+};
+
+// 保存（创建与修改共用）：写 ingress → 补 DNS 路由 → 同步两类路由。
+// 云端配置是**运行时生效**的：运行中的隧道会自动同步，不需要重启进程。
+const confirmTunnelForm = async () => {
+  tunnelFormSubmitted.value = true;
+  const isCreate = tunnelFormMode.value === 'create';
+  const name = tunnelFormName.value.trim();
+
+  if (isCreate && (!name || !isTunnelNameValid(name))) {
+    tunnelFormNameHasError.value = true;
+    appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
+    return;
+  }
+  if (tunnelFormRows.value.length === 0) tunnelFormRows.value = [emptyIngressRow()];
+
+  const badRow = tunnelFormRows.value.findIndex(
+    (row, i) => ingressRowErrorKey(row) || ingressRowOrderError(i),
+  );
+  if (badRow >= 0) {
+    appendLog(`[ERROR] 第 ${badRow + 1} 条路由填写有误，请检查`, 'error', 'server');
+    return;
+  }
+  // 同一个域名出现两次：云端按顺序只认第一条，第二条永远不会命中，属于白写
+  const hosts = tunnelFormRows.value.map(r => r.hostname.trim()).filter(Boolean);
+  if (new Set(hosts).size !== hosts.length) {
+    appendLog(`[ERROR] ${errText('err_hostname_dup')}`, 'error', 'server');
+    showToast(errText('err_hostname_dup'));
+    return;
+  }
+  if (tunnelFormHostRoutes.value.some(r => !r.hostname.trim())) {
+    appendLog(`[ERROR] ${errText('err_host_required')}`, 'error', 'server');
+    return;
+  }
+  if (tunnelFormCidrRoutes.value.some(r => !r.network.trim())) {
+    appendLog(`[ERROR] ${errText('err_cidr_required')}`, 'error', 'server');
+    return;
+  }
+
+  tunnelFormSaving.value = true;
+  try {
+    let tunnelId = tunnelFormTarget.value?.id || '';
+    if (isCreate) {
+      const res = await invoke<string>('create_tunnel', { name });
+      appendLog(`[SUCCESS] 成功创建隧道 [${name}]: ${res}`, 'success', 'server');
+      // 新隧道要拿它的 ID 才能写云端配置，而 ID 只能从刷新后的列表里取
+      await handleRefreshTunnels();
+      // 注意别把这个 lambda 参数叫 t —— 会遮住 i18n 的 t，自检脚本也会误判成文案键
+      tunnelId = tunnelList.value.find(tn => tn.name.trim() === name)?.id || '';
+      if (!tunnelId) {
+        throw new Error('隧道已创建，但未取到它的 ID；请点「刷新」后再打开「修改」补配置');
+      }
+    }
+    if (!tunnelId) throw new Error('未找到隧道 ID，无法写入云端配置');
+
+    // ① 已发布应用程序路由
+    await invoke<string>('update_tunnel_config', { tunnelId, ingress: buildIngress() });
+    appendLog(`[SUCCESS] 已发布应用程序路由已写入云端 (${name})`, 'success', 'server');
+
+    // ② 新增的域名补 DNS 路由。
+    //    只补不删：删域名不连带删 DNS 记录，免得误删别处在用的 CNAME，
+    //    要解绑请去「DNS 路由绑定」面板（那里会连带清掉该域名的密码锁）。
+    const bound = new Set(
+      (tunnelList.value.find(tn => tn.id === tunnelId)?.hostnames ?? []).map(h => h.name),
+    );
+    for (const host of hosts) {
+      if (bound.has(host)) continue;
+      try {
+        const dnsRes = await invoke<string>('route_dns_tunnel', { name, hostname: host });
+        appendLog(`[SUCCESS] ${dnsRes}`, 'success', 'server');
+      } catch (err: any) {
+        appendLog(`[WARN] 域名 ${host} 的 DNS 路由创建失败: ${errorText(err)}`, 'warn', 'server');
+      }
+    }
+
+    // ③ 主机名路由 / CIDR 路由
+    await syncHostnameRoutes(tunnelId, name);
+    await syncCidrRoutes(tunnelId, name);
+
+    // ④ 记住源站配置：列表行内「启动」直接用。
+    //    真正生效的是云端 ingress，这份本地记录只是为了让启动按钮不必先打网络请求。
+    const first = tunnelFormRows.value.find(r => r.protocol !== 'raw') ?? tunnelFormRows.value[0];
+    if (first) {
+      saveTunnelCfgValues(name, first.protocol, first.port.trim(), first.unixSocket.trim());
+      if (isCreate) serverConfig.value.name = name;
+    }
+
+    await handleRefreshTunnels();
+    await refreshHostnamesOnly();
+    soundManager.playSuccess();
+    showToast(t.value.server_tab.form_saved);
+    showTunnelModal.value = false;
+  } catch (err: any) {
+    appendLog(`[ERROR] 保存隧道配置失败: ${errorText(err)}`, 'error', 'server');
+    showToast(`${errorText(err)}`);
+  } finally {
+    tunnelFormSaving.value = false;
+  }
+};
 // 隧道列表与选中项
 const tunnelList = ref<TunnelInfo[]>([]);
 const selectedTunnel = ref<TunnelInfo | null>(null);
 
-const localTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'local'));
-const remoteTunnelList = computed(() => tunnelList.value.filter(t => t.tunnel_type === 'remote'));
+// 账号下的**全部**隧道，只此一份。原先按 tunnel_type 拆成「固定域名 / 云端托管」两份，
+// 但那个字段判的是「本机有没有凭据文件」，跟「是不是云端托管」是两回事 ——
+// 于是同一条隧道会出现在两处，或者明明是云端托管却被标成「本地」。
+const serverTunnelList = computed(() => tunnelList.value);
 
-// 云端托管列表里被选中的那一行：顶部「删除」按钮作用于它（每行另有独立的 🗑 入口）
-const selectedRemoteTunnel = ref<TunnelInfo | null>(null);
-
-// 服务端三类隧道状态胶囊的「运行中 (数量)」统计
+// 固定隧道列表的「运行中 (数量)」统计
 const localRunningCount = computed(() =>
-  localTunnelList.value.filter(x => isTunnelRunning(x.name)).length,
+  serverTunnelList.value.filter(x => isTunnelRunning(x.name)).length,
 );
 
 // ============================ 隧道密码锁（Cloudflare Access） ============================
@@ -2404,7 +2494,7 @@ type DnsBoundGroup = {
 };
 
 const dnsBoundGroups = computed<DnsBoundGroup[]>(() =>
-  localTunnelList.value
+  serverTunnelList.value
     .map(t => ({
       tunnelId: t.id,
       tunnelName: t.name,
@@ -2520,18 +2610,16 @@ const stopConsoleResize = () => {
 // 弹窗与 Toast
 const showDeleteModal = ref(false);
 
-// 待删除的隧道。固定域名隧道（local）与云端托管隧道（remote）共用同一个确认弹窗，
-// scope 决定删除后刷新哪张列表、以及要不要先停掉本机正在跑的那个进程。
-const pendingDelete = ref<{ id: string; name: string; scope: 'local' | 'remote' } | null>(null);
+// 待删除的隧道（记录 id 是给「连带删除提示」数域名用的）
+const pendingDelete = ref<{ id: string; name: string } | null>(null);
 
-// 确认弹窗里的正文：本地与云端用的是两套文案，占位符也不一样（{name} / {target}）
+// 确认弹窗正文。原先分「本地 / 云端」两套文案，视图合并后只剩一套；
+// {name} / {target} 两种占位符都替换一遍，免得换文案时漏改一个。
 const deleteConfirmMessage = computed(() => {
   const name = pendingDelete.value?.name || '';
-  const tpl =
-    pendingDelete.value?.scope === 'remote'
-      ? t.value.server_tab.remote_delete_confirm_msg
-      : t.value.server_tab.errors.delete_confirm_msg;
-  return String(tpl).replace('{name}', name).replace('{target}', name);
+  return String(t.value.server_tab.errors.delete_confirm_msg)
+    .replace('{name}', name)
+    .replace('{target}', name);
 });
 
 // 删除确认框里的「连带删除」提示：这条隧道绑了几个域名、其中几把密码锁会被一起删掉。
@@ -2563,22 +2651,6 @@ const logs = ref<LogEntry[]>([
 ]);
 
 // 格式校验触发
-const onServerNameInput = () => {
-  const val = serverConfig.value.name;
-  serverNameHasError.value = val.length > 0 && !isTunnelNameValid(val);
-  localStorage.setItem('server_tunnel_name', val);
-};
-
-const onServerPortInput = () => {
-  const val = serverConfig.value.port;
-  serverPortHasError.value = val.length > 0 && !isPortValid(val);
-  localStorage.setItem('server_port', val);
-};
-
-const onServerUnixSocketInput = () => {
-  localStorage.setItem('server_unix_socket', serverConfig.value.unixSocket);
-};
-
 const onClientFormDomainInput = () => {
   const val = clientForm.value.domain;
   clientFormDomainHasError.value = val.length > 0 && !isDomainValid(val);
@@ -2719,11 +2791,10 @@ const fillTunnelHostnames = async () => {
 // 这里最要紧的是「别让网络拖着按钮」：列表本体读的是本地 cloudflared 配置（毫秒级），
 // 而绑定域名、云端 ingress 都要打 Cloudflare API —— 网络不通时单次能一直等到超时。
 // 所以列表先上屏、慢活全部异步化，按钮随后就能恢复可点。
-const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
-  const key: 'local' | 'remote' = scope === 'remote' ? 'remote' : 'local';
-  // 防重入：同一个列表连点不做第二次；两个列表互不影响
-  if (refreshingTunnels.value[key]) return;
-  refreshingTunnels.value[key] = true;
+const handleRefreshTunnels = async () => {
+  // 防重入：连点不做第二次
+  if (refreshingTunnels.value.local) return;
+  refreshingTunnels.value.local = true;
   try {
     const res = await invoke<TunnelInfo[]>('list_tunnels');
     tunnelList.value = res;
@@ -2731,116 +2802,14 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
     // 绑定域名走云 API，不阻塞列表上屏与按钮恢复
     void fillTunnelHostnames();
 
-    // 与后端对账命名隧道的运行状态（多开后靠这里把已退出的进程同步掉）
+    // 与后端对账固定隧道的运行状态（多开后靠这里把已退出的进程同步掉）
     await reconcileServerRunning();
 
-    // 云端托管列表的刷新按钮只有 handleRefreshTunnels 这一个入口，
-    // 顺手把云端隧道进程也对账一次，否则「运行中」状态会一直停在旧值上。
-    // 注意条件保留 `scope !== 'local'`：启动时的自动刷新（不带 scope）也要走到，
-    // 否则上次停在云端 Tab 的用户重启后，配置卡片会一直空着。
-    if (scope !== 'local') {
-      await refreshRemoteTunnels();
-      // 云端 ingress 配置要逐条隧道发两个 API 请求，网络不通时会拖很久。
-      // 列表与运行状态都已更新完，这里后台跑，不继续锁着按钮；
-      // 只有用户亲手点这个列表的刷新按钮才强刷，自动刷新走缓存（见 refreshRemoteConfigs）。
-      void refreshRemoteConfigs({ force: scope === 'remote' });
-    }
-
-    // 按触发刷新的列表分别统计：固定域名列表 / 云端托管
-    const localCount = res.filter(x => x.tunnel_type === 'local').length;
-    const remoteCount = res.filter(x => x.tunnel_type === 'remote').length;
-    const scopeName = scope === 'local' ? '固定域名' : scope === 'remote' ? '云端托管' : '隧道';
-    const count = scope === 'local' ? localCount : scope === 'remote' ? remoteCount : res.length;
-    appendLog(`[INFO] 已刷新${scopeName}列表，共获取到 ${count} 条隧道`, 'info', 'server');
+    appendLog(`[INFO] 已刷新隧道列表，共获取到 ${res.length} 条隧道`, 'info', 'server');
   } catch (err: any) {
-    const scopeName = scope === 'local' ? '固定域名' : scope === 'remote' ? '云端托管' : '隧道';
-    appendLog(`[ERROR] 刷新${scopeName}列表失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] 刷新隧道列表失败: ${err}`, 'error', 'server');
   } finally {
-    refreshingTunnels.value[key] = false;
-  }
-};
-
-// 创建隧道 (触发 playSuccess 音效)
-// 创建弹窗状态：名称/协议/端口沿用 serverConfig（同时充当「上次用的值」的记忆），
-// 域名与上锁开关是弹窗自己的状态。
-const showNamedCreateModal = ref(false);
-const namedCreateDomain = ref('');
-const namedCreateDomainHasError = ref(false);
-
-const onNamedCreateDomainInput = () => {
-  const val = namedCreateDomain.value;
-  namedCreateDomainHasError.value = val.length > 0 && !isDomainValid(val);
-};
-
-const openNamedCreateModal = () => {
-  soundManager.playClick();
-  namedCreateDomain.value = '';
-  namedCreateDomainHasError.value = false;
-  serverNameHasError.value = false;
-  serverPortHasError.value = false;
-  showNamedCreateModal.value = true;
-};
-
-// 创建 + 可选绑定域名，一步到位（密码锁改到「DNS 路由绑定」面板按域名上锁）：
-//   1. cloudflared tunnel create
-//   2. （填了域名）cloudflared tunnel route dns
-const confirmNamedCreate = async () => {
-  const name = serverConfig.value.name.trim();
-  const port = serverConfig.value.port.trim();
-  const protocol = serverConfig.value.protocol;
-  const unixSocket = serverConfig.value.unixSocket.trim();
-  const domain = namedCreateDomain.value.trim();
-
-  if (!name || !isTunnelNameValid(name)) {
-    serverNameHasError.value = true;
-    appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
-    return;
-  }
-  if (protocol !== 'hello_world' && !isPortValid(port)) {
-    serverPortHasError.value = true;
-    appendLog(`[ERROR] 本地端口错误`, 'error', 'server');
-    return;
-  }
-  if ((protocol === 'unix' || protocol === 'unix+tls') && !unixSocket) {
-    appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'server');
-    return;
-  }
-  if (domain && !isDomainValid(domain)) {
-    namedCreateDomainHasError.value = true;
-    appendLog(`[ERROR] ${t.value.server_tab.errors.dns_domain_invalid}`, 'error', 'server');
-    return;
-  }
-
-  soundManager.playSuccess();
-  isCreatingTunnel.value = true;
-  try {
-    const res = await invoke<string>('create_tunnel', { name });
-    appendLog(`[SUCCESS] 成功创建隧道 [${name}]: ${res}`, 'success', 'server');
-
-    // 记住这条隧道的源站配置，列表行内「启动」直接可用
-    saveTunnelCfgValues(name, protocol, port, unixSocket);
-
-    if (domain) {
-      try {
-        const dnsRes = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
-        appendLog(`[SUCCESS] ${dnsRes}`, 'success', 'server');
-      } catch (err: any) {
-        appendLog(`[ERROR] 绑定域名失败: ${err}`, 'error', 'server');
-        showToast(`绑定域名失败: ${err}`);
-      }
-    }
-
-    // 刷新列表拿到新隧道的 ID，后续域名展示要用
-    await handleRefreshTunnels();
-
-    if (domain) await refreshHostnamesOnly();
-
-    if (!showLockInfoModal.value) showToast(`隧道 [${name}] 创建成功！`);
-    showNamedCreateModal.value = false;
-  } catch (err: any) {
-    appendLog(`[ERROR] 创建隧道失败: ${err}`, 'error', 'server');
-  } finally {
-    isCreatingTunnel.value = false;
+    refreshingTunnels.value.local = false;
   }
 };
 
@@ -2891,7 +2860,7 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
     soundManager.playClick();
     appendLog(`[WARN] 隧道 [${name}] 还没有配置协议和端口，请先点击「修改」补全`, 'warn', 'server');
     showToast(t.value.server_tab.edit_need_config);
-    openNamedEditModal(tunnel);
+    openTunnelEditModal(tunnel);
     return;
   }
   if (saved.protocol === 'unix' || saved.protocol === 'unix+tls') {
@@ -2901,7 +2870,7 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
     }
   } else if (saved.protocol !== 'hello_world' && !isPortValid(saved.port)) {
     appendLog(`[ERROR] 隧道 [${name}] 保存的端口不合法，请点击「修改」更正`, 'error', 'server');
-    openNamedEditModal(tunnel);
+    openTunnelEditModal(tunnel);
     return;
   }
 
@@ -2918,77 +2887,6 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
   } catch (err: any) {
     appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
   }
-};
-
-// 修改隧道弹窗：协议 / 端口（密码锁已挪到「DNS 路由绑定」面板按域名管理）。
-// 保存时：落库源站配置 → 运行中的隧道用新配置自动重启。
-const showNamedEditModal = ref(false);
-const namedEditTarget = ref<TunnelInfo | null>(null);
-const namedEdit = ref({ protocol: 'http', port: '', unixSocket: '' });
-const namedEditPortHasError = ref(false);
-
-const namedEditAddressMode = computed(() => addressModeOf(namedEdit.value.protocol));
-
-const openNamedEditModal = (tunnel: TunnelInfo) => {
-  soundManager.playClick();
-  const saved = loadTunnelCfg(tunnel.name.trim());
-  namedEditTarget.value = tunnel;
-  namedEdit.value = {
-    protocol: saved?.protocol || 'http',
-    port: saved?.port || '',
-    unixSocket: saved?.unixSocket || '',
-  };
-  namedEditPortHasError.value = false;
-  showNamedEditModal.value = true;
-};
-
-const confirmNamedEdit = async () => {
-  const target = namedEditTarget.value;
-  if (!target) return;
-  const protocol = namedEdit.value.protocol;
-  const port = namedEdit.value.port.trim();
-  const unixSocket = namedEdit.value.unixSocket.trim();
-  const name = target.name.trim();
-
-  if (protocol !== 'hello_world' && !isPortValid(port)) {
-    namedEditPortHasError.value = true;
-    appendLog(`[ERROR] 本地端口错误`, 'error', 'server');
-    return;
-  }
-  if ((protocol === 'unix' || protocol === 'unix+tls') && !unixSocket) {
-    appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'server');
-    return;
-  }
-
-  const saved = loadTunnelCfg(name);
-  const cfgChanged =
-    !saved ||
-    saved.protocol !== protocol ||
-    saved.port !== port ||
-    saved.unixSocket !== unixSocket;
-
-  // 1. 源站配置落库
-  if (cfgChanged) saveTunnelCfgValues(name, protocol, port, unixSocket);
-
-  // 2. 运行中的隧道用新配置自动重启（配置没变就不折腾）
-  if (cfgChanged && isTunnelRunning(name)) {
-    try {
-      await invoke<string>('stop_server_tunnel', { name });
-    } catch {}
-    markServerStopped(name);
-    try {
-      await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
-      markServerRunning(name);
-      appendLog(`[INFO] 隧道 [${name}] 已用新配置重启 (${describeServerTarget(protocol, port, unixSocket)})`, 'info', 'server');
-    } catch (err: any) {
-      appendLog(`[ERROR] 重启隧道失败: ${err}`, 'error', 'server');
-    }
-  }
-
-  soundManager.playSuccess();
-  showToast(`隧道 [${name}] 已保存`);
-  showNamedEditModal.value = false;
-  namedEditTarget.value = null;
 };
 
 // 停止服务端隧道 (普通点击音效)
@@ -3013,7 +2911,7 @@ const handleStopServer = async (name?: string) => {
 // 打开「添加绑定」弹窗（隧道下拉 + 域名输入）
 const openDnsAddModal = () => {
   // 没有任何固定域名隧道时无处可绑：直接提示，不弹空下拉框
-  if (localTunnelList.value.length === 0) {
+  if (serverTunnelList.value.length === 0) {
     soundManager.playClick();
     appendLog('[ERROR] 未发现隧道，请先创建固定域名隧道再绑定域名', 'error', 'server');
     showToast(t.value.server_tab.quick_list_empty);
@@ -3021,7 +2919,7 @@ const openDnsAddModal = () => {
   }
   soundManager.playClick();
   // 预选第一个固定域名隧道（若有），域名清空
-  dnsRoute.value.name = localTunnelList.value[0]?.name || '';
+  dnsRoute.value.name = serverTunnelList.value[0]?.name || '';
   dnsRoute.value.domain = '';
   dnsRouteNameHasError.value = false;
   dnsRouteDomainHasError.value = false;
@@ -3199,66 +3097,6 @@ const confirmUnbindDnsRoute = async () => {
   }
 };
 
-// 与后端对账云端托管隧道：后端用 try_wait() 回收已退出的进程，返回真实在跑的快照
-const refreshRemoteTunnels = async (withLog = false) => {
-  try {
-    const list = await invoke<{ key: string }[]>('list_remote_tunnels');
-    remoteRunningKeys.value = list.map(x => x.key);
-    // 选中的那条已经被删掉 / 列表里不存在了，就把选中态清掉，避免顶部删除按钮指向幽灵
-    if (
-      selectedRemoteTunnel.value &&
-      !remoteTunnelList.value.some(x => x.id === selectedRemoteTunnel.value?.id)
-    ) {
-      selectedRemoteTunnel.value = null;
-    }
-    if (withLog) {
-      appendLog(
-        `[INFO] 已刷新云端托管隧道列表，共获取到 ${remoteRunningKeys.value.length} 条隧道`,
-        'info',
-        'remote',
-      );
-    }
-  } catch (err: any) {
-    if (withLog) appendLog(`[ERROR] 刷新云端托管隧道列表失败: ${err}`, 'error', 'remote');
-  }
-};
-
-// 启动指定的那一条云端托管隧道：Token 由后端拿 cert.pem 现取，前端全程不接触 Token
-const handleStartRemoteTunnel = async (tunnel: TunnelInfo) => {
-  if (isRemoteRunning(tunnel.id)) return;
-  soundManager.playSuccess();
-  try {
-    // 启动成功的日志由 Rust 侧统一广播，这里不再重复打印
-    await invoke<string>('start_remote_tunnel_by_id', {
-      tunnelId: tunnel.id,
-      tunnelName: tunnel.name,
-    });
-    showToast(`云端托管已启动 (${tunnel.name})`);
-    await refreshRemoteTunnels();
-    // 隧道刚起来，配置可能已经变了，强刷一次
-    void refreshRemoteConfigs({ force: true });
-  } catch (err: any) {
-    appendLog(`[ERROR] 启动云端托管失败: ${err}`, 'error', 'remote');
-    showToast(`${err}`);
-  }
-};
-
-// 停止指定的那一条云端托管隧道（只停进程，隧道本身不受影响）
-const handleStopRemoteTunnel = async (tunnel: TunnelInfo) => {
-  soundManager.playClick();
-  try {
-    // 隧道名一并传给后端：停止日志里显示隧道名，而不是那串 UUID
-    await invoke<string>('stop_remote_tunnel', { key: tunnel.id, tunnelName: tunnel.name });
-    showToast(`服务端隧道 [${tunnel.name}] 已停止`);
-    delete remoteConfigs.value[tunnel.id];
-    // 这一条的缓存已经清掉，把整轮缓存判失效，下次切到云端托管会重新补齐
-    invalidateRemoteConfigs();
-    await refreshRemoteTunnels();
-  } catch (err: any) {
-    appendLog(`[ERROR] 停止云端托管失败: ${err}`, 'error', 'remote');
-  }
-};
-
 // 启动临时链接（临时域名）。返回是否启动成功（创建弹窗据此决定是否关闭）。
 const handleStartQuick = async (): Promise<boolean> => {
   const port = quickConfig.value.port.trim();
@@ -3413,24 +3251,7 @@ const promptDeleteTunnel = (tunnel?: TunnelInfo) => {
   }
   soundManager.playClick();
   selectedTunnel.value = target;
-  pendingDelete.value = {
-    id: target.id,
-    name: target.name,
-    scope: 'local',
-  };
-  showDeleteModal.value = true;
-};
-
-// 云端托管列表的删除入口：顶部按钮不带参数（作用于选中行），行内 🗑 直接把 tunnel 传进来
-const promptDeleteRemoteTunnel = (tunnel?: TunnelInfo) => {
-  const target = tunnel ?? selectedRemoteTunnel.value;
-  if (!target) {
-    showToast(t.value.server_tab.errors.no_selection);
-    return;
-  }
-  soundManager.playClick();
-  selectedRemoteTunnel.value = target;
-  pendingDelete.value = { id: target.id, name: target.name, scope: 'remote' };
+  pendingDelete.value = { id: target.id, name: target.name };
   showDeleteModal.value = true;
 };
 
@@ -3452,12 +3273,7 @@ const confirmDeleteTunnel = async () => {
   // 先停掉本机正在跑的那个进程：强制删除只是把隧道从 Cloudflare 侧摘掉，
   // 本机进程不主动停会一直重连报错，日志里刷屏。
   try {
-    if (target.scope === 'remote') {
-      if (isRemoteRunning(target.id)) {
-        await invoke<string>('stop_remote_tunnel', { key: target.id, tunnelName: target.name });
-        remoteRunningKeys.value = remoteRunningKeys.value.filter(k => k !== target.id);
-      }
-    } else if (isTunnelRunning(target.name)) {
+    if (isTunnelRunning(target.name)) {
       await invoke<string>('stop_server_tunnel', { name: target.name });
       markServerStopped(target.name);
     }
@@ -3503,9 +3319,7 @@ const confirmDeleteTunnel = async () => {
     );
 
     if (selectedTunnel.value?.id === target.id) selectedTunnel.value = null;
-    if (selectedRemoteTunnel.value?.id === target.id) selectedRemoteTunnel.value = null;
-    delete remoteConfigs.value[target.id];
-    await handleRefreshTunnels(target.scope === 'remote' ? 'remote' : 'local');
+    await handleRefreshTunnels();
   } catch (err: any) {
     appendLog(`[ERROR] 删除隧道失败: ${err}`, 'error', 'server');
   }
@@ -3820,8 +3634,6 @@ onMounted(async () => {
   } catch {}
 
   // 执行一次输入合法性初步检查（如有初始值）
-  if (serverConfig.value.name) onServerNameInput();
-  if (serverConfig.value.port) onServerPortInput();
   if (clientForm.value.port) onClientFormPortInput();
 
   // 监听 Rust 后端进程日志广播
@@ -3836,14 +3648,6 @@ onMounted(async () => {
     // 监听系统托盘点击「退出程序」事件
     await listen('show-exit-confirm', () => {
       showExitConfirmModal.value = true;
-    });
-
-    // cloudflared 每次加载配置都会广播这个事件。配置内容现在统一走 Cloudflare API 读，
-    // 所以这里只借它判断「这条隧道确实活着」，顺手把运行状态补上。
-    await listen<{ key: string; config: string }>('remote-config-update', (event) => {
-      const key = event.payload?.key || '';
-      if (!key) return;
-      if (!remoteRunningKeys.value.includes(key)) remoteRunningKeys.value.push(key);
     });
 
     // 监听临时链接临时域名分配
@@ -3877,7 +3681,6 @@ onMounted(async () => {
     const serverKeys = await invoke<string[]>('is_server_running');
     serverRunningNames.value = serverKeys;
     await refreshClientConnections();
-    await refreshRemoteTunnels();
     const quickKeys = await invoke<string[]>('is_quick_running');
     quickTunnels.value = quickKeys.map(key => {
       const { protocol, port } = parseQuickKey(key);
@@ -5640,6 +5443,179 @@ onUnmounted(() => {
 
 .modal-hint.warn {
   color: var(--warning-color, #c78a1d);
+}
+
+/* ============ 「创建 / 修改隧道」弹窗：三块云端配置编辑器 ============ */
+
+/* 比通用弹窗宽：一行里要摆下「协议下拉 + 端口 + 域名 + 删除」四件东西。
+   必须写成两级选择器 —— .fluent-modal-dialog 的 max-width:420px 在样式表里排在后面，
+   同权重下后者胜出，只写 .tunnel-form-dialog 会被它压回 420px（实测就是被压住了）。 */
+.fluent-modal-dialog.tunnel-form-dialog {
+  max-width: 620px;
+}
+
+/* 三块编辑区加起来比一屏长，让内容区自己滚动，标题与底部按钮始终可见 */
+.tunnel-form-body {
+  max-height: 62vh;
+  overflow-y: auto;
+  /* 给滚动条留位，否则「＋ 添加路由」这类右对齐按钮会贴着滚动条 */
+  padding-right: 8px;
+}
+
+/* 修改态下的隧道名：只读，但保持输入框的体量，方便跟创建态对照 */
+.tunnel-form-name {
+  padding: 8px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 4px;
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.form-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.route-loading {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: var(--bg-input);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 一块配置区：标题行 + 内容，用一条上边框跟上一块分开 */
+.route-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.route-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.route-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 一条 ingress 规则 = 一行：协议 / 端口 / 域名 / 删除 */
+.ingress-row {
+  margin-bottom: 8px;
+}
+
+.ingress-row-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.ingress-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ingress-field-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* 都能收缩（flex-shrink: 1），窄窗口下三格一起让位，不会把整行顶出弹窗。
+   子元素一律 min-width:0 —— <select> 的 min-content 是它最长那个选项的文字宽度，
+   不归零的话 flex 收缩算不下去，行照样溢出。 */
+.ingress-field > * {
+  min-width: 0;
+}
+
+.ingress-field.protocol {
+  flex: 0 1 180px;
+}
+
+.ingress-field.port {
+  flex: 0 1 108px;
+}
+
+/* 域名（或 raw 的 service 原文）那一格吃掉剩下的宽度 */
+.ingress-field.hostname,
+.ingress-field.service {
+  flex: 2 1 130px;
+}
+
+.ingress-remove {
+  flex-shrink: 0;
+  margin-bottom: 4px;
+}
+
+/* 末尾兜底规则：不是用户填的，用虚线框把它跟上面可编辑的行区分开 */
+.ingress-catch-all {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background-color: var(--bg-input);
+}
+
+.catch-all-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  background-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.catch-all-service {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.catch-all-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 主机名 / CIDR 路由：一行 = 值 + 备注 + 删除 */
+.route-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.route-row .fluent-input {
+  min-width: 0;
+}
+
+/* 值那格固定一些、备注那格弹性，窄窗口下先压备注 */
+.route-row .fluent-input:first-child {
+  flex: 0 1 220px;
+}
+
+.route-row .fluent-input:nth-child(2) {
+  flex: 1 1 120px;
+}
+
+.route-empty {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 /* 凭据展示弹窗里的行内复制按钮 */

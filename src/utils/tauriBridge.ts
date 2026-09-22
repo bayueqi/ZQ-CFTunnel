@@ -12,8 +12,8 @@ export const isTauriEnvironment = (): boolean => {
 };
 
 // 浏览器演示模式下的内存隧道数据
-// tunnel_type 必须有：界面按它把隧道分到「固定域名」和「云端托管」两个列表，
-// 漏了这个字段两个列表在网页演示里都会是空的。
+// tunnel_type 仍然保留（Rust 侧会返回），但界面已不再按它分列表 ——
+// 固定隧道列表展示的是账号下的全部隧道。
 let mockTunnels = [
   {
     id: 'f83a21b4-49c0-4e2a-b7e1-893d11b0e91a',
@@ -43,6 +43,10 @@ let mockRemotes: Array<{ key: string }> = [];
 // 演示模式下模拟后端下发的 ingress 配置（桌面端由 cloudflared 日志解析后推送）
 type RemoteConfigListener = (event: { payload: { key: string; config: string } }) => void;
 const mockRemoteConfigListeners: RemoteConfigListener[] = [];
+
+// 演示模式下模拟临时隧道分配到的临时域名（桌面端由 cloudflared 日志解析后推送）
+type QuickUrlListener = (event: { payload: { key: string; url: string } }) => void;
+const mockQuickUrlListeners: QuickUrlListener[] = [];
 
 export function emitMockLog(message: string, level: 'info' | 'warn' | 'error' | 'success' = 'info', source: string = 'system') {
   mockLogListeners.forEach(listener => {
@@ -226,17 +230,108 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
     case 'fetch_tunnel_routes': {
       // 主机名路由 / CIDR 路由：与 ingress 无关的两份独立数据，演示模式各给一种情况
       // （一个有数据、一个空列表），好让两种分支都能在网页端看到。
+      // 注意 id 必须有：改名 / 删除都靠它定位，缺了演示端改不动。
       const tunnelId = ((args?.tunnelId as string) || '').trim();
       if (!tunnelId) throw new Error('隧道 ID 格式不正确');
       const tunnel = mockTunnels.find(t => t.id === tunnelId);
       const name = tunnel?.name || tunnelId;
       return {
-        hostname_routes: [{ hostname: `${name}.internal`, comment: '演示数据' }],
+        hostname_routes: [{ id: `hr-${tunnelId.slice(0, 6)}`, hostname: `${name}.internal`, comment: '演示数据' }],
         cidr_routes: [],
         hostname_error: null,
         cidr_error: null,
       } as unknown as T;
     }
+
+    // ===== 云端配置写入（「创建 / 修改隧道」弹窗的保存路径）演示模拟 =====
+    // 与 Rust 侧 update_tunnel_config / *_route 语义一致：只回一句成功文案。
+    case 'update_tunnel_config': {
+      const ingress = (args?.ingress as unknown[]) || [];
+      await new Promise(r => setTimeout(r, 400));
+      emitMockLog(`[SUCCESS] 已发布应用程序路由已写入云端（演示模式，${ingress.length} 条）`, 'success', 'server');
+      return '云端配置已更新' as unknown as T;
+    }
+
+    case 'create_hostname_route': {
+      const hostname = ((args?.hostname as string) || '').trim();
+      await new Promise(r => setTimeout(r, 250));
+      emitMockLog(`[SUCCESS] 主机名路由 ${hostname} 已创建（演示模式）`, 'success', 'server');
+      return `主机名路由 ${hostname} 已创建` as unknown as T;
+    }
+
+    case 'delete_hostname_route':
+      await new Promise(r => setTimeout(r, 250));
+      emitMockLog('[SUCCESS] 主机名路由已删除（演示模式）', 'success', 'server');
+      return '主机名路由已删除' as unknown as T;
+
+    case 'create_cidr_route': {
+      const network = ((args?.network as string) || '').trim();
+      await new Promise(r => setTimeout(r, 250));
+      emitMockLog(`[SUCCESS] CIDR 路由 ${network} 已创建（演示模式）`, 'success', 'server');
+      return `CIDR 路由 ${network} 已创建` as unknown as T;
+    }
+
+    case 'update_cidr_route':
+      await new Promise(r => setTimeout(r, 250));
+      emitMockLog('[SUCCESS] CIDR 路由已更新（演示模式）', 'success', 'server');
+      return 'CIDR 路由已更新' as unknown as T;
+
+    case 'delete_cidr_route':
+      await new Promise(r => setTimeout(r, 250));
+      emitMockLog('[SUCCESS] CIDR 路由已删除（演示模式）', 'success', 'server');
+      return 'CIDR 路由已删除' as unknown as T;
+
+    // ===== DNS 路由绑定（添加 / 改名 / 解绑）演示模拟 =====
+    case 'route_dns_tunnel': {
+      const hostname = ((args?.hostname as string) || '').trim();
+      const name = ((args?.name as string) || '').trim();
+      await new Promise(r => setTimeout(r, 300));
+      emitMockLog(`[SUCCESS] 已将域名 ${hostname} 绑定到隧道 ${name}（演示模式）`, 'success', 'server');
+      return `已将域名 ${hostname} 绑定到隧道 ${name}` as unknown as T;
+    }
+
+    case 'rename_dns_route': {
+      const hostname = ((args?.hostname as string) || '').trim();
+      await new Promise(r => setTimeout(r, 300));
+      emitMockLog(`[SUCCESS] 域名已改名为 ${hostname}（演示模式）`, 'success', 'server');
+      return `域名已改名为 ${hostname}` as unknown as T;
+    }
+
+    case 'delete_dns_route':
+      await new Promise(r => setTimeout(r, 300));
+      emitMockLog('[SUCCESS] 域名绑定已解除（演示模式）', 'success', 'server');
+      return '域名绑定已解除' as unknown as T;
+
+    // ===== 临时隧道（quick tunnel）演示模拟 =====
+    case 'start_quick_tunnel': {
+      const port = ((args?.port as string) || '5244').trim();
+      const protocol = ((args?.protocol as string) || 'http').trim();
+      // key 必须与 Rust 侧进程表的 key 完全一致：hello_world 固定；
+      // unix 用「协议:套接字路径」；其余是「协议://127.0.0.1:端口」
+      const unixSocket = ((args?.unixSocket as string) || '').trim();
+      const key = protocol === 'hello_world'
+        ? 'hello_world'
+        : protocol === 'unix' || protocol === 'unix+tls'
+          ? `${protocol}:${unixSocket}`
+          : `${protocol}://127.0.0.1:${port}`;
+      emitMockLog('[INFO] 正在申请临时域名...', 'info', 'quick');
+      // 桌面端临时域名由 cloudflared 日志解析后广播 quick-tunnel-url，演示模式照做，
+      // 否则列表里那条「生成中...」永远等不到域名。
+      setTimeout(() => {
+        const url = `https://${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36).slice(-4)}.trycloudflare.com`;
+        mockQuickUrlListeners.forEach(l => l({ payload: { key, url } }));
+      }, 900);
+      return `临时隧道 ${key} 已启动` as unknown as T;
+    }
+
+    case 'stop_quick_tunnel': {
+      const key = ((args?.key as string) || '').trim();
+      emitMockLog(`[INFO] 临时隧道 ${key || '全部'} 已停止（演示模式）`, 'warn', 'quick');
+      return '临时隧道已停止' as unknown as T;
+    }
+
+    case 'is_quick_running':
+      return [] as unknown as T;
 
     case 'list_remote_tunnels':
       // 云端托管支持多开：返回当前所有在跑的进程快照（key 为隧道 ID）
@@ -322,6 +417,14 @@ export async function safeListen<T>(event: string, handler: EventCallback<T>): P
     return () => {
       const idx = mockRemoteConfigListeners.indexOf(handler as unknown as RemoteConfigListener);
       if (idx !== -1) mockRemoteConfigListeners.splice(idx, 1);
+    };
+  }
+
+  if (event === 'quick-tunnel-url') {
+    mockQuickUrlListeners.push(handler as unknown as QuickUrlListener);
+    return () => {
+      const idx = mockQuickUrlListeners.indexOf(handler as unknown as QuickUrlListener);
+      if (idx !== -1) mockQuickUrlListeners.splice(idx, 1);
     };
   }
 

@@ -157,6 +157,48 @@ export interface LangPack {
     named_edit_title: string;
     named_create_domain_label: string;
     named_create_domain_placeholder: string;
+/** 协议下拉里代表「原始 service」（无法反解成协议+端口）的那一项 */
+    protocol_raw: string;
+/** 修改弹窗打开后正在拉取云端配置 */
+    form_loading_config: string;
+/** 云端配置拉取失败时缀在原因前面的标题 */
+    form_load_failed: string;
+/** 修改态下隧道名只读的说明 */
+    form_name_readonly_hint: string;
+/** raw 行的 service 原文输入框标题 */
+    form_service_label: string;
+/** 一条路由的域名输入框标题 */
+    form_hostname_label: string;
+/** 域名输入框占位文案 */
+    form_route_hostname_placeholder: string;
+/** 「添加路由」按钮 */
+    form_add_route: string;
+/** 行内删除本条路由按钮 */
+    form_remove_route: string;
+/** 末尾兜底规则的标签 */
+    form_catch_all_label: string;
+/** 末尾兜底规则会补上时的说明 */
+    form_catch_all_hint: string;
+/** 最后一条本身就没有域名时的说明 */
+    form_catch_all_inline: string;
+/** 主机名路由区块的说明 */
+    /** 保存成功后的提示：云端配置即时生效，无需重启 */
+    form_live_hint: string;
+    form_host_routes_hint: string;
+/** CIDR 路由区块的说明 */
+    form_cidr_routes_hint: string;
+/** 「添加主机名路由」按钮 */
+    form_add_host_route: string;
+/** 「添加 CIDR 路由」按钮 */
+    form_add_cidr_route: string;
+/** 主机名路由的主机名输入框标题 */
+    form_host_label: string;
+/** CIDR 路由的网段输入框标题 */
+    form_cidr_label: string;
+/** 路由备注输入框标题 */
+    form_comment_label: string;
+/** 保存成功提示 */
+    form_saved: string;
     lock_switch_label: string;
     lock_switch_hint: string;
     lock_need_domain: string;
@@ -212,6 +254,14 @@ export interface LangPack {
       delete_confirm_title: string;
       delete_confirm_msg: string;
       dns_domain_invalid: string;
+      err_service_required: string;
+      err_socket_required: string;
+      err_port_required: string;
+      err_hostname_invalid: string;
+      err_catch_all_last: string;
+      err_hostname_dup: string;
+      err_host_required: string;
+      err_cidr_required: string;
       dns_unbind_confirm_title: string;
       dns_unbind_confirm_msg: string;
       quick_stop_confirm_title: string;
