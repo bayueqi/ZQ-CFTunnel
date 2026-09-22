@@ -484,41 +484,57 @@ fn read_list_tunnels() -> Result<Vec<TunnelInfo>, String> {
         return Ok(Vec::new());
     }
 
-    // 解析 JSON 数组
-    #[derive(Deserialize)]
-    struct RawTunnel {
-        id: String,
-        name: String,
-        created_at: String,
-        connections: Vec<serde_json::Value>,
-    }
-
-    let raw_list: Vec<RawTunnel> = serde_json::from_str(&stdout_str)
+    // 解析 JSON 数组。
+    //
+    // **坑（实测）**：账号里一条隧道都没有时，`cloudflared tunnel list --output json`
+    // 输出的不是 `[]`，而是字面量 `null`。以前直接按 `Vec<RawTunnel>` 反序列化，
+    // 于是「没有隧道」这个完全正常的状态被炸成
+    // `解析隧道列表失败: invalid type: null, expected a sequence at line 1 column 4`
+    // —— 用户看到的就是这条莫名其妙的红字。
+    //
+    // 所以先按 `Value` 收下，再自己判形态：`null` 当空列表；
+    // 每条隧道也逐字段取，任何字段缺失/为 null 都只兜底成空串，不让单条脏数据拖垮整张列表。
+    let parsed: serde_json::Value = serde_json::from_str(&stdout_str)
         .map_err(|e| format!("解析隧道列表失败: {}", e))?;
+    let raw_items = match parsed {
+        serde_json::Value::Null => Vec::new(),
+        serde_json::Value::Array(items) => items,
+        _ => return Err("解析隧道列表失败: 输出既不是数组也不是 null".to_string()),
+    };
 
     // 隧道密钥（<隧道ID>.json）与 cert.pem 同处：cloudflared 的默认目录 ~/.cloudflared
     let cred_dir = default_cloudflared_dir();
 
     let mut list = Vec::new();
-    for t in raw_list {
-        let connections_str = if t.connections.is_empty() {
-            String::new()
-        } else {
-            t.connections.iter()
-                .filter_map(|c| c.get("colo_name").and_then(|v| v.as_str()).map(|s| format!("1x{}", s)))
-                .collect::<Vec<_>>()
-                .join(", ")
+    for item in raw_items {
+        // 没有 id 的条目无法定位凭据文件，直接跳过
+        let id = match item.get("id").and_then(|v| v.as_str()) {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => continue,
         };
-        let cred_path = cred_dir.join(format!("{}.json", t.id));
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let created = item.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let connections_str = item
+            .get("connections")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| c.get("colo_name").and_then(|v| v.as_str()).map(|s| format!("1x{}", s)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+
+        let cred_path = cred_dir.join(format!("{}.json", id));
         let tunnel_type = if cred_path.exists() {
             "local".to_string()
         } else {
             "remote".to_string()
         };
         list.push(TunnelInfo {
-            id: t.id,
-            name: t.name,
-            created: t.created_at,
+            id,
+            name,
+            created,
             connections: connections_str,
             tunnel_type,
         });
@@ -2833,16 +2849,16 @@ fn find_tunnel_id_by_name(name: &str) -> Option<String> {
         return None;
     }
     let stdout_str = String::from_utf8_lossy(&output.stdout);
-    #[derive(Deserialize)]
-    struct RawTunnel {
-        id: String,
-        name: String,
-    }
-    let raw_list: Vec<RawTunnel> = serde_json::from_str(stdout_str.trim()).ok()?;
-    raw_list
-        .into_iter()
-        .find(|t| t.name == name)
-        .map(|t| t.id)
+    // 与 `read_list_tunnels` 同一坑：空账号时 CLI 输出字面量 `null`，
+    // 以前按 `Vec<RawTunnel>` 解析会直接失败。这里本来就是「查不到就当没有」的容错查询，
+    // 统一按 Value 取，`null` / 非数组一律视为空列表。
+    let parsed: serde_json::Value = serde_json::from_str(stdout_str.trim()).ok()?;
+    parsed
+        .as_array()?
+        .iter()
+        .find(|t| t.get("name").and_then(|v| v.as_str()) == Some(name))
+        .and_then(|t| t.get("id").and_then(|v| v.as_str()))
+        .map(|s| s.to_string())
 }
 
 /// 一条指向隧道的 DNS 记录，附带其指向的 tunnel_id（从 CNAME content 解析）。
