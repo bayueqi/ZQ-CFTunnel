@@ -157,6 +157,8 @@ export interface LangPack {
     named_edit_title: string;
     named_create_domain_label: string;
     named_create_domain_placeholder: string;
+/** 兜底行下拉里的默认档：未匹配的请求直接回 404 */
+    protocol_catch_all_404: string;
 /** 协议下拉里代表「原始 service」（无法反解成协议+端口）的那一项 */
     protocol_raw: string;
 /** 修改弹窗打开后正在拉取云端配置 */
@@ -175,15 +177,11 @@ export interface LangPack {
     form_add_route: string;
 /** 行内删除本条路由按钮 */
     form_remove_route: string;
-/** 末尾兜底规则的标签 */
+/** 末尾兜底规则行的标签 */
     form_catch_all_label: string;
-/** 末尾兜底规则会补上时的说明 */
+/** 末尾兜底行下面那行说明（它接住所有未匹配的请求） */
     form_catch_all_hint: string;
-/** 最后一条本身就没有域名时的说明 */
-    form_catch_all_inline: string;
 /** 主机名路由区块的说明 */
-    /** 保存成功后的提示：云端配置即时生效，无需重启 */
-    form_live_hint: string;
     form_host_routes_hint: string;
 /** CIDR 路由区块的说明 */
     form_cidr_routes_hint: string;
@@ -258,7 +256,7 @@ export interface LangPack {
       err_socket_required: string;
       err_port_required: string;
       err_hostname_invalid: string;
-      err_catch_all_last: string;
+      err_hostname_required: string;
       err_hostname_dup: string;
       err_host_required: string;
       err_cidr_required: string;

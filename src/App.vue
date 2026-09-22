@@ -1039,7 +1039,17 @@
               </button>
             </div>
 
-            <div v-for="(row, i) in tunnelFormRows" :key="'ing-' + i" class="ingress-row">
+            <div
+              v-for="(row, i) in tunnelFormRows"
+              :key="'ing-' + i"
+              class="ingress-row"
+              :class="{ 'is-catch-all': isCatchAllIndex(i) }"
+            >
+              <!-- 末尾兜底行：它不靠域名匹配，标一下免得被当成普通规则（标签单独占一行，
+                   跟下面字段列对齐才不会看成协议那一格的标题） -->
+              <div v-if="isCatchAllIndex(i)" class="catch-all-head">
+                <span class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
+              </div>
               <div class="ingress-row-line">
                 <div class="ingress-field protocol">
                   <span class="ingress-field-label">{{ t.server_tab.protocol_label }}</span>
@@ -1048,6 +1058,15 @@
                     class="fluent-input fluent-select"
                     @change="onIngressProtocolChange(row)"
                   >
+                    <!-- 兜底行的默认档：未匹配就回 404。普通行不给这一项 —— 带域名回 404 没意义。
+                         第二个条件是给存量数据留的：极少数老配置会给域名配 http_status:404，
+                         那时它已是这一档，下拉得能选中它，否则界面显示会跟真实值对不上 -->
+                    <option
+                      v-if="isCatchAllIndex(i) || row.protocol === 'http_status_404'"
+                      value="http_status_404"
+                    >
+                      {{ t.server_tab.protocol_catch_all_404 }}
+                    </option>
                     <option value="http">{{ t.server_tab.protocol_http }}</option>
                     <option value="https">{{ t.server_tab.protocol_https }}</option>
                     <option value="tcp">{{ t.server_tab.protocol_tcp }}</option>
@@ -1089,8 +1108,12 @@
                   <span class="ingress-field-label">{{ t.server_tab.form_service_label }}</span>
                   <input type="text" v-model="row.rawService" class="fluent-input mono" />
                 </div>
-                <div v-else class="ingress-field hostname">
-                  <span class="ingress-field-label">{{ t.server_tab.form_hostname_label }}</span>
+                <!-- 兜底行没有域名输入框：它按定义就不带域名 -->
+                <div v-else-if="!isCatchAllIndex(i)" class="ingress-field hostname">
+                  <!-- 必填：不带域名的规则会吃掉它后面的所有规则，所以只允许最下面那条兜底行不带域名 -->
+                  <span class="ingress-field-label">
+                    {{ t.server_tab.form_hostname_label }}<span class="required">*</span>
+                  </span>
                   <input
                     type="text"
                     v-model="row.hostname"
@@ -1099,31 +1122,26 @@
                   />
                 </div>
 
+                <!-- 兜底行不可删：ingress 最后一条必须不带域名，删了得上哪找一条 -->
                 <button
+                  v-if="!isCatchAllIndex(i)"
                   class="row-action-btn danger ingress-remove"
-                  :disabled="tunnelFormRows.length <= 1"
                   :title="t.server_tab.form_remove_route"
                   @click="removeIngressRow(i)"
                 >🗑</button>
               </div>
-              <div
-                v-if="tunnelFormSubmitted && (ingressRowErrorKey(row) || ingressRowOrderError(i))"
-                class="error-tip"
-              >
-                <span class="error-icon">⚠️</span>
-                {{ errText(ingressRowErrorKey(row) || ingressRowOrderError(i)) }}
-              </div>
-            </div>
 
-            <!-- 末尾兜底：ingress 的最后一条必须不带域名，否则未匹配的请求无处可去。
-                 用户最后一行填了域名就自动补一条 404；他自己留了一条无域名的规则则不补。 -->
-            <div class="ingress-catch-all">
-              <span class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
-              <template v-if="ingressNeedsCatchAll">
-                <span class="catch-all-service mono">{{ CATCH_ALL_SERVICE }}</span>
-                <span class="catch-all-hint">{{ t.server_tab.form_catch_all_hint }}</span>
-              </template>
-              <span v-else class="catch-all-hint">{{ t.server_tab.form_catch_all_inline }}</span>
+              <!-- 兜底行下面说明它是干什么的，并把最终会写进云端的 service 原文亮出来 -->
+              <div v-if="isCatchAllIndex(i)" class="catch-all-hint">
+                {{ t.server_tab.form_catch_all_hint }}
+                <span v-if="!ingressRowErrorKey(row, i)" class="catch-all-service mono">
+                  {{ serviceOfRow(row) }}
+                </span>
+              </div>
+              <div v-if="tunnelFormSubmitted && ingressRowErrorKey(row, i)" class="error-tip">
+                <span class="error-icon">⚠️</span>
+                {{ errText(ingressRowErrorKey(row, i)) }}
+              </div>
             </div>
           </div>
 
@@ -1191,9 +1209,6 @@
 
           <div v-if="tunnelFormLoadError" class="modal-hint warn">
             {{ t.server_tab.form_load_failed }}：{{ tunnelFormLoadError }}
-          </div>
-          <div v-else class="modal-hint">
-            {{ t.server_tab.form_live_hint }}
           </div>
         </div>
         <div class="modal-footer">
@@ -1754,9 +1769,11 @@ const onQuickUnixSocketInput = () => {
 // 目标地址输入框形态，由协议决定：
 //   port   —— 普通协议，填端口
 //   socket —— unix / unix+tls，套接字路径直接顶替端口那一格
-//   none   —— hello_world 内置测试服务器，不需要填写任何地址
+//   none   —— hello_world 内置测试服务器、兜底行的 404 档，不需要填写任何地址
 type AddressMode = 'port' | 'socket' | 'none';
 const addressModeOf = (protocol: string): AddressMode => {
+  // 兜底行的默认档（http_status:404）：不接本机服务，直接回状态码，所以不需要地址
+  if (protocol === CATCH_ALL_PROTOCOL) return 'none';
   if (protocol === 'hello_world') return 'none';
   if (protocol === 'unix' || protocol === 'unix+tls') return 'socket';
   return 'port';
@@ -1825,10 +1842,13 @@ type IngressRow = {
 
 /** ingress 末尾的兜底规则：不带域名，接住所有未匹配的请求 */
 const CATCH_ALL_SERVICE = 'http_status:404';
+/** 兜底行下拉里的默认档。它不是真协议，serviceOfRow / rowOfRule / addressModeOf 都认它 */
+const CATCH_ALL_PROTOCOL = 'http_status_404';
 
 // 协议 → service 字符串。unix / hello_world 的写法跟普通协议不同，
 // 与 Rust 侧 start_server_tunnel 拼 --url 的规则保持一字不差。
 const serviceOfRow = (row: IngressRow): string => {
+  if (row.protocol === CATCH_ALL_PROTOCOL) return CATCH_ALL_SERVICE;
   if (row.protocol === 'raw') return row.rawService.trim();
   if (row.protocol === 'hello_world') return 'hello_world';
   if (row.protocol === 'unix' || row.protocol === 'unix+tls') {
@@ -1850,6 +1870,9 @@ const rowOfRule = (rule: TunnelIngressRule): IngressRow => {
     path: rule.path || '',
   };
   const service = (rule.service || '').trim();
+  // 兜底行的默认值：认出来就能在下拉里显示成「未匹配回 404」，
+  // 而不是丢进 raw 让用户对着 http_status:404 发愣（改别的状态码仍落到 raw 原文保留）
+  if (service === CATCH_ALL_SERVICE) return { ...base, protocol: CATCH_ALL_PROTOCOL };
   if (service === 'hello_world') return { ...base, protocol: 'hello_world' };
   const socket = service.match(/^(unix\+tls|unix):(.+)$/);
   if (socket) return { ...base, protocol: socket[1], unixSocket: socket[2] };
@@ -1865,6 +1888,13 @@ const emptyIngressRow = (): IngressRow => ({
   hostname: '',
   rawService: '',
   path: '',
+});
+
+// 兜底行的初始值：默认 http_status:404（未匹配就回 404）。
+// 想让它把未匹配的请求转到本机某个服务，在下拉里换成具体协议 + 填端口即可。
+const emptyCatchAllRow = (): IngressRow => ({
+  ...emptyIngressRow(),
+  protocol: CATCH_ALL_PROTOCOL,
 });
 
 // 弹窗状态：create 与 edit 共用同一套，靠 tunnelFormMode 分辨
@@ -1884,27 +1914,25 @@ const tunnelFormLoadError = ref('');
 const originalHostRoutes = ref<Record<string, string>>({});
 const originalCidrRoutes = ref<Record<string, { network: string; comment: string }>>({});
 
-// 最后一条有域名 → 需要程序补一条 404 兜底；最后一条本身没域名 → 它就是兜底
-const ingressNeedsCatchAll = computed(() => {
-  const rows = tunnelFormRows.value;
-  return rows.length > 0 && !!rows[rows.length - 1].hostname.trim();
-});
+// 数组最后一条就是兜底行 —— ingress 的最后一条必须不带域名，由它接住所有未匹配的请求。
+// 它在界面上：有「默认兜底」标签、没有域名输入框、不能删，service 由用户在下拉里选
+// （默认 http_status:404，也可以换成转发到本机某个端口）。
+const isCatchAllIndex = (i: number): boolean => i === tunnelFormRows.value.length - 1;
 
 // 逐行校验：返回错误文案键（空串 = 合法）。只有点过「保存」之后才显示，免得一打开满屏红。
-const ingressRowErrorKey = (row: IngressRow): string => {
+const ingressRowErrorKey = (row: IngressRow, i: number): string => {
+  if (row.protocol === CATCH_ALL_PROTOCOL) return ''; // 404 档没有地址可填，也不可能填错
   if (row.protocol === 'raw') return row.rawService.trim() ? '' : 'err_service_required';
   const mode = addressModeOf(row.protocol);
   if (mode === 'socket' && !row.unixSocket.trim()) return 'err_socket_required';
   if (mode === 'port' && !isPortValid(row.port.trim())) return 'err_port_required';
+  // 兜底行也没有域名输入框（它按定义就不带域名），所以只有普通行才要求填域名 ——
+  // 不带域名的规则会吃掉它后面的所有规则，与其让用户踩这个坑，不如只允许出现在兜底行
+  if (isCatchAllIndex(i)) return '';
   const host = row.hostname.trim();
-  if (host && !isDomainValid(host)) return 'err_hostname_invalid';
+  if (!host) return 'err_hostname_required';
+  if (!isDomainValid(host)) return 'err_hostname_invalid';
   return '';
-};
-
-// 不带域名的规则会吃掉它后面的所有规则，所以只允许出现在最后一条
-const ingressRowOrderError = (i: number): string => {
-  if (i === tunnelFormRows.value.length - 1) return '';
-  return tunnelFormRows.value[i].hostname.trim() ? '' : 'err_catch_all_last';
 };
 
 // 语言包里 errors 是手写接口，没有索引签名 —— 动态键必须这样取，
@@ -1915,13 +1943,17 @@ const errText = (key: string): string => {
 };
 
 const addIngressRow = () => {
-  // 新行沿用上一行的协议与端口（同一个隧道下多域名指向同一服务是常见做法），只清域名
-  const last = tunnelFormRows.value[tunnelFormRows.value.length - 1];
-  tunnelFormRows.value.push(last ? { ...last, hostname: '' } : emptyIngressRow());
+  // 新行沿用上一条**普通行**的协议与端口（同一个隧道下多域名指向同一服务是常见做法），
+  // 只清域名；插在兜底行之前，保证兜底行永远待在最后
+  const rows = tunnelFormRows.value;
+  const prev = rows[rows.length - 2];
+  rows.splice(Math.max(rows.length - 1, 0), 0, prev ? { ...prev, hostname: '' } : emptyIngressRow());
 };
 
+// 兜底行不可删（它在数组末尾，模板也不给它删除按钮），其余行随便删 ——
+// 只剩兜底行也是合法的 ingress（一条不带域名的规则）
 const removeIngressRow = (i: number) => {
-  if (tunnelFormRows.value.length <= 1) return;
+  if (isCatchAllIndex(i)) return;
   tunnelFormRows.value.splice(i, 1);
 };
 
@@ -1944,21 +1976,18 @@ const addCidrRoute = () => {
   tunnelFormCidrRoutes.value.push({ id: '', network: '', comment: '' });
 };
 
-// 表单行 → 云端 ingress 数组
+// 表单行 → 云端 ingress 数组。兜底行也在 rows 里（永远在末尾），不再由程序偷偷补
 const buildIngress = (): Record<string, string>[] => {
-  const rules = tunnelFormRows.value.map((row) => {
+  const rows = tunnelFormRows.value;
+  return rows.map((row, i) => {
     const rule: Record<string, string> = { service: serviceOfRow(row) };
+    // 最后一条（兜底行）不写 hostname：Cloudflare 要求数组最后一条不带域名
     const host = row.hostname.trim();
-    if (host) rule.hostname = host;
+    if (host && i < rows.length - 1) rule.hostname = host;
     // path 只有存量规则才有；空值不往请求体里塞，免得云端把它当成「匹配空路径」
     if (row.path) rule.path = row.path;
     return rule;
   });
-  // 兜底：Cloudflare 要求数组最后一条不带域名。用户最后一行填了域名就补一条 404；
-  // 他自己留了无域名的规则则不补 —— 否则 404 排在它后面永远轮不到，反而把配置搞乱。
-  const last = rules[rules.length - 1];
-  if (last && last.hostname) rules.push({ service: CATCH_ALL_SERVICE });
-  return rules;
 };
 
 // invoke 被拒绝时抛出来的既可能是字符串（Rust 侧 Result<_, String>），也可能是别的对象，
@@ -1972,12 +2001,15 @@ const openTunnelCreateModal = () => {
   tunnelFormMode.value = 'create';
   tunnelFormTarget.value = null;
   tunnelFormName.value = serverConfig.value.name || 'mc';
+  // 普通行 + 末尾兜底行（默认 http_status:404）。创建时就把兜底行摆出来，
+  // 而不是等保存时程序偷偷补一条 —— 它是什么、能不能改，用户得看得见。
   tunnelFormRows.value = [
     {
       ...emptyIngressRow(),
       protocol: serverConfig.value.protocol || 'http',
       port: serverConfig.value.port || '',
     },
+    emptyCatchAllRow(),
   ];
   tunnelFormHostRoutes.value = [];
   tunnelFormCidrRoutes.value = [];
@@ -1997,7 +2029,8 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
   tunnelFormMode.value = 'edit';
   tunnelFormTarget.value = tunnel;
   tunnelFormName.value = tunnel.name.trim();
-  tunnelFormRows.value = [emptyIngressRow()];
+  // 先摆一行普通行 + 兜底行占位，读回云端配置后再整体替换
+  tunnelFormRows.value = [emptyIngressRow(), emptyCatchAllRow()];
   tunnelFormHostRoutes.value = [];
   tunnelFormCidrRoutes.value = [];
   originalHostRoutes.value = {};
@@ -2016,10 +2049,11 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
 
     if (cfgRes.status === 'fulfilled') {
       const rows = (cfgRes.value?.rules ?? []).map(rowOfRule);
-      // 末尾那条无域名的 404 是程序自动补的，不要让它占一行 —— 否则每改一次就多一条
+      // 末尾那条不带域名的规则就是兜底行，原样留在最后（它的 service 是用户定的，别覆盖）；
+      // 云端如果没有兜底（最后一条带域名），补一条默认的摆出来让用户自己改
       const last = rows[rows.length - 1];
-      if (last && !last.hostname && !last.path && last.rawService === CATCH_ALL_SERVICE) rows.pop();
-      tunnelFormRows.value = rows.length ? rows : [emptyIngressRow()];
+      if (!last || last.hostname.trim()) rows.push(emptyCatchAllRow());
+      tunnelFormRows.value = rows;
     } else {
       tunnelFormLoadError.value = errorText(cfgRes.reason);
     }
@@ -2139,9 +2173,7 @@ const confirmTunnelForm = async () => {
   }
   if (tunnelFormRows.value.length === 0) tunnelFormRows.value = [emptyIngressRow()];
 
-  const badRow = tunnelFormRows.value.findIndex(
-    (row, i) => ingressRowErrorKey(row) || ingressRowOrderError(i),
-  );
+  const badRow = tunnelFormRows.value.findIndex((row, i) => ingressRowErrorKey(row, i));
   if (badRow >= 0) {
     appendLog(`[ERROR] 第 ${badRow + 1} 条路由填写有误，请检查`, 'error', 'server');
     return;
@@ -2204,7 +2236,12 @@ const confirmTunnelForm = async () => {
 
     // ④ 记住源站配置：列表行内「启动」直接用。
     //    真正生效的是云端 ingress，这份本地记录只是为了让启动按钮不必先打网络请求。
-    const first = tunnelFormRows.value.find(r => r.protocol !== 'raw') ?? tunnelFormRows.value[0];
+    //    必须挑一条**普通转发行**：兜底行的 404 档是假协议，存进去启动按钮会当端口模式校验，
+    //    反而拦住启动。
+    const first =
+      tunnelFormRows.value.find(r => r.protocol !== 'raw' && r.protocol !== CATCH_ALL_PROTOCOL) ??
+      tunnelFormRows.value.find(r => r.protocol !== CATCH_ALL_PROTOCOL) ??
+      null;
     if (first) {
       saveTunnelCfgValues(name, first.protocol, first.port.trim(), first.unixSocket.trim());
       if (isCreate) serverConfig.value.name = name;
@@ -5559,17 +5596,20 @@ onUnmounted(() => {
   margin-bottom: 4px;
 }
 
-/* 末尾兜底规则：不是用户填的，用虚线框把它跟上面可编辑的行区分开 */
-.ingress-catch-all {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-  padding: 6px 10px;
+/* 末尾兜底规则行：它不靠域名匹配（是 ingress 的结构性末条），
+   用虚线框跟上面按域名匹配的普通行区分开，也不给它删除按钮 */
+.ingress-row.is-catch-all {
+  margin-top: 10px;
+  padding: 8px 10px;
   border: 1px dashed var(--border-strong);
   border-radius: 6px;
   background-color: var(--bg-input);
+}
+
+.catch-all-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
 }
 
 .catch-all-tag {
@@ -5587,6 +5627,11 @@ onUnmounted(() => {
 }
 
 .catch-all-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
   font-size: 11px;
   color: var(--text-secondary);
 }
