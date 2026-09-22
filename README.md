@@ -1,8 +1,22 @@
 # CFTunnel
 
-Cloudflare Tunnel 的图形客户端，基于 Tauri 2（Rust）与 Vue 3，用于把本机服务发布到公网，无需使用命令行。
+<div align="center">
+<img src="public/cloudflared.ico" width="96" height="96" alt="CFTunnel Logo" />
+<h3>基于 Tauri 2 + Vue 3 + Rust 的 Cloudflare Tunnel 图形客户端</h3>
+<p>把 <code>cloudflared</code> 的命令行操作收进一个窗口。</p>
+</div>
 
-在线演示：<http://cftunnel.520jacky.dpdns.org/>（演示数据，可自由点击）
+<p align="center">
+  <a href="#下载">下载</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#服务端">服务端</a> ·
+  <a href="#协议">协议</a> ·
+  <a href="#客户端配置">客户端</a> ·
+  <a href="#开发">开发</a> ·
+  <a href="#发布">发布</a>
+</p>
+
+---
 
 ## 下载
 
@@ -14,52 +28,54 @@ Cloudflare Tunnel 的图形客户端，基于 Tauri 2（Rust）与 Vue 3，用�
 | macOS | DMG（Intel 芯片 / Apple 芯片各一份） |
 | Linux | AppImage、deb、rpm（x64 / arm64） |
 
-安装包内不含 cloudflared，首次启动后需在「配置」页点击「安装 cloudflared」。
+安装包内不含 cloudflared，首次启动后需在「⚙️ 配置」页点击「📦 安装 cloudflared」。
 
-## 两种隧道
+## 快速开始
 
-| 对比项 | 临时隧道 | 固定隧道 |
-| --- | --- | --- |
-| 使用前提 | 安装 cloudflared | 安装 cloudflared，并完成授权登录 |
-| 访问地址 | `https://xxx.trycloudflare.com`，每次启动随机生成 | 自有域名，固定不变 |
-| 有效期 | 程序关闭即失效 | 长期有效 |
-| 适用场景 | 临时分享 | 长期对外提供服务 |
+| 步骤 | 位置 | 做什么 |
+| :--- | :--- | :--- |
+| 1. 装 cloudflared | **⚙️ 配置** → 「📦 安装 cloudflared」 | 自动识别系统与 CPU 架构，从官方 Release 下载 |
+| 2. 授权登录 | **⚙️ 配置** → 「🔑 Cloudflared 授权登录」 | 浏览器里**选中要授权的域名**，证书写入 `%USERPROFILE%\.cloudflared\cert.pem` |
+| 3. 建隧道 | **🖥️ 服务端** → 固定 / 临时隧道 → 「＋ 创建」 | 选协议、填本机端口；固定隧道再填域名 |
+| 4. 启动 | 列表行尾 **▶** | 临时隧道给你一个 `*.trycloudflare.com`，固定隧道用你绑定的域名 |
 
-使用固定隧道前，先进入「配置 → Cloudflared 授权登录」，在浏览器中选中要授权的域名。
+> 第 1、2 步只有**固定隧道**需要。临时隧道免登录、免凭证，装上 cloudflared 就能用。
 
-## 界面
+前置条件：一个 Cloudflare 账号；要用固定隧道，再要一个托管在 Cloudflare 上的域名。
 
-侧边栏共三页：服务端（子项「临时隧道」「固定隧道」）、客户端、配置。底部为日志控制台。
+## 具体配置
 
-## 建一条隧道
+### 服务端
 
-**临时隧道**：进入「服务端 → 临时隧道 → 创建」，填写本机端口，数秒后生成访问地址。
+#### 临时隧道
 
-**固定隧道**：进入「服务端 → 固定隧道 → 创建」，填写以下字段：
+临时隧道免登录、免凭证，装好 cloudflared 即可使用。
+
+进入 **🖥️ 服务端** → 临时隧道 → 「＋ 创建」，填写本机端口，数秒后列表中出现该隧道。点击行尾 **▶** 启动，控制台会输出一个 `https://xxx.trycloudflare.com` 地址，发给他人即可访问。
+
+地址每次启动都会重新生成，程序关闭后失效。可以同时创建多条临时隧道。
+
+#### 固定隧道
+
+固定隧道使用自己的域名，创建前需先完成「📦 安装 cloudflared」与「🔑 Cloudflared 授权登录」。
+
+进入 **🖥️ 服务端** → 固定隧道 → 「＋ 创建」，填写隧道名（仅限英文字母，创建后不可修改），并在下方按行配置路由：
 
 | 字段 | 说明 |
 | --- | --- |
-| 隧道名 | 仅限英文字母，创建后不可修改 |
-| 本机端口 | 被发布服务所在的端口 |
-| 域名 | 已授权域名下的一条记录 |
-
-创建完成后，点击列表行尾的 ▶ 启动。
-
-创建与修改共用同一弹窗，路由按行填写：
-
-| 字段 | 说明 |
-| --- | --- |
-| 协议 | 见下方「协议」一节 |
+| 协议 | 见「协议」一节 |
 | 端口 | 本机服务端口 |
 | 域名 | 绑定的域名 |
 
 最后一行为兜底路由，未匹配的请求由该行处理，默认为 404；需要全部转发时，填写该行的协议与端口。
 
-## DNS 路由绑定
+创建完成后点击列表行尾 **▶** 启动，修改隧道打开同一个弹窗。
+
+##### DNS 路由绑定
 
 位于固定隧道下方，按隧道列出已绑定的域名。点击域名即可复制，并可就地改名或解绑。
 
-## 密码锁
+##### 密码锁
 
 为域名上锁后，未携带凭据的连接会被 Cloudflare 拒绝（403），浏览器、扫描器与客户端直连均无法进入。锁绑定在域名上，同一隧道下的多个域名各自独立。
 
@@ -72,9 +88,22 @@ Cloudflare Tunnel 的图形客户端，基于 Tauri 2（Rust）与 Vue 3，用�
 | 帐户 · Access: Apps and Policies | 编辑 |
 | 帐户 · Access: Service Tokens | 编辑 |
 
-创建后填入「配置」页的「Access Token（密码锁凭证）」。
+创建后填入「⚙️ 配置」页的「Access Token（密码锁凭证）」。
 
-## 客户端
+### 协议
+
+| 协议 | 适用服务 |
+| --- | --- |
+| HTTP | 网站 |
+| HTTPS | 本机已启用 TLS 的服务 |
+| TCP | 游戏服务、SSH、数据库等 |
+| UNIX | 本机套接字（仅 Linux / macOS） |
+| UNIX + TLS | 本机套接字，叠加 TLS（仅 Linux / macOS） |
+| Hello World | cloudflared 自带的测试服务 |
+
+游戏服务与数据库请勿选择 HTTP，否则连接会中断，日志中会提示 `websocket: bad handshake`。
+
+### 客户端配置
 
 在需要连接的机器上进入「客户端 → 添加」，填写以下字段：
 
@@ -92,19 +121,6 @@ Cloudflare Tunnel 的图形客户端，基于 Tauri 2（Rust）与 Vue 3，用�
 cloudflared access tcp --hostname mc.example.com --url tcp://127.0.0.1:25566 \
   --service-token-id <访问账号> --service-token-secret <访问密码>
 ```
-
-## 协议
-
-| 协议 | 适用服务 |
-| --- | --- |
-| HTTP | 网站 |
-| HTTPS | 本机已启用 TLS 的服务 |
-| TCP | 游戏服务、SSH、数据库等 |
-| UNIX | 本机套接字（仅 Linux / macOS） |
-| UNIX + TLS | 本机套接字，叠加 TLS（仅 Linux / macOS） |
-| Hello World | cloudflared 自带的测试服务 |
-
-游戏服务与数据库请勿选择 HTTP，否则连接会中断，日志中会提示 `websocket: bad handshake`。
 
 ## 开发
 
