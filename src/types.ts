@@ -108,8 +108,14 @@ export interface LangPack {
     btn_route_dns: string;
     dns_bound_title: string;
     dns_bound_empty: string;
+    /** 隧道分组标题里的域名计数，{count} 替换为实际条数 */
+    dns_group_count: string;
     dns_col_tunnel: string;
     dns_add_btn: string;
+    /** 域名行内「改名」按钮 */
+    dns_btn_rename: string;
+    /** 域名行内「解绑」按钮 */
+    dns_btn_unbind: string;
     dns_add_title: string;
     dns_edit_title: string;
     dns_edit_label: string;
@@ -167,6 +173,10 @@ export interface LangPack {
     lock_on: string;
     /** 锁状态徽标：未上锁 */
     lock_off: string;
+    /** 凭据掩码状态下「显示凭据」按钮 */
+    lock_cred_show: string;
+    /** 凭据展开状态下「隐藏凭据」按钮 */
+    lock_cred_hide: string;
     /** 「换密码」按钮 */
     btn_rotate_password: string;
     /** 换密码二次确认弹窗标题 */

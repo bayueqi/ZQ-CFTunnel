@@ -373,7 +373,12 @@
             </div>
           </div>
 
-          <!-- DNS 路由绑定卡片：标题行 + 添加按钮 + 通栏已绑定域名表 -->
+          <!-- DNS 路由绑定卡片：标题行 + 添加按钮 + 按隧道分组的域名列表。
+               分组层级：隧道（组容器）> 域名（组内区块）> 该域名的设置（区块内的行）。
+               每个域名是一个自洽区块：上排是域名本身与域名级操作（改名 / 解绑），
+               下排是这个域名的「访问密码锁」—— 锁是域名的属性，跟它放在一起看才不会错位。
+               原「隧道列 / 域名列 / 密码列」三列表格已废弃：client id 32 位 + secret 40 位
+               这类超长凭据塞进任何固定列宽都会折行，且与所属域名分处两列，看不出对应关系。 -->
           <div class="fluent-card form-card dns-route-card">
             <div class="dns-route-title-row">
               <h3 class="card-title dns-route-title">{{ t.server_tab.dns_section }}</h3>
@@ -383,103 +388,97 @@
               </button>
             </div>
 
-            <!-- 已绑定域名管理：只列出固定域名的绑定记录，每条可直接改名 / 解绑 -->
-            <div class="dns-bound-block">
-              <div class="fluent-table-wrapper">
-                <table class="fluent-table dns-bound-table">
-                  <thead>
-                    <tr>
-                      <th class="col-tunnel-name">{{ t.server_tab.dns_col_tunnel }}</th>
-                      <th class="col-bound-hostname">{{ t.server_tab.headers.hostname }}</th>
-                      <th class="col-bound-lock">{{ t.server_tab.headers.lock }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <!-- 按隧道聚合：一个隧道占一行，该隧道下的多个域名以标签换行排列。
-                         改 / 解绑 / 密码锁都内嵌在各自的域名 chip 里，每个域名独立上锁。 -->
-                    <tr v-for="group in dnsBoundGroups" :key="group.tunnelId">
-                      <td class="col-tunnel-name font-bold" :title="group.tunnelName">{{ group.tunnelName }}</td>
-                      <td class="col-bound-hostname">
-                        <div class="hostname-chip-list">
-                          <span
-                            v-for="rec in group.records"
-                            :key="rec.recordId"
-                            class="hostname-chip"
-                            :class="{ locked: lockOf(rec.hostname) }"
-                          >
-                            <span
-                              class="hostname-chip-text"
-                              :title="rec.hostname + ' · ' + t.server_tab.click_to_copy"
-                              @click="copyHostname(rec.hostname)"
-                            >{{ rec.hostname }}</span>
-                            <span
-                              v-if="lockOf(rec.hostname)"
-                              class="chip-lock-tag"
-                            >🔒 {{ t.server_tab.lock_on }}</span>
-                            <span
-                              v-else
-                              class="chip-lock-tag off"
-                            >{{ t.server_tab.lock_off }}</span>
-                            <button
-                              class="chip-action-btn"
-                              :title="t.server_tab.dns_edit_title"
-                              @click.stop="promptEditDnsRoute(rec)"
-                            >✎</button>
-                            <button
-                              class="chip-action-btn danger"
-                              :title="t.server_tab.btn_unbind"
-                              @click.stop="promptUnbindDnsRoute(rec)"
-                            >🗑</button>
-                          </span>
-                        </div>
-                      </td>
-                      <td class="col-bound-lock">
-                        <div class="hostname-chip-list">
-                          <div
-                            v-for="rec in group.records"
-                            :key="'lock-' + rec.recordId"
-                            class="lock-chip-row"
-                          >
-                            <template v-if="lockOf(rec.hostname)">
-                              <span
-                                class="lock-cred-line mono"
-                                :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                                @click.stop="copyText(lockOf(rec.hostname)?.clientId || '')"
-                              >{{ lockOf(rec.hostname)?.clientId }}</span>
-                              <span
-                                class="lock-cred-line mono"
-                                :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                                @click.stop="copyText(lockOf(rec.hostname)?.clientSecret || '')"
-                              >{{ lockOf(rec.hostname)?.clientSecret }}</span>
-                              <button
-                                class="chip-action-btn"
-                                :title="t.server_tab.btn_rotate_password"
-                                :disabled="isLockMutating"
-                                @click.stop="promptRotatePassword(rec.hostname)"
-                              >🔁</button>
-                              <button
-                                class="chip-action-btn danger"
-                                :title="t.server_tab.btn_unlock"
-                                :disabled="isLockMutating"
-                                @click.stop="promptUnlockHostname(rec.hostname)"
-                              >🔓</button>
-                            </template>
-                            <button
-                              v-else
-                              class="chip-action-btn primary"
-                              :title="t.server_tab.btn_lock"
-                              :disabled="isLockMutating"
-                              @click.stop="promptLockHostname(rec.hostname)"
-                            >🔒 {{ t.server_tab.btn_lock }}</button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr v-if="dnsBoundGroups.length === 0">
-                      <td colspan="3" class="empty-table">{{ t.server_tab.dns_bound_empty }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <!-- 已绑定域名管理：只列出固定域名的绑定记录，按隧道分组 -->
+            <div class="dns-group-list">
+              <div v-for="group in dnsBoundGroups" :key="group.tunnelId" class="dns-group">
+                <div class="dns-group-head">
+                  <span class="dns-group-name" :title="group.tunnelName">{{ group.tunnelName }}</span>
+                  <span class="dns-group-count">
+                    {{ t.server_tab.dns_group_count.replace('{count}', String(group.records.length)) }}
+                  </span>
+                </div>
+
+                <div
+                  v-for="rec in group.records"
+                  :key="rec.recordId"
+                  class="dns-domain"
+                  :class="{ locked: !!lockOf(rec.hostname) }"
+                >
+                  <div class="dns-domain-row">
+                    <span
+                      class="dns-domain-host"
+                      :title="rec.hostname + ' · ' + t.server_tab.click_to_copy"
+                      @click="copyHostname(rec.hostname)"
+                    >{{ rec.hostname }}</span>
+                    <span class="dns-row-actions">
+                      <button
+                        class="dns-mini-btn"
+                        :title="t.server_tab.dns_edit_title"
+                        @click.stop="promptEditDnsRoute(rec)"
+                      >{{ t.server_tab.dns_btn_rename }}</button>
+                      <button
+                        class="dns-mini-btn danger"
+                        :title="t.server_tab.btn_unbind"
+                        @click.stop="promptUnbindDnsRoute(rec)"
+                      >{{ t.server_tab.dns_btn_unbind }}</button>
+                    </span>
+                  </div>
+
+                  <!-- 该域名的访问密码锁设置：状态徽标 + 凭据 + 锁操作 -->
+                  <div class="dns-domain-row dns-lock-row">
+                    <span class="dns-lock-label">{{ t.server_tab.headers.lock }}</span>
+
+                    <template v-if="lockOf(rec.hostname)">
+                      <span class="dns-lock-state on">{{ t.server_tab.lock_on }}</span>
+                      <span
+                        class="dns-cred"
+                        :class="{ expanded: isLockCredExpanded(rec.hostname) }"
+                        :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
+                        @click="copyText(lockOf(rec.hostname)?.clientId || '')"
+                      >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
+                      <span
+                        class="dns-cred"
+                        :class="{ expanded: isLockCredExpanded(rec.hostname) }"
+                        :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
+                        @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
+                      >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname) }}</span>
+                      <span class="dns-row-actions">
+                        <button
+                          class="dns-mini-btn"
+                          @click.stop="toggleLockCred(rec.hostname)"
+                        >{{ isLockCredExpanded(rec.hostname) ? t.server_tab.lock_cred_hide : t.server_tab.lock_cred_show }}</button>
+                        <button
+                          class="dns-mini-btn"
+                          :title="t.server_tab.btn_rotate_password"
+                          :disabled="isLockMutating"
+                          @click.stop="promptRotatePassword(rec.hostname)"
+                        >{{ t.server_tab.btn_rotate_password }}</button>
+                        <button
+                          class="dns-mini-btn danger"
+                          :title="t.server_tab.btn_unlock"
+                          :disabled="isLockMutating"
+                          @click.stop="promptUnlockHostname(rec.hostname)"
+                        >{{ t.server_tab.btn_unlock }}</button>
+                      </span>
+                    </template>
+
+                    <template v-else>
+                      <span class="dns-lock-state off">{{ t.server_tab.lock_off }}</span>
+                      <span class="dns-row-actions">
+                        <button
+                          class="dns-mini-btn primary"
+                          :title="t.server_tab.btn_lock"
+                          :disabled="isLockMutating"
+                          @click.stop="promptLockHostname(rec.hostname)"
+                        >{{ t.server_tab.btn_lock }}</button>
+                      </span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="dnsBoundGroups.length === 0" class="dns-empty">
+                {{ t.server_tab.dns_bound_empty }}
               </div>
             </div>
           </div>
@@ -2210,6 +2209,25 @@ const lockOf = (hostname: string): TunnelLockEntry | null => tunnelLocks.value[h
 
 // 锁操作进行中：所有锁按钮统一禁用，防止并发重复建锁
 const isLockMutating = ref(false);
+
+// 密码锁凭据默认掩码显示：client id 32 位 + secret 40 位，明文会把域名行撑破。
+// 想核对全文时点「显示凭据」展开；展开状态按域名记，纯临时 UI 态，不落盘。
+const expandedLockCreds = ref<Record<string, boolean>>({});
+const isLockCredExpanded = (hostname: string): boolean => !!expandedLockCreds.value[hostname];
+const toggleLockCred = (hostname: string) => {
+  // 整体替换对象而不是改属性：record 里新增的 key 不是响应式的，直接赋值不会触发重渲染
+  expandedLockCreds.value = {
+    ...expandedLockCreds.value,
+    [hostname]: !expandedLockCreds.value[hostname],
+  };
+};
+/** 凭据展示文本。掩码时保留开头几位（secret 的 cfast_ 前缀、client id 前 4 位），
+ *  这样一眼能分清哪个是账号、哪个是密码；点击复制拿到的始终是完整值，不受掩码影响。 */
+const credDisplay = (value: string, hostname: string): string => {
+  if (!value) return '';
+  if (isLockCredExpanded(hostname)) return value;
+  return value.slice(0, value.startsWith('cfast_') ? 6 : 4) + '••••••••••••';
+};
 
 // 上锁 / 换密码成功后的凭据展示弹窗
 const showLockInfoModal = ref(false);
@@ -4692,190 +4710,213 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-/* 「已绑定域名」管理块：通栏铺满整卡（原五五开两列已取消，表单移入添加弹窗） */
-.dns-bound-block {
-  min-width: 0;
-}
-
-/* 列表铺满整卡宽度，并限制最大高度做内部滚动：列表再长也不会把卡片撑出屏幕。
-   上限取约 2 行（表头 34 + 2 行 ≈ 100px），把更多高度让给上方的隧道列表卡（更常用）。 */
-.dns-bound-block .fluent-table-wrapper {
-  width: 100%;
-  max-height: 100px;
-}
-
-/* 该表铺满右列。
-   注意 1：必须用 .dns-bound-block .fluent-table 这个两级选择器，
-   否则会被后面同样只有一级的 .fluent-table { min-width: max-content } 覆盖，
-   导致窄框里的表格仍按内容撑宽、只露出第一列并出现横向滚动。
-   注意 2：table-layout:fixed 是这里的关键。表格默认按"最长域名"的 min-content
-   撑宽，min-width:0 也压不住（实测：框 473px、表 559px、右侧被切 85px）；
-   固定布局后列宽只按 width 分配，域名放不下由标签换行 / 省略号处理，不会撑破框。 */
-.dns-bound-block .fluent-table {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
-}
-
-.dns-bound-table .col-tunnel-name {
-  white-space: nowrap;
-  /* 定宽 + 省略号：table-layout:fixed 下百分比/1% 会被严格按比例算，
-     写成 1% 会把这一列压成一条线（隧道名只剩 "local…"）。
-     固定 104px 后剩余宽度（约 370px）全部给域名列，
-     正好放得下两个常规域名标签一行（约 343px），不会因为列太窄而多折一行。 */
-  width: 104px;
-  max-width: 104px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: top;
-}
-
-/* 域名列允许换行：同一隧道的多个域名以标签横向排列，放不下时自然折行 */
-.dns-bound-table .col-bound-hostname {
-  white-space: normal;
-  vertical-align: top;
-}
-
-/* ---- 域名标签：一个隧道一行，域名做成小胶囊，改/解绑按钮内嵌在胶囊里 ---- */
-.hostname-chip-list {
+/* 「已绑定域名」区块：按隧道分组的卡片列表（已取代原先的三列表格）。
+   层级靠「容器底色 + 域名行左侧竖线」表达，不再依赖列宽对齐 —— 表头那三列已删，
+   连带原先那套 .hostname-chip / .lock-chip-row / .chip-action-btn 胶囊样式一并废弃。 */
+.dns-group-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  /* 分组多了在卡片内部滚动：列表再长也不会把卡片撑出视口。
+     上限约 3 个域名区块（组头 28 + 3 × 50 ≈ 180），再高就会挤掉上方的隧道列表，
+     所以宁可内部滚动 —— 隧道列表那边有 min-height: 150px 的地板，不能被无限压缩。 */
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
-.hostname-chip {
-  display: inline-flex;
+/* 一条隧道 = 一个分组容器。
+   边框必须用 --border-strong：--border-subtle（0.08α）在浅色主题下实测几乎看不见，
+   分组容器一消失，「哪个域名属于哪条隧道」这个层级就又回到了改版前的问题。 */
+.dns-group {
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 分组标题条：隧道名 + 域名数。用 --bg-table-header 铺浅底（浅色 #f8f9fa / 深色 #282828，
+   两套主题都有值），跟下方域名区块分开，告诉人「这几个域名属于它」。 */
+.dns-group-head {
+  display: flex;
   align-items: center;
-  gap: 1px;
-  max-width: 100%;
-  padding: 1px 3px 1px 8px;
-  border-radius: 4px;
-  background-color: #005fb8;
-  color: #ffffff;
-  font-size: 11.5px;
-  font-family: 'Consolas', 'Courier New', monospace;
+  gap: 8px;
+  padding: 5px 10px;
+  background-color: var(--bg-table-header);
 }
 
-.hostname-chip-text {
+.dns-group-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* 点击即复制 */
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dns-group-count {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+/* 一个域名 = 组内一个区块，含两排：域名行 + 密码锁行。
+   左侧 3px 竖线把所有域名的层级拉平，同时用颜色标示有没有上锁。 */
+.dns-domain {
+  padding: 5px 10px 6px 10px;
+  border-top: 1px solid var(--border-subtle);
+  border-left: 3px solid #b4b2a9;
+}
+
+.dns-domain:first-of-type {
+  border-top: none;
+}
+
+.dns-domain.locked {
+  border-left-color: #639922;
+}
+
+.dns-domain-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 域名本身：等宽字体，点击即复制（沿用本面板的既有约定，不额外放复制按钮） */
+.dns-domain-host {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
   cursor: pointer;
   user-select: none;
 }
 
-.hostname-chip-text:hover {
+.dns-domain-host:hover {
   text-decoration: underline;
 }
 
-.chip-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* 域名的密码锁设置行：标签 + 状态 + 凭据 + 操作。
+   允许换行 —— 凭据展开成全文后一定放不下，折行而不是把行撑出卡片。 */
+.dns-lock-row {
+  flex-wrap: wrap;
+  margin-top: 2px;
+  row-gap: 3px;
+}
+
+.dns-lock-label {
   flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #ffffff;
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: background-color 0.15s ease, opacity 0.15s ease;
+  font-size: 11.5px;
+  color: var(--text-secondary);
 }
 
-.chip-action-btn:hover {
-  background-color: rgba(255, 255, 255, 0.32);
-  opacity: 1;
-}
-
-.chip-action-btn.danger:hover {
-  background-color: #d13438;
-  opacity: 1;
-}
-
-/* 域名胶囊内的锁状态标签（已上锁 🔒 / 未上锁） */
-.chip-lock-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+/* 锁状态徽标：已上锁用绿（保护生效中），未上锁用中性灰，不用红色 —— 未上锁是常态不是错误 */
+.dns-lock-state {
   flex-shrink: 0;
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-family: inherit;
-  background-color: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
-.chip-lock-tag.off {
-  background-color: rgba(255, 255, 255, 0.14);
-  opacity: 0.85;
+.dns-lock-state.on {
+  background-color: #EAF3DE;
+  border-color: #97C459;
+  color: #3B6D11;
 }
 
-/* 密码锁操作列：每个域名一行，已上锁显示账号/密码+换密码/解锁，未上锁显示「上锁」 */
-.dns-bound-table .col-bound-lock {
-  white-space: normal;
-  vertical-align: top;
-  width: 210px;
-  max-width: 210px;
+.dns-lock-state.off {
+  background-color: var(--bg-table-header);
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
 }
 
-.lock-chip-row {
-  display: flex;
+/* 行内操作按钮统一靠右：一个 flex 容器收口，避免给每个按钮都写 margin-left:auto
+   （多个 auto 会平分空白，按钮被撒得满行都是）。窄窗口下按钮组自己换行，不挤出卡片。 */
+.dns-row-actions {
+  display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
-  min-height: 20px;
-  padding: 1px 0;
+  gap: 5px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-/* 锁操作列里的「上锁」按钮：加个浅色底，跟域名胶囊里的动作按钮区分开 */
-.chip-action-btn.primary {
-  width: auto;
-  height: auto;
-  padding: 1px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--text-primary, #1a1a1a);
-  background-color: var(--chip-lock-btn-bg, #e8f3ff);
-  opacity: 1;
+/* 凭据：默认掩码，点击复制完整值；展开后显示全文并允许任意位置折行 */
+.dns-cred {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
 }
 
-.chip-action-btn.primary:hover {
-  background-color: var(--chip-lock-btn-hover, #cfe6ff);
+.dns-cred:hover {
+  text-decoration: underline;
 }
 
-.chip-action-btn:disabled {
+.dns-cred.expanded {
+  flex-basis: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+/* 行内小按钮（改名 / 解绑 / 显示凭据 / 换密码 / 解锁 / 上锁）。
+   一律用文字而不是 ✎ 🗑 🔁 🔓 图标：浅色底上 ✎ 是细线条字、🗑 是彩色 emoji，
+   同一行里两种字形大小与质感都不一致（实测截图确认），文字按钮宽度统一、语义也更直白。 */
+.dns-mini-btn {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 悬停统一走 --bg-hover：它两套主题都有值（浅色黑 5% / 深色白 7%），
+   比写死 rgba 或浅色底稳 —— 深色主题下浅蓝底会糊成一片。 */
+.dns-mini-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+/* 语义色只落在描边与文字上，且用主题变量而非写死色值（深色主题会换成浅色号） */
+.dns-mini-btn.primary {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.dns-mini-btn.danger {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.dns-mini-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* 锁操作列里换密码/解锁按钮：脱离蓝底胶囊，需要自带可见的文字色与悬停底 */
-.col-bound-lock .chip-action-btn {
-  color: var(--text-primary, #1a1a1a);
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-.col-bound-lock .chip-action-btn:hover {
-  background-color: rgba(0, 0, 0, 0.12);
-}
-
-.col-bound-lock .chip-action-btn.danger {
-  color: var(--danger-color, #d13438);
-}
-
-.col-bound-lock .chip-action-btn.danger:hover {
-  background-color: #d13438;
-  color: #ffffff;
+.dns-empty {
+  padding: 14px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-secondary);
 }
 
 /* 解绑按钮：危险色描边，与行内启停按钮区分 */
