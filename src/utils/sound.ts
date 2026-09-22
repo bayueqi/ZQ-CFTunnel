@@ -142,8 +142,6 @@ export function initSoundDelegation(root: Document | HTMLElement = document) {
     '.fluent-btn',
     '.tile-btn',
     '.fluent-icon-btn',
-    '.fluent-dropdown-btn',
-    '.fluent-dropdown-item',
     '.nav-tab',
     '.tab-btn',
     '.nav-item',

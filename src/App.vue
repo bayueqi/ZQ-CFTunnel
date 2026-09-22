@@ -42,37 +42,7 @@
           </svg>
         </button>
 
-        <!-- 3. 语言选择器 -->
-        <div class="fluent-dropdown-wrapper" ref="langDropdownRef">
-          <button
-            class="fluent-dropdown-btn"
-            :class="{ open: isLangDropdownOpen }"
-            @click="isLangDropdownOpen = !isLangDropdownOpen"
-            type="button"
-          >
-            <span class="dropdown-selected-label">
-              {{ currentLangItem?.flag }} {{ currentLangItem?.label }}
-            </span>
-            <span class="dropdown-arrow" :class="{ rotated: isLangDropdownOpen }">▾</span>
-          </button>
-
-          <transition name="dropdown-slide">
-            <div v-if="isLangDropdownOpen" class="fluent-dropdown-menu">
-              <div
-                v-for="item in LANG_ORDER"
-                :key="item.key"
-                :class="['fluent-dropdown-item', { active: currentLang === item.key }]"
-                @click="selectLanguage(item.key)"
-              >
-                <span class="item-flag">{{ item.flag }}</span>
-                <span class="item-label">{{ item.label }}</span>
-                <span v-if="currentLang === item.key" class="item-check">✓</span>
-              </div>
-            </div>
-          </transition>
-        </div>
-
-        <!-- 4. 主题切换按钮 -->
+        <!-- 3. 主题切换按钮 -->
         <button
           class="fluent-icon-btn theme-btn"
           @click="toggleTheme"
@@ -83,7 +53,7 @@
           </span>
         </button>
 
-        <!-- 5. 最小化按钮 (统一 28x28 尺寸，通过后端原生命令可靠最小化) -->
+        <!-- 4. 最小化按钮 (统一 28x28 尺寸，通过后端原生命令可靠最小化) -->
         <button
           class="fluent-icon-btn win-ctrl-btn minimize-btn"
           @click.stop="handleMinimize"
@@ -94,7 +64,7 @@
           </svg>
         </button>
 
-        <!-- 6. 最大化 / 还原按钮 (统一 28x28 尺寸，通过后端原生命令可靠缩放) -->
+        <!-- 5. 最大化 / 还原按钮 (统一 28x28 尺寸，通过后端原生命令可靠缩放) -->
         <button
           class="fluent-icon-btn win-ctrl-btn maximize-btn"
           @click.stop="handleToggleMaximize"
@@ -108,7 +78,7 @@
           </svg>
         </button>
 
-        <!-- 7. 关闭按钮 (统一 28x28 尺寸，通过后端原生命令优雅隐藏到系统托盘) -->
+        <!-- 6. 关闭按钮 (统一 28x28 尺寸，通过后端原生命令优雅隐藏到系统托盘) -->
         <button
           class="fluent-icon-btn win-ctrl-btn close-btn"
           @click.stop="handleCloseWindow"
@@ -416,24 +386,26 @@
                     </span>
                   </div>
 
-                  <!-- 该域名的访问密码锁设置：状态徽标 + 凭据 + 锁操作 -->
+                  <!-- 该域名的访问密码锁设置：状态徽标 + 掩码凭据 + 锁操作。
+                       展开「显示凭据」时凭据不留在这一行 —— 32 位账号 + 40 位密码会把这一行
+                       折成三四段、按钮被挤到最底下。展开态改由下面独立的整行块承载。 -->
                   <div class="dns-domain-row dns-lock-row">
                     <span class="dns-lock-label">{{ t.server_tab.headers.lock }}</span>
 
                     <template v-if="lockOf(rec.hostname)">
                       <span class="dns-lock-state on">{{ t.server_tab.lock_on }}</span>
-                      <span
-                        class="dns-cred"
-                        :class="{ expanded: isLockCredExpanded(rec.hostname) }"
-                        :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                        @click="copyText(lockOf(rec.hostname)?.clientId || '')"
-                      >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
-                      <span
-                        class="dns-cred"
-                        :class="{ expanded: isLockCredExpanded(rec.hostname) }"
-                        :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                        @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
-                      >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname) }}</span>
+                      <template v-if="!isLockCredExpanded(rec.hostname)">
+                        <span
+                          class="dns-cred"
+                          :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
+                          @click="copyText(lockOf(rec.hostname)?.clientId || '')"
+                        >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
+                        <span
+                          class="dns-cred"
+                          :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
+                          @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
+                        >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname) }}</span>
+                      </template>
                       <span class="dns-row-actions">
                         <button
                           class="dns-mini-btn"
@@ -465,6 +437,30 @@
                         >{{ t.server_tab.btn_lock }}</button>
                       </span>
                     </template>
+                  </div>
+
+                  <!-- 展开的凭据：整行、账号与密码各占一行（标签 + 值，点击即复制）。
+                       放在锁行下面而不是行内，按钮才不会被超长凭据挤到第三、四行 -->
+                  <div
+                    v-if="lockOf(rec.hostname) && isLockCredExpanded(rec.hostname)"
+                    class="dns-cred-block"
+                  >
+                    <div class="dns-cred-item">
+                      <span class="dns-cred-key">{{ t.server_tab.lock_account_label }}</span>
+                      <span
+                        class="dns-cred-val mono"
+                        :title="t.server_tab.click_to_copy"
+                        @click="copyText(lockOf(rec.hostname)?.clientId || '')"
+                      >{{ lockOf(rec.hostname)?.clientId || '' }}</span>
+                    </div>
+                    <div class="dns-cred-item">
+                      <span class="dns-cred-key">{{ t.server_tab.lock_secret_label }}</span>
+                      <span
+                        class="dns-cred-val mono"
+                        :title="t.server_tab.click_to_copy"
+                        @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
+                      >{{ lockOf(rec.hostname)?.clientSecret || '' }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1041,18 +1037,17 @@
 
             <template v-for="(row, i) in tunnelFormRows" :key="'ing-' + i">
               <div
-                v-if="!(ingressShadowedTail && i === tunnelFormRows.length - 1)"
                 class="ingress-row"
                 :class="{ 'is-catch-all': isCatchAllIndex(i) }"
               >
-                <!-- 末尾兜底行：它不靠域名匹配，标一下免得被当成普通规则（标签单独占一行，
-                     跟下面字段列对齐才不会看成协议那一格的标题） -->
-                <div v-if="isCatchAllIndex(i)" class="catch-all-head">
-                  <span class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
-                </div>
                 <div class="ingress-row-line">
                   <div class="ingress-field protocol">
-                    <span class="ingress-field-label">{{ t.server_tab.protocol_label }}</span>
+                    <span class="ingress-field-label">
+                      <!-- 末尾兜底行：它不靠域名匹配（是 ingress 的结构性末条）。标签跟「协议」
+                           并排放在同一格的标签行里，整块因此只占一行高 -->
+                      <span v-if="isCatchAllIndex(i)" class="catch-all-tag">{{ t.server_tab.form_catch_all_label }}</span>
+                      <span>{{ t.server_tab.protocol_label }}</span>
+                    </span>
                     <select
                       v-model="row.protocol"
                       class="fluent-input fluent-select"
@@ -1110,8 +1105,8 @@
                   </div>
                   <!-- 兜底行没有域名输入框：它按定义就不带域名 -->
                   <div v-else-if="!isCatchAllIndex(i)" class="ingress-field hostname">
-                    <!-- 域名可以留空：留空的那条自己就成了兜底（匹配所有 hostname），
-                         代价是排在它后面的规则永远轮不到 —— 校验见 ingressRowErrorKey -->
+                    <!-- 域名空着就是空着：不报错、不改变这条的含义，保存时跳过它（不写入云端）。
+                         要接住所有未匹配的请求，用末尾那条常驻的「默认兜底」 -->
                     <span class="ingress-field-label">{{ t.server_tab.form_hostname_label }}</span>
                     <input
                       type="text"
@@ -1121,6 +1116,20 @@
                     />
                   </div>
 
+                  <!-- 兜底行：说明跟协议下拉同排（占掉剩余宽度），并把最终会写进云端的
+                       service 原文亮出来；整块因此只有一行高。放不下时省略号收尾，
+                       完整原文挂 title 上，鼠标一悬停就能看到 -->
+                  <div
+                    v-if="isCatchAllIndex(i)"
+                    class="catch-all-hint"
+                    :title="t.server_tab.form_catch_all_hint + ' ' + serviceOfRow(row)"
+                  >
+                    {{ t.server_tab.form_catch_all_hint }}
+                    <span v-if="!ingressRowErrorKey(row, i)" class="catch-all-service mono">
+                      {{ serviceOfRow(row) }}
+                    </span>
+                  </div>
+
                   <!-- 兜底行不可删：ingress 最后一条必须不带域名，删了得上哪找一条 -->
                   <button
                     v-if="!isCatchAllIndex(i)"
@@ -1128,14 +1137,6 @@
                     :title="t.server_tab.form_remove_route"
                     @click="removeIngressRow(i)"
                   >🗑</button>
-                </div>
-
-                <!-- 兜底行下面说明它是干什么的，并把最终会写进云端的 service 原文亮出来 -->
-                <div v-if="isCatchAllIndex(i)" class="catch-all-hint">
-                  {{ t.server_tab.form_catch_all_hint }}
-                  <span v-if="!ingressRowErrorKey(row, i)" class="catch-all-service mono">
-                    {{ serviceOfRow(row) }}
-                  </span>
                 </div>
                 <div v-if="tunnelFormSubmitted && ingressRowErrorKey(row, i)" class="error-tip">
                   <span class="error-icon">⚠️</span>
@@ -1396,8 +1397,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
-import { LANG_ORDER, LANG_DATA, fmt, setActiveLang } from './i18n';
-import { LangKey, TunnelInfo, QuickTunnelItem, ClientTunnelItem, LogEntry, DnsBinding } from './types';
+import { LANG_DATA, fmt } from './i18n';
+import { TunnelInfo, QuickTunnelItem, ClientTunnelItem, LogEntry, DnsBinding } from './types';
 import { isTunnelNameValid, isPortValid, isDomainValid } from './utils/validation';
 import { getCloudflaredTarget } from './utils/cloudflaredDownloader';
 import { soundManager } from './utils/sound';
@@ -1483,38 +1484,9 @@ const syncThemeToDocument = () => {
   }
 };
 
-// 语言状态与自定义下拉菜单
-const savedLang = (localStorage.getItem('app_lang') as LangKey) || 'zh_CN';
-const currentLang = ref<LangKey>(LANG_DATA[savedLang] ? savedLang : 'zh_CN');
-// 同步给非 Vue 上下文（网页演示模式的 mock）取文案用
-setActiveLang(currentLang.value);
-// 同步给非 Vue 上下文（网页演示模式的 mock）取文案用
-setActiveLang(currentLang.value);
-const isLangDropdownOpen = ref(false);
-const langDropdownRef = ref<HTMLDivElement | null>(null);
-
-const currentLangItem = computed(() => {
-  return LANG_ORDER.find(item => item.key === currentLang.value) || LANG_ORDER[0];
-});
-
-const t = computed(() => LANG_DATA[currentLang.value] || LANG_DATA['zh_CN']);
-
-const selectLanguage = (key: LangKey) => {
-  currentLang.value = key;
-  isLangDropdownOpen.value = false;
-  localStorage.setItem('app_lang', key);
-  // 切换语言需要重载页面（让 Vue 重新挂载整个 DOM，彻底防止错乱）。
-  // 重载会丢失内存里的视图状态，所以先把当前所在界面暂存到 sessionStorage，
-  // 由 setup 阶段同步恢复，避免重载后跳回「配置」页。
-  try {
-    sessionStorage.setItem('restore_view_on_reload', JSON.stringify({
-      tab: currentTab.value,
-      sidebarCollapsed: sidebarCollapsed.value,
-      sidebarOpen: sidebarOpen.value,
-    }));
-  } catch {}
-  window.location.reload();
-};
+// 文案包只有一份（简体中文），但保留 computed 这层：脚本里 130 多处日志与吐司
+// 写的是 t.value.<tab>.<key>，模板里也有大量 t.<tab>.<key>，包成 ref 就一行都不用改
+const t = computed(() => LANG_DATA.zh_CN);
 
 // 选项卡状态（点击软件默认进入「配置」页）
 const currentTab = ref('misc');
@@ -1526,25 +1498,6 @@ const sidebarOpen = ref<Record<string, boolean>>({
   client: false,
   misc: false,
 });
-
-// 若上一动作是「切换语言」触发的页面重载，则同步还原当时的视图位置，
-// 避免重载后跳回「配置」页（server_mode / local_sub_mode 本就持久化，无需再还原）。
-try {
-  const raw = sessionStorage.getItem('restore_view_on_reload');
-  if (raw) {
-    sessionStorage.removeItem('restore_view_on_reload');
-    const saved = JSON.parse(raw) as {
-      tab?: string;
-      sidebarCollapsed?: boolean;
-      sidebarOpen?: Record<string, boolean>;
-    };
-    if (typeof saved.tab === 'string') currentTab.value = saved.tab;
-    if (typeof saved.sidebarCollapsed === 'boolean') sidebarCollapsed.value = saved.sidebarCollapsed;
-    if (saved.sidebarOpen && typeof saved.sidebarOpen === 'object') {
-      sidebarOpen.value = { ...sidebarOpen.value, ...saved.sidebarOpen };
-    }
-  }
-} catch {}
 
 // 点击侧边栏一级项：服务端需要连带处理下边栏的展开/折叠
 const handleSidebarClick = (tab: string) => {
@@ -1919,32 +1872,21 @@ const originalHostRoutes = ref<Record<string, string>>({});
 const originalCidrRoutes = ref<Record<string, { network: string; comment: string }>>({});
 
 // 数组最后一条就是兜底行 —— ingress 的最后一条必须不带域名，由它接住所有未匹配的请求。
-// 它在界面上：有「默认兜底」标签、没有域名输入框、不能删，service 由用户在下拉里选
-// （默认 http_status:404，也可以换成转发到本机某个端口）。
+// 它**常驻**：永远渲染、永远在最后、永远写进云端；不因为上面的行填成什么样而消失或变形，
+// 也不参与任何「行与行之间」的推导。界面上它有「默认兜底」标签、没有域名输入框、不能删，
+// service 由用户在下拉里选（默认 http_status:404，也可以换成转发到本机某个端口）。
 const isCatchAllIndex = (i: number): boolean => i === tunnelFormRows.value.length - 1;
 
-// 「本该有域名、却留空」的普通行 —— 域名一空，这条规则就匹配所有 hostname，它自己成了兜底。
-// raw 行与 404 档不算：raw 是原样保留的存量规则（反解不出协议端口，谈不上按域名匹配），
-// 404 档根本没有域名输入框。
-const isBlankHostRow = (row: IngressRow): boolean =>
-  row.protocol !== CATCH_ALL_PROTOCOL && row.protocol !== 'raw' && !row.hostname.trim();
-
-// 倒数第二行留空域名 → 末尾那条兜底行永远轮不到：不渲染、保存也不写出去。
-// 依据 cloudflared 自己的校验（ingress/ingress.go validateHostname）：非最后一条的
-// 「匹配所有 hostname」规则会报 "the rules which follow it will never be triggered"。
-// 加载中不隐藏 —— 占位行本来就没有域名，藏了会让兜底行在读回配置时闪一下。
-const ingressShadowedTail = computed(
-  () =>
-    !tunnelFormLoading.value &&
-    tunnelFormRows.value.length >= 2 &&
-    // 末行必须真的没有域名（也就是真的兜底行）才谈得上被遮蔽 ——
-    // 否则宁可不隐藏：把用户填了域名的行藏掉、保存时又不写出去，那是静默丢数据
-    !tunnelFormRows.value[tunnelFormRows.value.length - 1].hostname.trim() &&
-    isBlankHostRow(tunnelFormRows.value[tunnelFormRows.value.length - 2]),
-);
+// 这一行会不会被写进云端：兜底行恒为真；普通行得填了域名才算一条路由。
+// 域名空着就是空着 —— 不报错、不改变这条或别的行的含义，保存时整行跳过（见 buildIngress）。
+const isRowWritten = (row: IngressRow, i: number): boolean =>
+  isCatchAllIndex(i) || !!row.hostname.trim();
 
 // 逐行校验：返回错误文案键（空串 = 合法）。只有点过「保存」之后才显示，免得一打开满屏红。
 const ingressRowErrorKey = (row: IngressRow, i: number): string => {
+  // 不会被写出去的行（域名空着的普通行）根本不参与校验 —— 它不构成配置，就不该拦保存，
+  // 更不该逼用户去填那个域名。空着就空着，跳过它就是了（保存时给一条日志说明）。
+  if (!isRowWritten(row, i)) return '';
   if (row.protocol === CATCH_ALL_PROTOCOL) return ''; // 404 档没有地址可填，也不可能填错
   if (row.protocol === 'raw') return row.rawService.trim() ? '' : 'err_service_required';
   const mode = addressModeOf(row.protocol);
@@ -1953,10 +1895,7 @@ const ingressRowErrorKey = (row: IngressRow, i: number): string => {
   // 兜底行没有域名输入框，也不参与域名校验
   if (isCatchAllIndex(i)) return '';
   const host = row.hostname.trim();
-  if (host) return isDomainValid(host) ? '' : 'err_hostname_invalid';
-  // 留空是允许的：这条自己就是兜底。但它后面的规则永远轮不到，所以只能放在倒数第二行
-  // （末尾兜底行上面那一行）—— 兜底行固定占着数组最后一位，没有比它更靠后的位置。
-  return i < tunnelFormRows.value.length - 2 ? 'err_catch_all_last' : '';
+  return isDomainValid(host) ? '' : 'err_hostname_invalid';
 };
 
 // 语言包里 errors 是手写接口，没有索引签名 —— 动态键必须这样取，
@@ -2000,21 +1939,24 @@ const addCidrRoute = () => {
   tunnelFormCidrRoutes.value.push({ id: '', network: '', comment: '' });
 };
 
-// 表单行 → 云端 ingress 数组。兜底行也在 rows 里（永远在末尾），不再由程序偷偷补
+// 表单行 → 云端 ingress 数组。兜底行也在 rows 里，永远落在最后一条。
+// 普通行没填域名 → 整行跳过：Cloudflare 只允许**一条**不带 hostname 的规则，而且必须在最后，
+// 那条恒由兜底行担任。把没填域名的普通行也写上去会变成两条「匹配所有 hostname」的规则，
+// 云端直接判非法（"the rules which follow it will never be triggered"）。
 const buildIngress = (): Record<string, string>[] => {
   const rows = tunnelFormRows.value;
-  const rules = rows.map((row, i) => {
+  const rules: Record<string, string>[] = [];
+  rows.forEach((row, i) => {
+    if (!isRowWritten(row, i)) return;
     const rule: Record<string, string> = { service: serviceOfRow(row) };
     // 最后一条（兜底行）不写 hostname：Cloudflare 要求数组最后一条不带域名
-    const host = row.hostname.trim();
-    if (host && i < rows.length - 1) rule.hostname = host;
+    if (!isCatchAllIndex(i)) rule.hostname = row.hostname.trim();
     // path 只有存量规则才有；空值不往请求体里塞，免得云端把它当成「匹配空路径」
     if (row.path) rule.path = row.path;
-    return rule;
+    rules.push(rule);
   });
-  // 上面有一条普通行留空域名 → 它自己就是兜底；末尾那条兜底行永远轮不到，
-  // 原样写上去 Cloudflare 会判非法（匹配所有 hostname 的规则后面不能再有规则），只写到那一条为止。
-  if (ingressShadowedTail.value && rules.length > 1) rules.pop();
+  // 纯防御：兜底行不可删，所以这里够不着；ingress 也绝不允许是空数组
+  if (rules.length === 0) rules.push({ service: CATCH_ALL_SERVICE });
   return rules;
 };
 
@@ -2029,15 +1971,28 @@ const openTunnelCreateModal = () => {
   tunnelFormMode.value = 'create';
   tunnelFormTarget.value = null;
   tunnelFormName.value = serverConfig.value.name || 'mc';
-  // 普通行 + 末尾兜底行（默认 http_status:404）。创建时就把兜底行摆出来，
-  // 而不是等保存时程序偷偷补一条 —— 它是什么、能不能改，用户得看得见。
+  // 一行普通行 + 末尾那条常驻的兜底行（创建时就把兜底行摆出来，而不是等保存时程序偷偷补
+  // 一条 —— 它是什么、能不能改，用户得看得见）。
+  // 兜底行直接预置成本机服务：它是唯一会被写成「不带域名」的规则，
+  // 所以「没有域名、未匹配的请求都转到本机」这件事在这儿明明白白摆着，不用靠留空普通行的域名去暗示。
+  const catchAll = emptyCatchAllRow();
+  const cfgProto = serverConfig.value.protocol || '';
+  const cfgPort = (serverConfig.value.port || '').trim();
+  const cfgSocket = (serverConfig.value.unixSocket || '').trim();
+  if (addressModeOf(cfgProto) === 'port' && cfgPort) {
+    catchAll.protocol = cfgProto;
+    catchAll.port = cfgPort;
+  } else if (addressModeOf(cfgProto) === 'socket' && cfgSocket) {
+    catchAll.protocol = cfgProto;
+    catchAll.unixSocket = cfgSocket;
+  }
   tunnelFormRows.value = [
     {
       ...emptyIngressRow(),
       protocol: serverConfig.value.protocol || 'http',
       port: serverConfig.value.port || '',
     },
-    emptyCatchAllRow(),
+    catchAll,
   ];
   tunnelFormHostRoutes.value = [];
   tunnelFormCidrRoutes.value = [];
@@ -2081,6 +2036,9 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
       // 云端如果没有兜底（最后一条带域名），补一条默认的摆出来让用户自己改
       const last = rows[rows.length - 1];
       if (!last || last.hostname.trim()) rows.push(emptyCatchAllRow());
+      // 云端一条规则都没有（或只有一条不带域名的）：补一行空普通行，别让表单只剩兜底行，
+      // 跟创建时的初始形态保持一致
+      if (rows.length === 1 && !rows[0].hostname.trim()) rows.unshift(emptyIngressRow());
       tunnelFormRows.value = rows;
     } else {
       tunnelFormLoadError.value = errorText(cfgRes.reason);
@@ -2199,12 +2157,27 @@ const confirmTunnelForm = async () => {
     appendLog(`[ERROR] ${t.value.server_tab.errors.tunnel_invalid}`, 'error', 'server');
     return;
   }
-  if (tunnelFormRows.value.length === 0) tunnelFormRows.value = [emptyIngressRow()];
+  // 兜底行不可删，所以 rows 至少有一条；这里只是兜住「数组真的空了」这种不可能的情况
+  if (tunnelFormRows.value.length === 0) tunnelFormRows.value = [emptyCatchAllRow()];
 
   const badRow = tunnelFormRows.value.findIndex((row, i) => ingressRowErrorKey(row, i));
   if (badRow >= 0) {
     appendLog(`[ERROR] ${fmt(t.value.logs.route_invalid_at, { index: badRow + 1 })}`, 'error', 'server');
     return;
+  }
+  // 没填域名的普通行不会写进云端（见 buildIngress）—— 只在它确实填了东西时才说一声，
+  // 免得白填了服务却不知道为什么没生效；光秃秃的空行就当没看见
+  const droppedRows = tunnelFormRows.value
+    .map((row, i) => ({ row, i }))
+    .filter(({ row, i }) => !isRowWritten(row, i))
+    .filter(({ row }) => !!(row.port.trim() || row.unixSocket.trim() || row.rawService.trim()))
+    .map(({ i }) => i + 1);
+  if (droppedRows.length) {
+    appendLog(
+      `[WARN] ${fmt(t.value.logs.blank_host_rows_skipped, { rows: droppedRows.join('、') })}`,
+      'warn',
+      'server',
+    );
   }
   // 同一个域名出现两次：云端按顺序只认第一条，第二条永远不会命中，属于白写
   const hosts = tunnelFormRows.value.map(r => r.hostname.trim()).filter(Boolean);
@@ -2264,11 +2237,12 @@ const confirmTunnelForm = async () => {
 
     // ④ 记住源站配置：列表行内「启动」直接用。
     //    真正生效的是云端 ingress，这份本地记录只是为了让启动按钮不必先打网络请求。
-    //    必须挑一条**普通转发行**：兜底行的 404 档是假协议，存进去启动按钮会当端口模式校验，
-    //    反而拦住启动。
+    //    必须挑一条**真的写进云端了的转发行**：兜底行的 404 档是假协议，存进去启动按钮
+    //    会当端口模式校验反而拦住启动；没填域名被跳过的行同理 —— 它压根没写进 ingress。
+    const writtenRows = tunnelFormRows.value.filter((r, i) => isRowWritten(r, i));
     const first =
-      tunnelFormRows.value.find(r => r.protocol !== 'raw' && r.protocol !== CATCH_ALL_PROTOCOL) ??
-      tunnelFormRows.value.find(r => r.protocol !== CATCH_ALL_PROTOCOL) ??
+      writtenRows.find(r => r.protocol !== 'raw' && r.protocol !== CATCH_ALL_PROTOCOL) ??
+      writtenRows.find(r => r.protocol !== CATCH_ALL_PROTOCOL) ??
       null;
     if (first) {
       saveTunnelCfgValues(name, first.protocol, first.port.trim(), first.unixSocket.trim());
@@ -3128,8 +3102,29 @@ const cancelUnbindDnsRoute = () => {
   dnsUnbindTarget.value = null;
 };
 
-// 解绑：先删掉该域名的密码锁（锁是挂在域名上的，DNS 记录删掉后就再也定位不到
-// 它对应的 Access 应用了），再删 Cloudflare 侧的 CNAME 记录。隧道本身与 ingress 不受影响。
+/** 解绑域名时，把云端 ingress（「已发布应用程序路由」）里指向该域名的规则摘掉。
+ *  一个域名在两处都留了痕迹：DNS 的 CNAME 记录 + 隧道的 ingress 规则。只删前者的话，
+ *  域名没了、ingress 里那条 hostname → 本机服务的规则会一直挂在「已发布应用程序路由」里，
+ *  只能进「修改隧道」手动删。
+ *  返回是否真的删掉了（云端本来就没有这条时返回 false，也就不必写回）。 */
+const stripIngressHostname = async (tunnelId: string, hostname: string): Promise<boolean> => {
+  const cfg = await invoke<{ rules: TunnelIngressRule[] }>('fetch_tunnel_config', { tunnelId });
+  const rules = cfg?.rules ?? [];
+  const want = hostname.trim().toLowerCase();
+  // 其余规则原样带回（含 path 与反解不出的 raw service），只摘掉域名匹配的那几条
+  const kept = rules.filter(r => (r.hostname || '').trim().toLowerCase() !== want);
+  if (kept.length === rules.length) return false;
+  // 摘掉之后一条不剩时补一条兜底：Cloudflare 不接受空的 ingress，
+  // 真发个空数组上去会整条写回失败 —— 那就成了「DNS 删了、ingress 还留着」，正是要修的状态
+  if (kept.length === 0) kept.push({ service: 'http_status:404' } as TunnelIngressRule);
+  await invoke<string>('update_tunnel_config', { tunnelId, ingress: kept });
+  return true;
+};
+
+// 解绑：① 删掉该域名的密码锁（锁挂在域名上，DNS 记录一删就再也定位不到它的 Access 应用）
+//      ② 删 Cloudflare 侧的 CNAME 记录
+//      ③ 摘掉隧道云端 ingress 里指向该域名的规则，让它同时从「已发布应用程序路由」里消失
+// 隧道本身不动。
 const confirmUnbindDnsRoute = async () => {
   const target = dnsUnbindTarget.value;
   if (!target || isDnsMutating.value) return;
@@ -3149,8 +3144,29 @@ const confirmUnbindDnsRoute = async () => {
 
     const res = await invoke<string>('delete_dns_route', { recordId: target.recordId });
     appendLog(`[SUCCESS] ${res} (${target.hostname})`, 'success', 'server');
+
+    // 放在删 DNS 之后：万一前面失败，不会留下「路由没了、DNS 还在」的半截状态
+    // —— 那会让域名照常解析到隧道，却因为没有 ingress 规则而回 404，更难查。
+    let ingressRemoved = false;
+    try {
+      ingressRemoved = await stripIngressHostname(target.tunnelId, target.hostname);
+      if (ingressRemoved) {
+        appendLog(
+          `[SUCCESS] ${fmt(t.value.logs.unbind_ingress_removed, { name: target.tunnelName, host: target.hostname })}`,
+          'success',
+          'server',
+        );
+      }
+    } catch (err: any) {
+      appendLog(
+        `[WARN] ${fmt(t.value.logs.unbind_ingress_remove_failed, { host: target.hostname, name: target.tunnelName, err: errorText(err) })}`,
+        'warn',
+        'server',
+      );
+    }
+
     showToast(
-      `${fmt(t.value.logs.unbind_ok, { host: target.hostname })}${done.length ? t.value.logs.unbind_ok_lock_purged : ''}`,
+      `${fmt(t.value.logs.unbind_ok, { host: target.hostname })}${done.length ? t.value.logs.unbind_ok_lock_purged : ''}${ingressRemoved ? t.value.logs.unbind_ok_ingress_removed : ''}`,
     );
     cancelUnbindDnsRoute();
     await refreshHostnamesOnly();
@@ -3655,12 +3671,10 @@ const confirmExitApp = async () => {
   }
 };
 
-// 键盘快捷键与全局点击监听 (ESC 关闭模态窗、下拉菜单与放大预览)
+// 键盘快捷键与全局点击监听 (ESC 关闭模态窗与放大预览)
 const onKeyDown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
-    if (isLangDropdownOpen.value) {
-      isLangDropdownOpen.value = false;
-    } else if (showDnsEditModal.value) {
+    if (showDnsEditModal.value) {
       cancelEditDnsRoute();
     } else if (showDnsAddModal.value) {
       cancelDnsAdd();
@@ -3680,18 +3694,11 @@ const onKeyDown = (e: KeyboardEvent) => {
   }
 };
 
-const onClickOutside = (e: MouseEvent) => {
-  if (langDropdownRef.value && !langDropdownRef.value.contains(e.target as Node)) {
-    isLangDropdownOpen.value = false;
-  }
-};
-
 // 初始化与事件监听
 onMounted(async () => {
   syncThemeToDocument();
   document.title = t.value.title;
   window.addEventListener('keydown', onKeyDown);
-  document.addEventListener('click', onClickOutside);
 
   // 获取并监听窗口最大化状态
   try {
@@ -3763,7 +3770,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown);
-  document.removeEventListener('click', onClickOutside);
 });
 </script>
 
@@ -3820,8 +3826,6 @@ onUnmounted(() => {
   --console-success-tag: #107c10;
   --console-success-text: #0e6b0e;
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
-  --dropdown-bg: rgba(255, 255, 255, 0.96);
-  --dropdown-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .dark-theme {
@@ -3872,8 +3876,6 @@ onUnmounted(() => {
   --console-success-tag: #6ccb5f;
   --console-success-text: #98e68e;
   --shadow-card: 0 6px 16px rgba(0, 0, 0, 0.35);
-  --dropdown-bg: rgba(40, 40, 40, 0.96);
-  --dropdown-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* 全局容器 (锁定全屏，无边框美学圆角) */
@@ -4082,112 +4084,6 @@ onUnmounted(() => {
 
 .github-btn:hover .github-icon {
   transform: scale(1.12);
-}
-
-/* 自定义 Win11 优雅平滑语言下拉菜单 (高度统一为 28px, 居中对齐) */
-.fluent-dropdown-wrapper {
-  position: relative;
-  z-index: 5001;
-  display: flex;
-  align-items: center;
-  pointer-events: auto !important;
-  -webkit-app-region: no-drag !important;
-}
-
-.fluent-dropdown-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  box-sizing: border-box;
-  background-color: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer !important;
-  outline: none;
-  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  pointer-events: auto !important;
-  -webkit-app-region: no-drag !important;
-}
-
-.fluent-dropdown-btn:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--text-secondary);
-}
-
-.fluent-dropdown-btn.open {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 1px var(--accent-color);
-}
-
-.dropdown-arrow {
-  font-size: 9px;
-  color: var(--text-secondary);
-  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-.dropdown-arrow.rotated {
-  transform: rotate(180deg);
-}
-
-.fluent-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 160px;
-  background-color: var(--dropdown-bg);
-  backdrop-filter: blur(24px);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  box-shadow: var(--dropdown-shadow);
-  padding: 6px;
-  z-index: 99999;
-}
-
-.dropdown-slide-enter-active,
-.dropdown-slide-leave-active {
-  transition: opacity 0.22s cubic-bezier(0.25, 1, 0.5, 1),
-              transform 0.22s cubic-bezier(0.25, 1, 0.5, 1);
-  transform-origin: top right;
-}
-
-.dropdown-slide-enter-from,
-.dropdown-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.96);
-}
-
-.fluent-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 6px;
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  color: var(--text-primary);
-}
-
-.fluent-dropdown-item:hover {
-  background-color: var(--bg-hover);
-}
-
-.fluent-dropdown-item.active {
-  background-color: rgba(96, 205, 255, 0.12);
-  color: var(--accent-color);
-  font-weight: 600;
-}
-
-.item-check {
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: bold;
 }
 
 /* 主题切换按钮动效 */
@@ -4717,9 +4613,10 @@ onUnmounted(() => {
   margin-left: auto;
 }
 
-/* 凭据：默认掩码，点击复制完整值；展开后显示全文并允许任意位置折行 */
+/* 凭据：行内只显示掩码，点击复制完整值。
+   展开（显示凭据）后不走这里 —— 由下面的 .dns-cred-block 整行块承载 */
 .dns-cred {
-  max-width: 100%;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4734,11 +4631,45 @@ onUnmounted(() => {
   text-decoration: underline;
 }
 
-.dns-cred.expanded {
-  flex-basis: 100%;
-  white-space: normal;
+/* 展开的凭据块：整行、账号与密码各一行（标签 + 值），缩进挂在域名竖线里侧。
+   从锁行里挪出来独占整行，32 位账号 + 40 位密码就不会把锁行折成三四段、
+   把「隐藏凭据 / 换密码 / 解锁」挤到最下面 —— 那是之前最难看的形态 */
+.dns-cred-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 3px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border-subtle);
+}
+
+.dns-cred-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dns-cred-key {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 值：等宽、点击即复制。窄窗下允许在任意字符处折行，但绝不省略
+   —— 凭据少一位就发不出去了 */
+.dns-cred-val {
+  flex: 1;
+  min-width: 0;
   overflow-wrap: anywhere;
+  font-size: 11.5px;
   color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dns-cred-val:hover {
+  text-decoration: underline;
 }
 
 /* 行内小按钮（改名 / 解绑 / 显示凭据 / 换密码 / 解锁 / 上锁）。
@@ -5625,23 +5556,21 @@ onUnmounted(() => {
 }
 
 /* 末尾兜底规则行：它不靠域名匹配（是 ingress 的结构性末条），
-   用虚线框跟上面按域名匹配的普通行区分开，也不给它删除按钮 */
+   用虚线框跟上面按域名匹配的普通行区分开，也不给它删除按钮。
+   整块只占一行高 —— 标签并进「协议」那一格的标签行、说明挪到下拉右侧，
+   padding 也收紧到刚好包住这一行 */
 .ingress-row.is-catch-all {
-  margin-top: 10px;
-  padding: 8px 10px;
+  margin-top: 8px;
+  padding: 4px 10px 5px 10px;
   border: 1px dashed var(--border-strong);
   border-radius: 6px;
   background-color: var(--bg-input);
 }
 
-.catch-all-head {
-  display: flex;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
+/* 「默认兜底」标签：并进协议那一格的标签行里（inline-block 才吃得到水平 padding） */
 .catch-all-tag {
-  flex-shrink: 0;
+  display: inline-block;
+  margin-right: 5px;
   padding: 0 6px;
   border-radius: 3px;
   font-size: 11px;
@@ -5654,12 +5583,16 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
+/* 兜底行的说明：跟协议下拉同排、吃掉剩余宽度。窄窗放不下就用省略号收尾，
+   绝不许折成第二行 —— 一折整块又变成两行高了 */
 .catch-all-hint {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: flex-end;
+  margin-bottom: 7px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 11px;
   color: var(--text-secondary);
 }

@@ -38,12 +38,9 @@ export interface LogEntry {
   source: 'server' | 'client' | 'misc' | 'remote' | 'quick' | 'system';
 }
 
-export type LangKey = 'zh_CN' | 'zh_TW' | 'pt_BR' | 'es_ES' | 'en_US' | 'ja_JP';
-
 export interface LangPack {
   title: string;
   header: string;
-  lang_button: string;
 
   /** 窗口外壳：标题栏按钮 / 侧边栏 / 控制台把手等非业务文案 */
   chrome: {
@@ -282,7 +279,6 @@ export interface LangPack {
       err_socket_required: string;
       err_port_required: string;
       err_hostname_invalid: string;
-      err_catch_all_last: string;
       err_hostname_dup: string;
       err_host_required: string;
       err_cidr_required: string;
@@ -390,6 +386,7 @@ export interface LangPack {
     err_tunnel_id_missing: string;
     err_tunnel_id_not_found: string;
     ingress_written: string;
+    blank_host_rows_skipped: string;
     dns_route_create_failed: string;
     tunnel_save_failed: string;
     access_token_saved_log: string;
@@ -428,6 +425,9 @@ export interface LangPack {
     unbind_lock_purge_failed: string;
     unbind_ok: string;
     unbind_ok_lock_purged: string;
+    unbind_ingress_removed: string;
+    unbind_ingress_remove_failed: string;
+    unbind_ok_ingress_removed: string;
     unbind_domain_failed: string;
     unbind_domain_failed_toast: string;
     quick_port_invalid: string;
