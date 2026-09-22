@@ -1842,6 +1842,9 @@ const tunnelFormTarget = ref<TunnelInfo | null>(null);
 const tunnelFormName = ref('');
 const tunnelFormRows = ref<IngressRow[]>([]);
 const tunnelFormHostRoutes = ref<TunnelHostnameRoute[]>([]);
+// 打开弹窗时对路由行域名的快照：保存时用来识别「哪一行把域名换成了新名字」，
+// 好把旧域名的密码锁迁移到新域名。上面两份数据一个写 ingress、一个写 WARP 路由，互不相干。
+const tunnelFormOriginalHosts = ref<string[]>([]);
 const tunnelFormCidrRoutes = ref<TunnelCidrRoute[]>([]);
 const tunnelFormLoading = ref(false);
 const tunnelFormSaving = ref(false);
@@ -1959,6 +1962,7 @@ const openTunnelCreateModal = () => {
   // （以前预置一行填好协议端口的普通行，用户一打开就得先删它 / 改它，等于替他做了决定。）
   tunnelFormRows.value = [emptyCatchAllRow()];
   tunnelFormHostRoutes.value = [];
+  tunnelFormOriginalHosts.value = [];
   tunnelFormCidrRoutes.value = [];
   originalHostRoutes.value = {};
   originalCidrRoutes.value = {};
@@ -1979,6 +1983,7 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
   // 先只摆兜底行占位，读回云端配置后再整体替换
   tunnelFormRows.value = [emptyCatchAllRow()];
   tunnelFormHostRoutes.value = [];
+  tunnelFormOriginalHosts.value = [];
   tunnelFormCidrRoutes.value = [];
   originalHostRoutes.value = {};
   originalCidrRoutes.value = {};
@@ -2002,6 +2007,8 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
       if (!last || last.hostname.trim()) rows.push(emptyCatchAllRow());
       // 不额外补空普通行：初始形态就是「只有默认兜底」，要加就点「添加」
       tunnelFormRows.value = rows;
+      // 快照打开时的域名名单，保存时据此识别改名的行（迁移密码锁用）
+      tunnelFormOriginalHosts.value = rows.map(r => r.hostname.trim());
     } else {
       tunnelFormLoadError.value = errorText(cfgRes.reason);
     }
@@ -2221,10 +2228,16 @@ const confirmTunnelForm = async () => {
     const newHosts = hosts.filter(h => !bound.has(h));
     const removed = prevBindings.filter(h => !hostSet.has(h.name.trim()));
 
-    // 行内改域名：路由 id 没变、hostname 变了 —— 精确配对，用于锁迁移
-    const renamedPairs = tunnelFormHostRoutes.value
-      .filter(r => r.id && originalHostRoutes.value[r.id] && originalHostRoutes.value[r.id] !== r.hostname.trim())
-      .map(r => ({ oldHost: originalHostRoutes.value[r.id], newHost: r.hostname.trim() }));
+    // 行内改域名：按打开弹窗时的域名快照逐行比对 —— 第 i 行快照里是旧域名、现在填了
+    // 一个快照里没有的新域名，就是改名。快照里已有的域名出现在别的行说明只是删行/换位，
+    // 不算改名（那行的旧域名走下面的 removed 清理，不会被误当成迁移源）。
+    const originalSet = new Set(tunnelFormOriginalHosts.value.filter(Boolean));
+    const renamedPairs = tunnelFormRows.value
+      .map((r, i) => ({
+        oldHost: tunnelFormOriginalHosts.value[i] ?? '',
+        newHost: r.hostname.trim(),
+      }))
+      .filter(p => p.oldHost && p.newHost && p.oldHost !== p.newHost && !originalSet.has(p.newHost));
     const renamedOldSet = new Set(renamedPairs.map(p => p.oldHost));
 
     // 不再绑定的域名：删 DNS 记录（彼此独立，并发）。这些记录在保存前都指向本隧道，
@@ -2276,6 +2289,34 @@ const confirmTunnelForm = async () => {
       }),
     );
     dnsLogs.forEach(l => appendLog(l.message, l.level, 'server'));
+
+    // DNS 创建失败的域名不留在云端配置里：摘掉 ingress 里指向它的规则再写一次，
+    // 免得「CNAME 被占、域名绑定不上」时这条规则还挂在「已发布应用程序路由」里占位。
+    // 兜底行不带域名，不会被摘；摘完至少还剩它，不会出现空 ingress。
+    const failedHosts = new Set(
+      newHosts.filter((_, idx) => dnsLogs[idx].level === 'error'),
+    );
+    if (failedHosts.size) {
+      const rules = buildIngress();
+      const kept = rules.filter(r => !(r.hostname && failedHosts.has(r.hostname.trim())));
+      if (kept.length !== rules.length) {
+        if (kept.length === 0) kept.push({ service: 'http_status:404' } as TunnelIngressRule);
+        try {
+          await invoke<string>('update_tunnel_config', { tunnelId, ingress: kept });
+          appendLog(
+            `[INFO] ${fmt(t.value.logs.dns_failed_removed_from_ingress, { hosts: [...failedHosts].join('、') })}`,
+            'info',
+            'server',
+          );
+        } catch (err: any) {
+          appendLog(
+            `[ERROR] ${fmt(t.value.logs.tunnel_save_failed, { err: errorText(err) })}`,
+            'error',
+            'server',
+          );
+        }
+      }
+    }
 
     // ③ 主机名路由 / CIDR 路由：两块是彼此独立的资源（不同端点、不同数据结构），同时同步
     await Promise.all([syncHostnameRoutes(tunnelId, name), syncCidrRoutes(tunnelId, name)]);
