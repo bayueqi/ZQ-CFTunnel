@@ -429,7 +429,8 @@ fn cloudflared_line_level(line: &str) -> &'static str {
 /// 为什么必须这么做：Tauri 的**同步**命令（没写 `async` 的）是**在主线程上**跑的
 /// （官方文档原话：“Commands without the *async* keyword are executed on the main thread”），
 /// 而主线程就是窗口的消息循环 —— 一旦它被网卡住或被子进程拖住，界面就不重绘、点击也不响应。
-/// 本文件里这些命令干的正是这种活：`ureq` 阻塞式 HTTPS（每次还都是全新连接，实测单次约 340ms）、
+/// 本文件里这些命令干的正是这种活：`ureq` 阻塞式 HTTPS（单次 300ms 级；连接复用见
+/// [`cf_agent`]，早先每次新建连接时是 340ms 级）、
 /// `cloudflared` 子进程调用（`cmd.output()` 要等它退出）。
 ///
 /// 症状就是「切个视图卡一下」：点「云端托管」会触发 3×隧道数 次 API 读，6 条隧道就是 18 次，
@@ -608,7 +609,15 @@ fn create_tunnel_blocking(name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn delete_tunnel(name: String) -> Result<String, String> {
+async fn delete_tunnel(name: String) -> Result<String, String> {
+    // 走阻塞线程池：删隧道要「查隧道 id → 列 DNS 记录 → 逐条删记录 → 清路由 → 删隧道」，
+    // 一串网络请求。同步命令是在主线程上跑的，那期间窗口不重绘、按钮不响应，
+    // 前端并发发的多条删除反而会被主线程排成一队。
+    run_blocking("删除隧道", move || delete_tunnel_blocking(name)).await
+}
+
+/// `delete_tunnel` 的实现：同步发多次阻塞式 HTTPS，**必须**跑在阻塞线程池里。
+fn delete_tunnel_blocking(name: String) -> Result<String, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("隧道名不能为空".to_string());
@@ -697,7 +706,18 @@ fn delete_tunnel(name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn route_dns_tunnel(name: String, hostname: String) -> Result<String, String> {
+async fn route_dns_tunnel(name: String, hostname: String) -> Result<String, String> {
+    // 走阻塞线程池：这条要等 `cloudflared tunnel route dns` 这个子进程跑完（内部要调 API）。
+    // 一条隧道绑多个域名时前端是**并发**发的，同步命令会让它们在主线程上排成一队，
+    // 既没有并发收益，又把界面冻住。
+    run_blocking("创建 DNS 路由", move || {
+        route_dns_tunnel_blocking(name, hostname)
+    })
+    .await
+}
+
+/// `route_dns_tunnel` 的实现：同步等 `cloudflared` 子进程退出，**必须**跑在阻塞线程池里。
+fn route_dns_tunnel_blocking(name: String, hostname: String) -> Result<String, String> {
     let trimmed_name = name.trim();
     let trimmed_hostname = hostname.trim();
 
@@ -1223,7 +1243,15 @@ fn check_cloudflared_version() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn update_cloudflared(app: AppHandle) -> Result<String, String> {
+async fn update_cloudflared(app: AppHandle) -> Result<String, String> {
+    // 走阻塞线程池：`cloudflared update` 会联网把新版本拉下来，可能十几秒到几分钟。
+    // 同步命令跑在主线程上时，这期间窗口不重绘、按钮不响应，连进度日志都刷不出来
+    // ——emit 出去的事件也要等主线程空出来才能派发。
+    run_blocking("更新 cloudflared", move || update_cloudflared_blocking(app)).await
+}
+
+/// `update_cloudflared` 的实现：同步等 `cloudflared update` 退出，**必须**跑在阻塞线程池里。
+fn update_cloudflared_blocking(app: AppHandle) -> Result<String, String> {
     // 检查项目目录下是否已有程序
     let exe_path = get_cloudflared_executable();
     let _ = app.emit(
@@ -2300,6 +2328,32 @@ fn extract_cf_error(body: &str) -> String {
     body.trim().to_string()
 }
 
+/// 全局共享的 HTTP 客户端（**连接池就在这里**）。
+///
+/// 为什么必须共享一个 Agent：ureq 的 keep-alive 连接池挂在 `Agent` 实例上，
+/// 而不是进程级。以前 `cf_api_request` 每次都 `ureq::builder().build()` 造一个全新 Agent，
+/// 等于每个请求都要重做一遍 TCP + TLS 握手 —— 实测单次约 340ms，其中握手占大头。
+/// 而 Cloudflare 的接口天然是「一串小请求」（读一条隧道要 1 次 configurations +
+/// 2 次 routes；一次保存要写 ingress + 补 DNS + 同步两类路由），隧道一多就是十几二十次，
+/// 每次都握手的话光握手就能花掉好几秒。
+///
+/// 现在全进程共用一个 Agent：同一个 host（api.cloudflare.com）的连接被复用，
+/// 首请求握手之后，后续请求基本只剩一次往返（几十毫秒级）。
+/// Agent 内部持锁，本身是 Send + Sync 的，可以被阻塞线程池里的多个线程同时使用。
+///
+/// 超时设置：连接阶段单独限时。ureq 的 `timeout_connect` 默认 30 秒且**优先于**
+/// `timeout()`，网络不通时（断网 / Cloudflare 不可达）界面就得干等半分钟。
+/// 显式压到 8 秒：正常请求 300ms 级，8 秒足够，失败也失败得干脆。
+fn cf_agent() -> &'static ureq::Agent {
+    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::builder()
+            .timeout_connect(std::time::Duration::from_secs(8))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+    })
+}
+
 /// 发起一次 Cloudflare API 请求并返回响应体文本。
 ///
 /// ureq 会把 4xx/5xx 视为错误，这里统一转成带 Cloudflare 错误码的可读信息，
@@ -2310,15 +2364,7 @@ fn cf_api_request(
     token: &str,
     json_body: Option<&str>,
 ) -> Result<String, String> {
-    // 连接阶段单独限时。ureq 的 `timeout_connect` 默认是 30 秒，而且**优先于**
-    // `timeout()`；网络不通时（断网、Cloudflare 不可达）界面就得干等半分钟。
-    // 显式压到 8 秒：正常请求 300ms 级，8 秒足够，失败也失败得干脆。
-    let agent = ureq::builder()
-        .timeout_connect(std::time::Duration::from_secs(8))
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
-
-    let req = agent
+    let req = cf_agent()
         .request(method, url)
         .set("Authorization", &format!("Bearer {}", token))
         .set("User-Agent", "Cloudflare-Tunnel-GUI");
@@ -2476,7 +2522,7 @@ async fn fetch_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String
     run_blocking("读取隧道路由", move || read_tunnel_routes(tunnel_id)).await
 }
 
-/// `fetch_tunnel_routes` 的实现：一次要发**两次**阻塞式 HTTPS（主机名 + CIDR），
+/// `fetch_tunnel_routes` 的实现：一次要发**两次**阻塞式 HTTPS（主机名 + CIDR，并行），
 /// **必须**跑在阻塞线程池里。
 fn read_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
     let id = tunnel_id.trim();
@@ -2490,20 +2536,37 @@ fn read_tunnel_routes(tunnel_id: String) -> Result<TunnelRouteSet, String> {
         "https://api.cloudflare.com/client/v4/accounts/{}/zerotrust/routes/hostname?tunnel_id={}&per_page=100",
         account_id, id
     );
-    let (hostname_routes, hostname_error) =
-        match cf_api_request("GET", &hostname_url, &api_token, None) {
-            Ok(body) => match parse_hostname_routes(&body, id) {
-                Ok(list) => (list, None),
-                Err(e) => (Vec::new(), Some(e)),
-            },
-            Err(e) => (Vec::new(), Some(e)),
-        };
-
     let cidr_url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/teamnet/routes?tunnel_id={}&per_page=100",
         account_id, id
     );
-    let (cidr_routes, cidr_error) = match cf_api_request("GET", &cidr_url, &api_token, None) {
+
+    // 两个端点彼此独立（一个查主机名路由、一个查 CIDR 路由，数据源都不一样），所以**并行**发。
+    // 以前是串行两次请求，叠上「每次新建连接」就是 ≈700ms；现在连接复用 + 并发，
+    // 整体耗时约等于两者中较慢的那个。
+    let (hostname_res, cidr_res) = std::thread::scope(|scope| {
+        let hostname_handle =
+            scope.spawn(|| cf_api_request("GET", &hostname_url, &api_token, None));
+        let cidr_handle = scope.spawn(|| cf_api_request("GET", &cidr_url, &api_token, None));
+        (
+            hostname_handle
+                .join()
+                .unwrap_or_else(|_| Err("读取主机名路由时线程异常退出".to_string())),
+            cidr_handle
+                .join()
+                .unwrap_or_else(|_| Err("读取 CIDR 路由时线程异常退出".to_string())),
+        )
+    });
+
+    let (hostname_routes, hostname_error) = match hostname_res {
+        Ok(body) => match parse_hostname_routes(&body, id) {
+            Ok(list) => (list, None),
+            Err(e) => (Vec::new(), Some(e)),
+        },
+        Err(e) => (Vec::new(), Some(e)),
+    };
+
+    let (cidr_routes, cidr_error) = match cidr_res {
         Ok(body) => match parse_cidr_routes(&body, id) {
             Ok(list) => (list, None),
             Err(e) => (Vec::new(), Some(e)),
@@ -2870,6 +2933,11 @@ struct RawDnsBinding {
 }
 
 /// 分页拉取 Cloudflare 区域内全部指向隧道的 CNAME 记录（含 tunnel_id）。
+///
+/// 请求里带 `type=CNAME`：只有 CNAME 才可能指向隧道（content 形如
+/// `<tunnel-id>.cfargotunnel.com`），下面本来也是按这个后缀筛的。
+/// 让服务端先把 A / AAAA / TXT / MX 等滤掉，返回体积和翻页数都能少一大截 ——
+/// 一个几百条记录的 zone，原先每页 100 条要翻好几页，现在常常一页就够。
 fn fetch_all_dns_bindings() -> Result<Vec<RawDnsBinding>, String> {
     let (api_token, zone_id) = cloudflare_credentials()?;
     let mut out: Vec<RawDnsBinding> = Vec::new();
@@ -2877,7 +2945,7 @@ fn fetch_all_dns_bindings() -> Result<Vec<RawDnsBinding>, String> {
 
     loop {
         let url = format!(
-            "https://api.cloudflare.com/client/v4/zones/{}/dns_records?per_page=100&page={}",
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records?type=CNAME&per_page=100&page={}",
             zone_id, page
         );
         let body = cf_api_request("GET", &url, &api_token, None)?;
@@ -2982,7 +3050,16 @@ fn read_tunnel_hostnames() -> Result<HashMap<String, Vec<DnsBinding>>, String> {
 /// 对应 `PATCH /zones/{zone_id}/dns_records/{record_id}`，只提交 name 字段，
 /// 因此记录的 type、content（指向的隧道）、proxied、ttl 等均保持不变。
 #[tauri::command]
-fn rename_dns_route(record_id: String, hostname: String) -> Result<String, String> {
+async fn rename_dns_route(record_id: String, hostname: String) -> Result<String, String> {
+    // 走阻塞线程池：里面是一次阻塞式 HTTPS。同步命令在主线程上跑，会把界面冻住这段时间。
+    run_blocking("修改域名", move || {
+        rename_dns_route_blocking(record_id, hostname)
+    })
+    .await
+}
+
+/// `rename_dns_route` 的实现：同步发阻塞式 HTTPS，**必须**跑在阻塞线程池里。
+fn rename_dns_route_blocking(record_id: String, hostname: String) -> Result<String, String> {
     let trimmed_id = record_id.trim();
     let trimmed_hostname = hostname.trim();
 
@@ -3015,9 +3092,14 @@ fn rename_dns_route(record_id: String, hostname: String) -> Result<String, Strin
 /// 只删 Cloudflare 侧的 CNAME 记录，不影响隧道本身，也不改动 ingress 配置；
 /// 删除后该域名立即无法再通过隧道访问。
 #[tauri::command]
-fn delete_dns_route(record_id: String) -> Result<String, String> {
-    delete_dns_record_by_id(&record_id)?;
-    Ok("域名绑定已删除".to_string())
+async fn delete_dns_route(record_id: String) -> Result<String, String> {
+    // 走阻塞线程池：一次阻塞式 HTTPS。删隧道时会**并发**删掉多条残留域名，
+    // 同步命令会让它们在主线程上排成一队（并发收益为零），还会冻住界面。
+    run_blocking("删除域名绑定", move || {
+        delete_dns_record_by_id(&record_id)?;
+        Ok("域名绑定已删除".to_string())
+    })
+    .await
 }
 
 /// 简易 base64 解码（标准字符集）

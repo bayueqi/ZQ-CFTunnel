@@ -2046,82 +2046,117 @@ const openTunnelEditModal = async (tunnel: TunnelInfo) => {
   }
 };
 
+// 一批并发跑完后再按原顺序落日志的条目。
+// 这些同步动作本质是若干个**互不相关**的 HTTP 请求，以前一条一条 await，
+// N 条就是 N 个往返（先后顺序好看，代价是用户要多等 N 倍时间）。
+// 现在让请求并发发出，把「要打的日志」收集回来再按原顺序打出去：既快，日志顺序也和以前一致。
+type PendingLog = { message: string; level: LogEntry['level'] };
+
 // 主机名路由：按「原始名单 / 当前名单」的差集增删。
 // 改名 = 删旧建新（这个资源没有 PATCH）。删除必须走后端的 zerotrust 路径，
 // 旧 teamnet 前缀对 DELETE 回 405，报错文案还骗人说「认证方案不支持」。
 const syncHostnameRoutes = async (tunnelId: string, name: string) => {
   const keep = new Set(tunnelFormHostRoutes.value.map(r => r.id).filter(Boolean));
-  for (const id of Object.keys(originalHostRoutes.value)) {
-    if (keep.has(id)) continue;
-    try {
-      await invoke<string>('delete_hostname_route', { routeId: id });
-      appendLog(
-        `[SUCCESS] ${fmt(t.value.logs.host_route_deleted, { route: originalHostRoutes.value[id], name })}`,
-        'success',
-        'server',
-      );
-    } catch (err: any) {
-      appendLog(`[WARN] ${fmt(t.value.logs.host_route_delete_failed, { err: errorText(err) })}`, 'warn', 'server');
-    }
-  }
-  for (const r of tunnelFormHostRoutes.value) {
-    const host = r.hostname.trim();
-    if (r.id && originalHostRoutes.value[r.id] === host) continue;
-    if (r.id) {
-      // 名字改过：先把旧的删掉，再按新名字建
+
+  // ① 被删掉的旧路由：彼此独立，全并发
+  const removedIds = Object.keys(originalHostRoutes.value).filter(id => !keep.has(id));
+  const removedLogs = await Promise.all(
+    removedIds.map(async (id): Promise<PendingLog> => {
       try {
-        await invoke<string>('delete_hostname_route', { routeId: r.id });
+        await invoke<string>('delete_hostname_route', { routeId: id });
+        return {
+          message: `[SUCCESS] ${fmt(t.value.logs.host_route_deleted, { route: originalHostRoutes.value[id], name })}`,
+          level: 'success',
+        };
       } catch (err: any) {
-        appendLog(`[WARN] ${fmt(t.value.logs.host_route_delete_failed_named, { route: originalHostRoutes.value[r.id], err: errorText(err) })}`, 'warn', 'server');
-        continue;
+        return {
+          message: `[WARN] ${fmt(t.value.logs.host_route_delete_failed, { err: errorText(err) })}`,
+          level: 'warn',
+        };
       }
-    }
-    try {
-      const res = await invoke<string>('create_hostname_route', {
-        tunnelId,
-        hostname: host,
-        comment: r.comment.trim(),
-      });
-      appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    } catch (err: any) {
-      appendLog(`[WARN] ${fmt(t.value.logs.host_route_create_failed, { route: host, err: errorText(err) })}`, 'warn', 'server');
-    }
-  }
+    }),
+  );
+  removedLogs.forEach(l => appendLog(l.message, l.level, 'server'));
+
+  // ② 新增 / 改名的路由：各条之间独立可并发，单条内部保持「先删旧、再建新」的次序
+  const changedLogs = await Promise.all(
+    tunnelFormHostRoutes.value.map(async (r): Promise<PendingLog> => {
+      const host = r.hostname.trim();
+      if (r.id && originalHostRoutes.value[r.id] === host) return { message: '', level: 'info' };
+      if (r.id) {
+        try {
+          await invoke<string>('delete_hostname_route', { routeId: r.id });
+        } catch (err: any) {
+          return {
+            message: `[WARN] ${fmt(t.value.logs.host_route_delete_failed_named, { route: originalHostRoutes.value[r.id], err: errorText(err) })}`,
+            level: 'warn',
+          };
+        }
+      }
+      try {
+        const res = await invoke<string>('create_hostname_route', {
+          tunnelId,
+          hostname: host,
+          comment: r.comment.trim(),
+        });
+        return { message: `[SUCCESS] ${res}`, level: 'success' };
+      } catch (err: any) {
+        return {
+          message: `[WARN] ${fmt(t.value.logs.host_route_create_failed, { route: host, err: errorText(err) })}`,
+          level: 'warn',
+        };
+      }
+    }),
+  );
+  // message 为空 = 这条没动过，不打日志
+  changedLogs.filter(l => l.message).forEach(l => appendLog(l.message, l.level, 'server'));
 };
 
 // CIDR 路由：同上，但这个资源支持 PATCH，改网段/备注走更新而不是删了重建
 const syncCidrRoutes = async (tunnelId: string, name: string) => {
   const keep = new Set(tunnelFormCidrRoutes.value.map(r => r.id).filter(Boolean));
-  for (const id of Object.keys(originalCidrRoutes.value)) {
-    if (keep.has(id)) continue;
-    try {
-      await invoke<string>('delete_cidr_route', { routeId: id });
-      appendLog(
-        `[SUCCESS] ${fmt(t.value.logs.cidr_route_deleted, { network: originalCidrRoutes.value[id].network, name })}`,
-        'success',
-        'server',
-      );
-    } catch (err: any) {
-      appendLog(`[WARN] ${fmt(t.value.logs.cidr_route_delete_failed, { err: errorText(err) })}`, 'warn', 'server');
-    }
-  }
-  for (const r of tunnelFormCidrRoutes.value) {
-    const network = r.network.trim();
-    const comment = r.comment.trim();
-    const before = r.id ? originalCidrRoutes.value[r.id] : undefined;
-    if (before && before.network === network && before.comment === comment) continue;
-    try {
-      if (before) {
-        const res = await invoke<string>('update_cidr_route', { routeId: r.id, network, comment });
-        appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-      } else {
-        const res = await invoke<string>('create_cidr_route', { tunnelId, network, comment });
-        appendLog(`[SUCCESS] ${res}`, 'success', 'server');
+
+  const removedIds = Object.keys(originalCidrRoutes.value).filter(id => !keep.has(id));
+  const removedLogs = await Promise.all(
+    removedIds.map(async (id): Promise<PendingLog> => {
+      try {
+        await invoke<string>('delete_cidr_route', { routeId: id });
+        return {
+          message: `[SUCCESS] ${fmt(t.value.logs.cidr_route_deleted, { network: originalCidrRoutes.value[id].network, name })}`,
+          level: 'success',
+        };
+      } catch (err: any) {
+        return {
+          message: `[WARN] ${fmt(t.value.logs.cidr_route_delete_failed, { err: errorText(err) })}`,
+          level: 'warn',
+        };
       }
-    } catch (err: any) {
-      appendLog(`[WARN] ${fmt(t.value.logs.cidr_route_save_failed, { network, err: errorText(err) })}`, 'warn', 'server');
-    }
-  }
+    }),
+  );
+  removedLogs.forEach(l => appendLog(l.message, l.level, 'server'));
+
+  const changedLogs = await Promise.all(
+    tunnelFormCidrRoutes.value.map(async (r): Promise<PendingLog> => {
+      const network = r.network.trim();
+      const comment = r.comment.trim();
+      const before = r.id ? originalCidrRoutes.value[r.id] : undefined;
+      if (before && before.network === network && before.comment === comment) {
+        return { message: '', level: 'info' };
+      }
+      try {
+        const res = before
+          ? await invoke<string>('update_cidr_route', { routeId: r.id, network, comment })
+          : await invoke<string>('create_cidr_route', { tunnelId, network, comment });
+        return { message: `[SUCCESS] ${res}`, level: 'success' };
+      } catch (err: any) {
+        return {
+          message: `[WARN] ${fmt(t.value.logs.cidr_route_save_failed, { network, err: errorText(err) })}`,
+          level: 'warn',
+        };
+      }
+    }),
+  );
+  changedLogs.filter(l => l.message).forEach(l => appendLog(l.message, l.level, 'server'));
 };
 
 // 保存（创建与修改共用）：写 ingress → 补 DNS 路由 → 同步两类路由。
@@ -2200,19 +2235,25 @@ const confirmTunnelForm = async () => {
     const bound = new Set(
       (tunnelList.value.find(tn => tn.id === tunnelId)?.hostnames ?? []).map(h => h.name),
     );
-    for (const host of hosts) {
-      if (bound.has(host)) continue;
-      try {
-        const dnsRes = await invoke<string>('route_dns_tunnel', { name, hostname: host });
-        appendLog(`[SUCCESS] ${dnsRes}`, 'success', 'server');
-      } catch (err: any) {
-        appendLog(`[WARN] ${fmt(t.value.logs.dns_route_create_failed, { host, err: errorText(err) })}`, 'warn', 'server');
-      }
-    }
+    // 新增的域名彼此独立 → 并发补 DNS；日志收集回来按顺序打
+    const newHosts = hosts.filter(h => !bound.has(h));
+    const dnsLogs = await Promise.all(
+      newHosts.map(async (host): Promise<PendingLog> => {
+        try {
+          const dnsRes = await invoke<string>('route_dns_tunnel', { name, hostname: host });
+          return { message: `[SUCCESS] ${dnsRes}`, level: 'success' };
+        } catch (err: any) {
+          return {
+            message: `[WARN] ${fmt(t.value.logs.dns_route_create_failed, { host, err: errorText(err) })}`,
+            level: 'warn',
+          };
+        }
+      }),
+    );
+    dnsLogs.forEach(l => appendLog(l.message, l.level, 'server'));
 
-    // ③ 主机名路由 / CIDR 路由
-    await syncHostnameRoutes(tunnelId, name);
-    await syncCidrRoutes(tunnelId, name);
+    // ③ 主机名路由 / CIDR 路由：两块是彼此独立的资源（不同端点、不同数据结构），同时同步
+    await Promise.all([syncHostnameRoutes(tunnelId, name), syncCidrRoutes(tunnelId, name)]);
 
     // ④ 记住源站配置：列表行内「启动」直接用。
     //    真正生效的是云端 ingress，这份本地记录只是为了让启动按钮不必先打网络请求。
@@ -2228,8 +2269,8 @@ const confirmTunnelForm = async () => {
       if (isCreate) serverConfig.value.name = name;
     }
 
-    await handleRefreshTunnels();
-    await refreshHostnamesOnly();
+    await handleRefreshTunnels(true);
+    await fillTunnelHostnames(true);
     soundManager.playSuccess();
     showToast(t.value.server_tab.form_saved);
     showTunnelModal.value = false;
@@ -2580,12 +2621,21 @@ const purgeDomainLocks = async (
   if (locked.length === 0) return { done, failed };
   isLockMutating.value = true;
   try {
-    for (const d of locked) {
-      const lock = lockOf(d.hostname);
-      if (!lock) continue;
-      // quiet：批量清理不逐个弹 toast，成败由调用方汇总成一行日志 + 一条提示
-      const ok = await doUnlock(lock, { quiet: true });
-      (ok ? done : failed).push(d.hostname);
+    // 每个域名的锁是**独立的一套**云端资源（各自的 Access 应用 / 策略 / Service Token），
+    // 域名之间没有任何先后关系 → 并发解锁；单个域名内部（应用→策略→令牌）仍由 doUnlock
+    // 保持原有次序。结果按原顺序归集，因此日志与提示的文案顺序不变。
+    const results = await Promise.all(
+      locked.map(async (d) => {
+        const lock = lockOf(d.hostname);
+        if (!lock) return { hostname: d.hostname, ok: false, skipped: true };
+        // quiet：批量清理不逐个弹 toast，成败由调用方汇总成一行日志 + 一条提示
+        const ok = await doUnlock(lock, { quiet: true });
+        return { hostname: d.hostname, ok, skipped: false };
+      }),
+    );
+    for (const r of results) {
+      if (r.skipped) continue;
+      (r.ok ? done : failed).push(r.hostname);
     }
   } finally {
     isLockMutating.value = false;
@@ -2789,28 +2839,30 @@ const selectTunnel = (tunnel: TunnelInfo) => {
   selectedTunnel.value = tunnel;
 };
 
-// 把绑定域名补进当前列表。
-// 这一步要打 Cloudflare API（遍历 zone 下的 DNS 记录），慢且可能失败，
+// 把绑定域名补进当前列表（原先拆成 fillTunnelHostnames / refreshHostnamesOnly 两个
+// 几乎一样的函数，现在合并成一个，`log` 决定失败时要不要说一句）。
+// 这一步要打 Cloudflare API（分页遍历 zone 下 DNS 记录），慢且可能失败，
 // 所以与列表本体解耦：失败时**保留上一次的值** —— 网络抖一下就把整列刷成
 // 「未绑定」，会让人误以为域名被解绑了，比不更新更糟。
-const fillTunnelHostnames = async () => {
+const fillTunnelHostnames = async (log = false) => {
   try {
     const map = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
     // 重建数组而不是原地改属性，保证表格一定收到更新
     tunnelList.value = tunnelList.value.map(t => ({ ...t, hostnames: map[t.id] ?? [] }));
-  } catch {
-    // 未授权 / 网络不通：静默忽略，保留旧值
+  } catch (err: any) {
+    if (log) appendLog(`[WARN] ${fmt(t.value.logs.refresh_hostnames_failed, { err })}`, 'warn', 'server');
   }
 };
 
-// 刷新隧道列表
-// scope：由哪个列表的刷新按钮触发（local=固定域名列表 / remote=云端托管列表），
-//        只影响日志文案、统计口径，以及要不要顺带刷新云端数据；内部调用不传则统计全部。
+// 刷新隧道列表。
 //
 // 这里最要紧的是「别让网络拖着按钮」：列表本体读的是本地 cloudflared 配置（毫秒级），
 // 而绑定域名、云端 ingress 都要打 Cloudflare API —— 网络不通时单次能一直等到超时。
 // 所以列表先上屏、慢活全部异步化，按钮随后就能恢复可点。
-const handleRefreshTunnels = async () => {
+//
+// `skipHostnameRefresh`：调用方自己马上要 await 一次 fillTunnelHostnames 时传 true，
+// 免得后台那次和它自己的那次同时发出 —— 这是最贵的一个接口（要分页遍历 zone 下 DNS 记录）。
+const handleRefreshTunnels = async (skipHostnameRefresh = false) => {
   // 防重入：连点不做第二次
   if (refreshingTunnels.value.local) return;
   refreshingTunnels.value.local = true;
@@ -2819,7 +2871,7 @@ const handleRefreshTunnels = async () => {
     tunnelList.value = res;
 
     // 绑定域名走云 API，不阻塞列表上屏与按钮恢复
-    void fillTunnelHostnames();
+    if (!skipHostnameRefresh) void fillTunnelHostnames();
 
     // 与后端对账固定隧道的运行状态（多开后靠这里把已退出的进程同步掉）
     await reconcileServerRunning();
@@ -2982,7 +3034,7 @@ const handleRouteDns = async (): Promise<boolean> => {
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
     showToast(`${fmt(t.value.logs.dns_bound_ok, { domain, name })}`);
     // 绑定后立即刷新域名列表，新域名马上出现在「已绑定域名」里
-    await refreshHostnamesOnly();
+    await fillTunnelHostnames(true);
     return true;
   } catch (err: any) {
     appendLog(`[ERROR] ${fmt(t.value.logs.dns_bind_failed, { err })}`, 'error', 'server');
@@ -2993,15 +3045,6 @@ const handleRouteDns = async (): Promise<boolean> => {
 
 // 只重新拉取绑定域名并回填到已有隧道列表（不重拉隧道列表、不写刷新日志），
 // 用于绑定 / 改名 / 解绑后同步界面显示。
-const refreshHostnamesOnly = async () => {
-  try {
-    const map = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
-    for (const t of tunnelList.value) t.hostnames = map[t.id] || [];
-  } catch (err: any) {
-    appendLog(`[WARN] ${fmt(t.value.logs.refresh_hostnames_failed, { err })}`, 'warn', 'server');
-  }
-};
-
 // 打开「修改绑定域名」弹窗（预填当前域名）
 const promptEditDnsRoute = (row: DnsBoundRow) => {
   soundManager.playClick();
@@ -3061,7 +3104,7 @@ const confirmEditDnsRoute = async () => {
       `${fmt(t.value.logs.rename_ok, { from: target.hostname, to: next })}${done.length ? t.value.logs.rename_ok_lock_purged : ''}`,
     );
     cancelEditDnsRoute();
-    await refreshHostnamesOnly();
+    await fillTunnelHostnames(true);
   } catch (err: any) {
     appendLog(`[ERROR] ${fmt(t.value.logs.rename_domain_failed, { err })}`, 'error', 'server');
     showToast(`${fmt(t.value.logs.rename_domain_failed_toast, { err })}`);
@@ -3149,7 +3192,7 @@ const confirmUnbindDnsRoute = async () => {
       `${fmt(t.value.logs.unbind_ok, { host: target.hostname })}${done.length ? t.value.logs.unbind_ok_lock_purged : ''}${ingressRemoved ? t.value.logs.unbind_ok_ingress_removed : ''}`,
     );
     cancelUnbindDnsRoute();
-    await refreshHostnamesOnly();
+    await fillTunnelHostnames(true);
   } catch (err: any) {
     appendLog(`[ERROR] ${fmt(t.value.logs.unbind_domain_failed, { err })}`, 'error', 'server');
     showToast(`${fmt(t.value.logs.unbind_domain_failed_toast, { err })}`);
@@ -3349,16 +3392,23 @@ const confirmDeleteTunnel = async () => {
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
 
     // 1. 域名：后端删隧道时会顺带清掉绑定的 CNAME，但拿不到 tunnel id 时会跳过，
-    //    这里按快照核对一次，只补删真正还留在云端的那些。
-    let dnsDeleted = 0;
-    for (const d of await findLeftoverDomains(bound)) {
-      try {
-        await invoke<string>('delete_dns_route', { recordId: d.recordId });
-        dnsDeleted += 1;
-      } catch (err: any) {
-        appendLog(`[WARN] ${fmt(t.value.logs.leftover_domain_cleanup_failed, { host: d.hostname, err: errorText(err) })}`, 'warn', 'server');
-      }
-    }
+    //    这里按快照核对一次，只补删真正还留在云端的那些。这些删除彼此独立 → 并发
+    const leftovers = await findLeftoverDomains(bound);
+    const cleanupLogs = await Promise.all(
+      leftovers.map(async (d): Promise<PendingLog | null> => {
+        try {
+          await invoke<string>('delete_dns_route', { recordId: d.recordId });
+          return null;
+        } catch (err: any) {
+          return {
+            message: `[WARN] ${fmt(t.value.logs.leftover_domain_cleanup_failed, { host: d.hostname, err: errorText(err) })}`,
+            level: 'warn',
+          };
+        }
+      }),
+    );
+    const dnsDeleted = cleanupLogs.filter(l => l === null).length;
+    cleanupLogs.forEach(l => { if (l) appendLog(l.message, l.level, 'server'); });
     if (dnsDeleted) appendLog(`[INFO] ${fmt(t.value.logs.leftover_dns_deleted, { count: dnsDeleted })}`, 'info', 'server');
 
     // 2. 密码锁：逐域名删掉云端的 Access 应用 / 策略 / Service Token（含本地记录），
@@ -3728,22 +3778,28 @@ onMounted(async () => {
     localStorage.removeItem('remote_token');
   } catch {}
 
-  // 异步获取初始隧道列表与状态
+  // 异步获取初始状态。
+  // 这三件事互不依赖（对账固定隧道运行状态 / 对账客户端隧道 / 取临时链接），
+  // 以前是一个 await 接一个，启动时白屏等待被叠了三倍；现在并发发出。
+  // 原来这里还单独调了一次 is_server_running，与 reconcileServerRunning 是同一个命令，
+  // 已去掉重复的那次（后者本来就会写 serverRunningNames）。
   try {
-    const serverKeys = await invoke<string[]>('is_server_running');
-    serverRunningNames.value = serverKeys;
-    await refreshClientConnections();
-    const quickKeys = await invoke<string[]>('is_quick_running');
-    quickTunnels.value = quickKeys.map(key => {
-      const { protocol, port } = parseQuickKey(key);
-      return {
-        key,
-        protocol,
-        port,
-        url: '',
-        status: 'running' as const,
-      };
-    });
+    await Promise.all([
+      reconcileServerRunning(),
+      refreshClientConnections(),
+      invoke<string[]>('is_quick_running').then((quickKeys) => {
+        quickTunnels.value = quickKeys.map(key => {
+          const { protocol, port } = parseQuickKey(key);
+          return {
+            key,
+            protocol,
+            port,
+            url: '',
+            status: 'running' as const,
+          };
+        });
+      }),
+    ]);
     await handleRefreshTunnels();
   } catch {}
 });
@@ -4392,16 +4448,6 @@ onUnmounted(() => {
   padding-bottom: 10px;
 }
 
-/* 云端托管列表卡片：与客户端列表保持同一套版式 */
-.remote-card {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
 .client-title-row {
   display: flex;
   align-items: center;
@@ -4755,111 +4801,10 @@ onUnmounted(() => {
   color: #534AB7;
 }
 
-/* 云端 ingress 配置展示 */
-.remote-config-card {
-  flex-shrink: 0;
-}
-
-.remote-config-body {
-  background-color: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 12px;
-  /* 多条云端隧道并行时配置会很长，这里封顶 + 内部滚动，避免卡片无限长高 */
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-/* 配置按隧道分组：每条隧道一块，块间用细线分隔，避免多条隧道时糊成一片 */
-.remote-config-group + .remote-config-group {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-subtle);
-}
-
-/* 分组标题现在是隧道名称（隧道 ID 只留在 tooltip 里），所以不再用等宽字体 */
-.remote-config-group-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 6px;
-}
-
-.remote-config-group-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 每条隧道下三块：已发布应用程序路由 / 主机名路由 / CIDR 路由。
-   三块来自面板上三个独立页面、三个不同接口，分开列清楚，别让人误以为是一套数据 */
-.remote-config-section + .remote-config-section {
-  margin-top: 8px;
-}
-
-.remote-config-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 2px;
-}
-
-/* 空与「读不到」要分开显示：空是有数据源、就 0 条；失败是压根没读到 */
-.remote-config-section-empty {
-  font-size: 12px;
-  color: var(--text-secondary);
-  opacity: 0.7;
-}
-
-.remote-config-section-error {
-  font-size: 12px;
-  color: var(--danger-color);
-  word-break: break-all;
-}
-
-.remote-config-body pre {
-  margin: 0;
-  font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-all;
-  line-height: 1.7;
-}
-
-.remote-config-empty {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.card-header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
 .card-title {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-}
-
-.card-subtitle {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-/* 表单与输入框 */
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
-  margin-bottom: 8px;
 }
 
 .fluent-form-group {
@@ -4927,14 +4872,6 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-/* 字段提示文字 */
-.field-hint {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-  line-height: 1.4;
-}
-
 .error-tip {
   display: flex;
   align-items: center;
@@ -4950,18 +4887,6 @@ onUnmounted(() => {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-4px); }
   75% { transform: translateX(4px); }
-}
-
-/* 按钮与居中规范 */
-.actions-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.center-actions {
-  justify-content: center !important;
-  width: 100%;
 }
 
 .fluent-btn {
@@ -5059,24 +4984,9 @@ onUnmounted(() => {
   border-color: var(--success-color);
 }
 
-.status-pill.online .pill-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: var(--success-color);
-  box-shadow: 0 0 6px var(--success-color);
-}
-
 .status-pill.offline {
   background-color: var(--bg-hover);
   color: var(--text-disabled);
-}
-
-.status-pill.offline .pill-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: var(--text-disabled);
 }
 
 /* 数据表格 (自适应填满剩余空间，带内部上下滑动 Slider) */
@@ -5302,17 +5212,6 @@ onUnmounted(() => {
   max-width: 260px;
 }
 
-.lock-cell {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.lock-btn {
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
 /* 明文凭据：账号 / 密码各一行，小号等宽字体，溢出省略（点击复制全文） */
 .lock-cred {
   display: flex;
@@ -5350,45 +5249,6 @@ onUnmounted(() => {
 .lock-cred-empty {
   color: var(--text-disabled);
   font-size: 12px;
-}
-
-/* 密码锁开关（创建 / 修改弹窗里的一行式 checkbox） */
-.lock-switch-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  margin-top: 4px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  cursor: pointer;
-  user-select: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.lock-switch-row:hover {
-  background-color: var(--bg-hover);
-}
-
-.lock-switch-row.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.lock-switch-row input[type='checkbox'] {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent-color);
-  cursor: pointer;
-}
-
-.lock-switch-icon {
-  font-size: 14px;
-}
-
-.lock-switch-text {
-  font-size: 12.5px;
-  color: var(--text-primary);
 }
 
 /* 弹窗底部提示行（普通 / 警告两种色） */
@@ -5586,12 +5446,6 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-/* 凭据展示弹窗里的行内复制按钮 */
-.copy-inline {
-  flex-shrink: 0;
-  margin-left: 6px;
-}
-
 /* ============ 配置页：Access Token 卡片 ============ */
 
 .access-token-card {
@@ -5619,27 +5473,6 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* 临时链接（临时域名）结果展示 */
-.quick-url-box {
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 8px;
-  background-color: var(--bg-input);
-}
-
-.quick-url-box.active {
-  border-style: solid;
-  border-color: var(--success-color);
-}
-
-.quick-url-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
 .quick-url-value {
   font-size: 14px;
   font-weight: 600;
@@ -5659,12 +5492,6 @@ onUnmounted(() => {
   color: var(--text-disabled);
   font-size: 13px;
   padding: 6px 0;
-}
-
-.quick-url-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
 }
 
 .quick-list {
@@ -5718,27 +5545,11 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.remote-tunnel-card {
-  margin-top: 12px;
-}
-
 .card-title {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 12px;
   color: var(--text-primary);
-}
-
-.hint-text {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-}
-
-.table-actions {
-  margin-top: 10px;
-  justify-content: flex-end;
-  flex-shrink: 0;
 }
 
 /* 杂项网格磁贴 */
@@ -6038,5 +5849,4 @@ onUnmounted(() => {
 .toast-fade-leave-to {
   opacity: 0;
   transform: translate(-50%, 10px);
-}
-</style>
+}</style>
