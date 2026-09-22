@@ -389,7 +389,7 @@ export interface LangPack {
     blank_host_rows_skipped: string;
     dns_route_create_failed: string;
     dns_route_delete_failed: string;
-    dns_failed_removed_from_ingress: string;
+    dns_failed_kept_in_ingress: string;
     tunnel_save_failed: string;
     access_token_saved_log: string;
     lock_ok: string;

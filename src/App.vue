@@ -2290,32 +2290,18 @@ const confirmTunnelForm = async () => {
     );
     dnsLogs.forEach(l => appendLog(l.message, l.level, 'server'));
 
-    // DNS 创建失败的域名不留在云端配置里：摘掉 ingress 里指向它的规则再写一次，
-    // 免得「CNAME 被占、域名绑定不上」时这条规则还挂在「已发布应用程序路由」里占位。
-    // 兜底行不带域名，不会被摘；摘完至少还剩它，不会出现空 ingress。
-    const failedHosts = new Set(
-      newHosts.filter((_, idx) => dnsLogs[idx].level === 'error'),
-    );
-    if (failedHosts.size) {
-      const rules = buildIngress();
-      const kept = rules.filter(r => !(r.hostname && failedHosts.has(r.hostname.trim())));
-      if (kept.length !== rules.length) {
-        if (kept.length === 0) kept.push({ service: 'http_status:404' } as TunnelIngressRule);
-        try {
-          await invoke<string>('update_tunnel_config', { tunnelId, ingress: kept });
-          appendLog(
-            `[INFO] ${fmt(t.value.logs.dns_failed_removed_from_ingress, { hosts: [...failedHosts].join('、') })}`,
-            'info',
-            'server',
-          );
-        } catch (err: any) {
-          appendLog(
-            `[ERROR] ${fmt(t.value.logs.tunnel_save_failed, { err: errorText(err) })}`,
-            'error',
-            'server',
-          );
-        }
-      }
+    // DNS 创建失败的域名**保留**在云端 ingress 里，不摘除、不改写。
+    // 域名第 ① 步已经写进「已发布应用程序路由」了，这里失败的只是 CNAME 那一步
+    // （被占 / 权限不足等）。一旦 DNS 就绪，那条规则立刻生效，用户重新保存一次补上 DNS 即可。
+    // 以前这里会把失败域名从 ingress 摘掉再写回云端一次，结果「顺手加个域名、恰好绑不上」
+    // 会把用户填的配置项直接抹掉（重开弹窗也读不回来）—— 该行为已移除。
+    const failedHosts = newHosts.filter((_, idx) => dnsLogs[idx].level === 'error');
+    if (failedHosts.length) {
+      appendLog(
+        `[WARN] ${fmt(t.value.logs.dns_failed_kept_in_ingress, { hosts: failedHosts.join('、') })}`,
+        'warn',
+        'server',
+      );
     }
 
     // ③ 主机名路由 / CIDR 路由：两块是彼此独立的资源（不同端点、不同数据结构），同时同步
