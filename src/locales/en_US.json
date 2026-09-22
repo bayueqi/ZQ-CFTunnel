@@ -118,6 +118,11 @@
     "unlock_confirm_title": "Remove password lock",
     "unlock_confirm_msg": "Once removed, {hostname} becomes public again — anyone who knows the hostname can connect. Remove it?",
     "unlocked_toast": "Password lock removed",
+    "lock_on": "Locked",
+    "lock_off": "Unlocked",
+    "btn_rotate_password": "Rotate",
+    "rotate_confirm_title": "Rotate access password",
+    "rotate_confirm_msg": "After rotating, the old access password for {hostname} becomes invalid immediately and all connected clients will be disconnected. Rotate it?",
     "copied_toast": "Copied to clipboard",
     "edit_need_config": "This tunnel has no protocol/port yet. Click Edit to complete it first.",
     "edit_restart_hint": "This tunnel is running; it will restart automatically with the new settings after saving.",
@@ -130,7 +135,8 @@
       "hostname": "Hostname",
       "status": "Status",
       "actions": "Actions",
-      "password": "Access password"
+      "password": "Access password",
+      "lock": "Password lock"
     },
     "errors": {
       "tunnel_invalid": "Tunnel name must contain only letters (a-z, A-Z)",

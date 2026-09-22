@@ -304,7 +304,6 @@
                     <th class="col-type">{{ t.server_tab.headers.type }}</th>
                     <th class="col-created">{{ t.server_tab.headers.created }}</th>
                     <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
-                    <th class="col-password">{{ t.server_tab.headers.password }}</th>
                     <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
                     <th class="col-status">{{ t.server_tab.headers.status }}</th>
                     <th class="col-actions">{{ t.server_tab.headers.actions }}</th>
@@ -334,38 +333,6 @@
                         >{{ h.name }}</span>
                       </template>
                       <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
-                    </td>
-                    <!-- 访问密码锁：未上锁显示🔓（点击直接上锁），已上锁显示🔒+明文凭据（点击弹解锁确认） -->
-                    <td class="col-password">
-                      <template v-if="lockOf(tunnel.id)">
-                        <div class="lock-cell">
-                          <button
-                            class="row-action-btn lock-btn"
-                            :title="t.server_tab.btn_unlock"
-                            :disabled="isLockMutating"
-                            @click.stop="promptUnlockTunnel(tunnel)"
-                          >🔒</button>
-                          <div class="lock-cred">
-                            <span
-                              class="lock-cred-line mono"
-                              :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                              @click.stop="copyText(lockOf(tunnel.id)?.clientId || '')"
-                            >{{ lockOf(tunnel.id)?.clientId }}</span>
-                            <span
-                              class="lock-cred-line mono"
-                              :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                              @click.stop="copyText(lockOf(tunnel.id)?.clientSecret || '')"
-                            >{{ lockOf(tunnel.id)?.clientSecret }}</span>
-                          </div>
-                        </div>
-                      </template>
-                      <button
-                        v-else
-                        class="row-action-btn lock-btn"
-                        :title="tunnel.hostnames && tunnel.hostnames.length ? t.server_tab.btn_lock : t.server_tab.lock_need_domain"
-                        :disabled="isLockMutating"
-                        @click.stop="promptLockTunnel(tunnel)"
-                      >🔓</button>
                     </td>
                     <td class="col-connections">{{ tunnel.connections || '-' }}</td>
                     <td class="col-status">
@@ -397,7 +364,7 @@
                     </td>
                   </tr>
                   <tr v-if="localTunnelList.length === 0">
-                    <td colspan="9" class="empty-table">
+                    <td colspan="8" class="empty-table">
                       {{ refreshingTunnels.local ? '正在刷新列表...' : '未发现隧道' }}
                     </td>
                   </tr>
@@ -424,11 +391,12 @@
                     <tr>
                       <th class="col-tunnel-name">{{ t.server_tab.dns_col_tunnel }}</th>
                       <th class="col-bound-hostname">{{ t.server_tab.headers.hostname }}</th>
+                      <th class="col-bound-lock">{{ t.server_tab.headers.lock }}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <!-- 按隧道聚合：一个隧道占一行，该隧道下的多个域名以标签换行排列，
-                         改 / 解绑按钮内嵌在各自的标签里，不再一条域名占一整行。 -->
+                    <!-- 按隧道聚合：一个隧道占一行，该隧道下的多个域名以标签换行排列。
+                         改 / 解绑 / 密码锁都内嵌在各自的域名 chip 里，每个域名独立上锁。 -->
                     <tr v-for="group in dnsBoundGroups" :key="group.tunnelId">
                       <td class="col-tunnel-name font-bold" :title="group.tunnelName">{{ group.tunnelName }}</td>
                       <td class="col-bound-hostname">
@@ -437,12 +405,21 @@
                             v-for="rec in group.records"
                             :key="rec.recordId"
                             class="hostname-chip"
+                            :class="{ locked: lockOf(rec.hostname) }"
                           >
                             <span
                               class="hostname-chip-text"
                               :title="rec.hostname + ' · ' + t.server_tab.click_to_copy"
                               @click="copyHostname(rec.hostname)"
                             >{{ rec.hostname }}</span>
+                            <span
+                              v-if="lockOf(rec.hostname)"
+                              class="chip-lock-tag"
+                            >🔒 {{ t.server_tab.lock_on }}</span>
+                            <span
+                              v-else
+                              class="chip-lock-tag off"
+                            >{{ t.server_tab.lock_off }}</span>
                             <button
                               class="chip-action-btn"
                               :title="t.server_tab.dns_edit_title"
@@ -456,9 +433,50 @@
                           </span>
                         </div>
                       </td>
+                      <td class="col-bound-lock">
+                        <div class="hostname-chip-list">
+                          <div
+                            v-for="rec in group.records"
+                            :key="'lock-' + rec.recordId"
+                            class="lock-chip-row"
+                          >
+                            <template v-if="lockOf(rec.hostname)">
+                              <span
+                                class="lock-cred-line mono"
+                                :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
+                                @click.stop="copyText(lockOf(rec.hostname)?.clientId || '')"
+                              >{{ lockOf(rec.hostname)?.clientId }}</span>
+                              <span
+                                class="lock-cred-line mono"
+                                :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
+                                @click.stop="copyText(lockOf(rec.hostname)?.clientSecret || '')"
+                              >{{ lockOf(rec.hostname)?.clientSecret }}</span>
+                              <button
+                                class="chip-action-btn"
+                                :title="t.server_tab.btn_rotate_password"
+                                :disabled="isLockMutating"
+                                @click.stop="promptRotatePassword(rec.hostname)"
+                              >🔁</button>
+                              <button
+                                class="chip-action-btn danger"
+                                :title="t.server_tab.btn_unlock"
+                                :disabled="isLockMutating"
+                                @click.stop="promptUnlockHostname(rec.hostname)"
+                              >🔓</button>
+                            </template>
+                            <button
+                              v-else
+                              class="chip-action-btn primary"
+                              :title="t.server_tab.btn_lock"
+                              :disabled="isLockMutating"
+                              @click.stop="promptLockHostname(rec.hostname)"
+                            >🔒 {{ t.server_tab.btn_lock }}</button>
+                          </div>
+                        </div>
+                      </td>
                     </tr>
                     <tr v-if="dnsBoundGroups.length === 0">
-                      <td colspan="2" class="empty-table">{{ t.server_tab.dns_bound_empty }}</td>
+                      <td colspan="3" class="empty-table">{{ t.server_tab.dns_bound_empty }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1207,18 +1225,6 @@
               {{ t.server_tab.errors.dns_domain_invalid }}
             </div>
           </div>
-
-          <!-- 密码锁开关：绑定域名后才有锁的对象 -->
-          <label class="lock-switch-row" :class="{ disabled: !namedCreateDomain.trim() }">
-            <input
-              type="checkbox"
-              v-model="namedCreateLock"
-              :disabled="!namedCreateDomain.trim() || isLockMutating"
-            />
-            <span class="lock-switch-icon">🔐</span>
-            <span class="lock-switch-text">{{ t.server_tab.lock_switch_label }}</span>
-          </label>
-          <div v-if="!namedCreateDomain.trim()" class="modal-hint">{{ t.server_tab.lock_switch_hint }}</div>
         </div>
         <div class="modal-footer">
           <button class="fluent-btn" @click="showNamedCreateModal = false">{{ t.exit_modal.btn_cancel }}</button>
@@ -1283,32 +1289,6 @@
             </div>
           </div>
 
-          <!-- 密码锁：已上锁的隧道可改锁定的域名（保存时自动换密码），也可直接解除 -->
-          <label class="lock-switch-row">
-            <input
-              type="checkbox"
-              v-model="namedEdit.lockOn"
-              :disabled="isLockMutating"
-            />
-            <span class="lock-switch-icon">🔐</span>
-            <span class="lock-switch-text">{{ t.server_tab.lock_switch_label }}</span>
-          </label>
-          <div v-if="namedEdit.lockOn && namedEditHostnames.length > 0" class="fluent-form-group">
-            <label class="form-label">{{ t.server_tab.lock_host_label }}</label>
-            <div class="input-container">
-              <select v-model="namedEdit.lockHostname" class="fluent-input fluent-select">
-                <option
-                  v-for="h in namedEditHostnames"
-                  :key="h"
-                  :value="h"
-                >{{ h }}</option>
-              </select>
-            </div>
-          </div>
-          <div v-if="namedEdit.lockOn && namedEditHostnames.length === 0" class="error-tip">
-            <span class="error-icon">⚠️</span>
-            {{ t.server_tab.lock_need_domain }}
-          </div>
           <div v-if="namedEditTarget && isTunnelRunning(namedEditTarget.name)" class="modal-hint warn">
             {{ t.server_tab.edit_restart_hint }}
           </div>
@@ -1376,12 +1356,30 @@
           <h3 class="modal-title">⚠️ {{ t.server_tab.unlock_confirm_title }}</h3>
         </div>
         <div class="modal-body">
-          <p>{{ t.server_tab.unlock_confirm_msg.replace('{hostname}', unlockTarget ? (lockOf(unlockTarget.id)?.hostname || '') : '') }}</p>
+          <p>{{ t.server_tab.unlock_confirm_msg.replace('{hostname}', unlockTarget || '') }}</p>
         </div>
         <div class="modal-footer">
           <button class="fluent-btn" @click="showUnlockModal = false">{{ t.exit_modal.btn_cancel }}</button>
-          <button class="fluent-btn danger" @click="confirmUnlockTunnel" :disabled="isLockMutating">
+          <button class="fluent-btn danger" @click="confirmUnlockHostname" :disabled="isLockMutating">
             {{ t.server_tab.btn_unlock }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 密码锁：换密码二次确认弹窗（旧密码会立即作废） -->
+    <div v-if="showRotateModal" class="fluent-modal-overlay" @click.self="showRotateModal = false">
+      <div class="fluent-modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">🔁 {{ t.server_tab.rotate_confirm_title }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ t.server_tab.rotate_confirm_msg.replace('{hostname}', rotateTarget || '') }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="fluent-btn" @click="showRotateModal = false">{{ t.exit_modal.btn_cancel }}</button>
+          <button class="fluent-btn primary" @click="confirmRotatePassword" :disabled="isLockMutating">
+            {{ t.server_tab.btn_rotate_password }}
           </button>
         </div>
       </div>
@@ -2139,11 +2137,10 @@ const localRunningCount = computed(() =>
 
 // ============================ 隧道密码锁（Cloudflare Access） ============================
 //
-// 每条固定域名隧道可单独上锁：上锁 = 后端在云端创建 Access 应用 + Service Token，
-// 拿到「访问账号 / 访问密码」这对凭据。锁信息按隧道 ID 存在 localStorage，
-// 列表里明文展示（可点击复制），客户端连接时把这对凭据填进「访问账号 / 访问密码」。
+// 锁本质是绑在「域名」上的（Access 应用按域名建），所以锁记录按 hostname 存，
+// 一个隧道绑多个域名时每个域名各自独立上锁 / 换密码 / 解锁。
+// 上锁 = 后端在云端创建 Access 应用 + Service Token，拿到「访问账号 / 访问密码」。
 type TunnelLockEntry = {
-  tunnelId: string;
   hostname: string;
   appUid: string;
   appName: string;
@@ -2162,10 +2159,12 @@ const loadTunnelLocks = (): Record<string, TunnelLockEntry> => {
     const obj = JSON.parse(raw);
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
     // 只保留字段齐全的条目，坏数据直接丢弃（最坏情况是列表里显示未上锁，
-    // 云端那把锁仍在，可在面板手动清理）
+    // 云端那把锁仍在，可在面板手动清理）。
+    // 老版本条目按隧道 ID 存（e.tunnelId），本版改为按 hostname 存 —— 迁移时
+    // 以 hostname 为键重建，键重复时后写覆盖，保证每个域名只有一条锁。
     const out: Record<string, TunnelLockEntry> = {};
     for (const [id, v] of Object.entries(obj as Record<string, unknown>)) {
-      const e = v as Partial<TunnelLockEntry>;
+      const e = v as Partial<TunnelLockEntry> & { tunnelId?: string };
       if (
         typeof e?.hostname === 'string' && e.hostname &&
         typeof e?.appUid === 'string' && e.appUid &&
@@ -2173,8 +2172,7 @@ const loadTunnelLocks = (): Record<string, TunnelLockEntry> => {
         typeof e?.clientId === 'string' && e.clientId &&
         typeof e?.clientSecret === 'string' && e.clientSecret
       ) {
-        out[id] = {
-          tunnelId: id,
+        out[e.hostname] = {
           hostname: e.hostname,
           appUid: e.appUid,
           appName: String(e.appName || ''),
@@ -2195,7 +2193,8 @@ const tunnelLocks = ref<Record<string, TunnelLockEntry>>(loadTunnelLocks());
 const persistTunnelLocks = () => {
   localStorage.setItem(TUNNEL_LOCKS_STORAGE_KEY, JSON.stringify(tunnelLocks.value));
 };
-const lockOf = (tunnelId: string): TunnelLockEntry | null => tunnelLocks.value[tunnelId] || null;
+// 按域名查锁：域名是锁的唯一载体，也是客户端连接时真正要锁住的目标
+const lockOf = (hostname: string): TunnelLockEntry | null => tunnelLocks.value[hostname] || null;
 
 // 锁操作进行中：所有锁按钮统一禁用，防止并发重复建锁
 const isLockMutating = ref(false);
@@ -2203,10 +2202,6 @@ const isLockMutating = ref(false);
 // 上锁 / 换密码成功后的凭据展示弹窗
 const showLockInfoModal = ref(false);
 const lockInfoDraft = ref<{ hostname: string; clientId: string; clientSecret: string } | null>(null);
-
-// 解锁二次确认弹窗
-const showUnlockModal = ref(false);
-const unlockTarget = ref<TunnelInfo | null>(null);
 
 // 配置页的 Access Token：留空 = 用「授权登录」凭证。
 // 该凭证需要 Access: Apps and Policies 与 Access: Service Tokens 两个编辑权限（见 README）。
@@ -2218,15 +2213,14 @@ const saveAccessToken = () => {
   showToast(t.value.misc_tab.access_token_saved);
 };
 
-// 上锁（底层）：调后端创建 Access 应用 + Service Token，成功后落库并展示凭据
-const doLock = async (tunnelId: string, hostname: string): Promise<boolean> => {
+// 上锁（底层）：调后端创建 Access 应用 + Service Token，成功后按域名落库并展示凭据
+const doLock = async (hostname: string): Promise<boolean> => {
   try {
     const res = await invoke<{
       hostname: string; app_uid: string; app_name: string;
       token_uid: string; policy_uid: string; client_id: string; client_secret: string;
     }>('tunnel_lock', { hostname, accessToken: accessTokenInput.value || null });
-    tunnelLocks.value[tunnelId] = {
-      tunnelId,
+    tunnelLocks.value[res.hostname] = {
       hostname: res.hostname,
       appUid: res.app_uid,
       appName: res.app_name,
@@ -2256,7 +2250,7 @@ const doUnlock = async (entry: TunnelLockEntry): Promise<boolean> => {
       policyUid: entry.policyUid || null,
       accessToken: accessTokenInput.value || null,
     });
-    delete tunnelLocks.value[entry.tunnelId];
+    delete tunnelLocks.value[entry.hostname];
     persistTunnelLocks();
     appendLog(`[SUCCESS] ${res} (${entry.hostname})`, 'success', 'server');
     return true;
@@ -2267,37 +2261,67 @@ const doUnlock = async (entry: TunnelLockEntry): Promise<boolean> => {
   }
 };
 
-// 行内 🔓：直接用该隧道第一个绑定域名上锁（想换域名走「修改」弹窗）
-const promptLockTunnel = async (tunnel: TunnelInfo) => {
-  if (isLockMutating.value || lockOf(tunnel.id)) return;
-  const hostnames = tunnel.hostnames || [];
-  if (hostnames.length === 0) {
-    soundManager.playClick();
-    appendLog('[ERROR] 该隧道还没有绑定域名，请先在「绑定域名」区绑定后再上锁', 'error', 'server');
-    showToast(t.value.server_tab.lock_need_domain);
-    return;
+// 换密码（底层）：删旧锁 + 重新上锁，旧密码立即作废
+const doRotatePassword = async (entry: TunnelLockEntry): Promise<boolean> => {
+  try {
+    const res = await invoke<{
+      hostname: string; app_uid: string; app_name: string;
+      token_uid: string; policy_uid: string; client_id: string; client_secret: string;
+    }>('tunnel_rotate_password', {
+      hostname: entry.hostname,
+      appUid: entry.appUid,
+      tokenUid: entry.tokenUid,
+      policyUid: entry.policyUid || null,
+      accessToken: accessTokenInput.value || null,
+    });
+    tunnelLocks.value[res.hostname] = {
+      hostname: res.hostname,
+      appUid: res.app_uid,
+      appName: res.app_name,
+      tokenUid: res.token_uid,
+      policyUid: res.policy_uid,
+      clientId: res.client_id,
+      clientSecret: res.client_secret,
+    };
+    persistTunnelLocks();
+    lockInfoDraft.value = { hostname: res.hostname, clientId: res.client_id, clientSecret: res.client_secret };
+    showLockInfoModal.value = true;
+    appendLog(`[SUCCESS] 已为域名 [${res.hostname}] 更换访问密码，旧密码作废`, 'success', 'server');
+    return true;
+  } catch (err: any) {
+    appendLog(`[ERROR] 更换密码失败: ${errorText(err)}`, 'error', 'server');
+    showToast(`${errorText(err)}`);
+    return false;
   }
+};
+
+// 行内「上锁」：给指定的单个域名上锁
+const promptLockHostname = async (hostname: string) => {
+  if (isLockMutating.value || lockOf(hostname)) return;
   soundManager.playSuccess();
   isLockMutating.value = true;
   try {
-    await doLock(tunnel.id, hostnames[0].name);
+    await doLock(hostname);
   } finally {
     isLockMutating.value = false;
   }
 };
 
-// 行内 🔒：弹解锁确认框（解锁后域名恢复公开，任何知道域名的人都能连）
-const promptUnlockTunnel = (tunnel: TunnelInfo) => {
+// 行内「解锁」：弹确认框（解锁后域名恢复公开，任何知道域名的人都能连）
+const unlockTarget = ref<string>(''); // 存 hostname
+const showUnlockModal = ref(false);
+
+const promptUnlockHostname = (hostname: string) => {
   if (isLockMutating.value) return;
   soundManager.playClick();
-  unlockTarget.value = tunnel;
+  unlockTarget.value = hostname;
   showUnlockModal.value = true;
 };
 
-const confirmUnlockTunnel = async () => {
-  const tunnel = unlockTarget.value;
-  const entry = tunnel ? lockOf(tunnel.id) : null;
-  if (!tunnel || !entry || isLockMutating.value) {
+const confirmUnlockHostname = async () => {
+  const hostname = unlockTarget.value;
+  const entry = hostname ? lockOf(hostname) : null;
+  if (!hostname || !entry || isLockMutating.value) {
     showUnlockModal.value = false;
     return;
   }
@@ -2311,10 +2335,32 @@ const confirmUnlockTunnel = async () => {
   }
 };
 
-// 修改弹窗里可选的锁域名 = 该隧道当前的绑定域名
-const namedEditHostnames = computed(() =>
-  (namedEditTarget.value?.hostnames || []).map(h => h.name),
-);
+// 行内「换密码」：弹确认框（旧密码会作废，正在连的客户端会断）
+const rotateTarget = ref<string>(''); // 存 hostname
+const showRotateModal = ref(false);
+
+const promptRotatePassword = (hostname: string) => {
+  if (isLockMutating.value) return;
+  soundManager.playClick();
+  rotateTarget.value = hostname;
+  showRotateModal.value = true;
+};
+
+const confirmRotatePassword = async () => {
+  const hostname = rotateTarget.value;
+  const entry = hostname ? lockOf(hostname) : null;
+  if (!hostname || !entry || isLockMutating.value) {
+    showRotateModal.value = false;
+    return;
+  }
+  showRotateModal.value = false;
+  isLockMutating.value = true;
+  try {
+    await doRotatePassword(entry);
+  } finally {
+    isLockMutating.value = false;
+  }
+};
 
 // 「已绑定域名」管理列表：只展开固定域名的绑定记录，
 // 云端托管隧道不在此处管理（其 ingress 由 Cloudflare 侧维护）。
@@ -2609,29 +2655,24 @@ const handleRefreshTunnels = async (scope?: 'local' | 'remote') => {
 const showNamedCreateModal = ref(false);
 const namedCreateDomain = ref('');
 const namedCreateDomainHasError = ref(false);
-const namedCreateLock = ref(false);
 
 const onNamedCreateDomainInput = () => {
   const val = namedCreateDomain.value;
   namedCreateDomainHasError.value = val.length > 0 && !isDomainValid(val);
-  // 域名被清空时锁开关没有作用对象，联动关掉
-  if (!val.trim()) namedCreateLock.value = false;
 };
 
 const openNamedCreateModal = () => {
   soundManager.playClick();
   namedCreateDomain.value = '';
   namedCreateDomainHasError.value = false;
-  namedCreateLock.value = false;
   serverNameHasError.value = false;
   serverPortHasError.value = false;
   showNamedCreateModal.value = true;
 };
 
-// 创建 + 可选绑定域名 + 可选上锁，一步到位：
+// 创建 + 可选绑定域名，一步到位（密码锁改到「DNS 路由绑定」面板按域名上锁）：
 //   1. cloudflared tunnel create
 //   2. （填了域名）cloudflared tunnel route dns
-//   3. （勾了上锁）云端创建 Access 应用 + Service Token
 const confirmNamedCreate = async () => {
   const name = serverConfig.value.name.trim();
   const port = serverConfig.value.port.trim();
@@ -2678,24 +2719,10 @@ const confirmNamedCreate = async () => {
       }
     }
 
-    // 刷新列表拿到新隧道的 ID，后续上锁与域名展示都要用
+    // 刷新列表拿到新隧道的 ID，后续域名展示要用
     await handleRefreshTunnels();
 
     if (domain) await refreshHostnamesOnly();
-
-    if (namedCreateLock.value && domain) {
-      const created = tunnelList.value.find(x => x.name === name);
-      if (created) {
-        isLockMutating.value = true;
-        try {
-          await doLock(created.id, domain);
-        } finally {
-          isLockMutating.value = false;
-        }
-      } else {
-        appendLog('[WARN] 未能定位新隧道的 ID，密码锁未开启，请在列表行内手动上锁', 'warn', 'server');
-      }
-    }
 
     if (!showLockInfoModal.value) showToast(`隧道 [${name}] 创建成功！`);
     showNamedCreateModal.value = false;
@@ -2782,11 +2809,11 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
   }
 };
 
-// 修改隧道弹窗：协议 / 端口 + 密码锁。
-// 保存时依次做三件事：落库源站配置 → 按开关状态增删/更换密码锁 → 运行中的隧道用新配置自动重启。
+// 修改隧道弹窗：协议 / 端口（密码锁已挪到「DNS 路由绑定」面板按域名管理）。
+// 保存时：落库源站配置 → 运行中的隧道用新配置自动重启。
 const showNamedEditModal = ref(false);
 const namedEditTarget = ref<TunnelInfo | null>(null);
-const namedEdit = ref({ protocol: 'http', port: '', unixSocket: '', lockOn: false, lockHostname: '' });
+const namedEdit = ref({ protocol: 'http', port: '', unixSocket: '' });
 const namedEditPortHasError = ref(false);
 
 const namedEditAddressMode = computed(() => addressModeOf(namedEdit.value.protocol));
@@ -2794,15 +2821,11 @@ const namedEditAddressMode = computed(() => addressModeOf(namedEdit.value.protoc
 const openNamedEditModal = (tunnel: TunnelInfo) => {
   soundManager.playClick();
   const saved = loadTunnelCfg(tunnel.name.trim());
-  const lock = lockOf(tunnel.id);
   namedEditTarget.value = tunnel;
   namedEdit.value = {
     protocol: saved?.protocol || 'http',
     port: saved?.port || '',
     unixSocket: saved?.unixSocket || '',
-    lockOn: !!lock,
-    // 已上锁的隧道锁定在当前域名上；未上锁则预选第一个绑定域名
-    lockHostname: lock?.hostname || tunnel.hostnames?.[0]?.name || '',
   };
   namedEditPortHasError.value = false;
   showNamedEditModal.value = true;
@@ -2833,82 +2856,28 @@ const confirmNamedEdit = async () => {
     saved.port !== port ||
     saved.unixSocket !== unixSocket;
 
-  // 1. 密码锁：开关与锁定域名的变化都先于配置落库处理，失败就留在弹窗里不改状态
-  const currentLock = lockOf(target.id);
-  isLockMutating.value = true;
-  try {
-    if (!namedEdit.value.lockOn && currentLock) {
-      const ok = await doUnlock(currentLock);
-      if (!ok) return;
-    } else if (namedEdit.value.lockOn) {
-      const wantHost = namedEdit.value.lockHostname.trim();
-      if (!wantHost) {
-        appendLog(`[ERROR] ${t.value.server_tab.lock_need_domain}`, 'error', 'server');
-        return;
-      }
-      if (!currentLock) {
-        const ok = await doLock(target.id, wantHost);
-        if (!ok) return;
-      } else if (currentLock.hostname !== wantHost) {
-        // 锁换到了别的域名：换密码（旧锁删除、新域名重新上锁，旧访问密码作废）
-        try {
-          const res = await invoke<{
-            hostname: string; app_uid: string; app_name: string;
-            token_uid: string; policy_uid: string; client_id: string; client_secret: string;
-          }>('tunnel_rotate_password', {
-            hostname: wantHost,
-            appUid: currentLock.appUid,
-            tokenUid: currentLock.tokenUid,
-            policyUid: currentLock.policyUid || null,
-            accessToken: accessTokenInput.value || null,
-          });
-          tunnelLocks.value[target.id] = {
-            tunnelId: target.id,
-            hostname: res.hostname,
-            appUid: res.app_uid,
-            appName: res.app_name,
-            tokenUid: res.token_uid,
-            policyUid: res.policy_uid,
-            clientId: res.client_id,
-            clientSecret: res.client_secret,
-          };
-          persistTunnelLocks();
-          lockInfoDraft.value = { hostname: res.hostname, clientId: res.client_id, clientSecret: res.client_secret };
-          showLockInfoModal.value = true;
-          appendLog(`[SUCCESS] 密码锁已换到 [${res.hostname}]，访问密码已更换，旧密码作废`, 'success', 'server');
-        } catch (err: any) {
-          appendLog(`[ERROR] 更换密码锁失败: ${errorText(err)}`, 'error', 'server');
-          showToast(`${errorText(err)}`);
-          return;
-        }
-      }
+  // 1. 源站配置落库
+  if (cfgChanged) saveTunnelCfgValues(name, protocol, port, unixSocket);
+
+  // 2. 运行中的隧道用新配置自动重启（配置没变就不折腾）
+  if (cfgChanged && isTunnelRunning(name)) {
+    try {
+      await invoke<string>('stop_server_tunnel', { name });
+    } catch {}
+    markServerStopped(name);
+    try {
+      await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
+      markServerRunning(name);
+      appendLog(`[INFO] 隧道 [${name}] 已用新配置重启 (${describeServerTarget(protocol, port, unixSocket)})`, 'info', 'server');
+    } catch (err: any) {
+      appendLog(`[ERROR] 重启隧道失败: ${err}`, 'error', 'server');
     }
-
-    // 2. 源站配置落库
-    if (cfgChanged) saveTunnelCfgValues(name, protocol, port, unixSocket);
-
-    // 3. 运行中的隧道用新配置自动重启（配置没变就不折腾）
-    if (cfgChanged && isTunnelRunning(name)) {
-      try {
-        await invoke<string>('stop_server_tunnel', { name });
-      } catch {}
-      markServerStopped(name);
-      try {
-        await invoke<string>('start_server_tunnel', { name, port, protocol, unixSocket });
-        markServerRunning(name);
-        appendLog(`[INFO] 隧道 [${name}] 已用新配置重启 (${describeServerTarget(protocol, port, unixSocket)})`, 'info', 'server');
-      } catch (err: any) {
-        appendLog(`[ERROR] 重启隧道失败: ${err}`, 'error', 'server');
-      }
-    }
-
-    soundManager.playSuccess();
-    showToast(`隧道 [${name}] 已保存`);
-    showNamedEditModal.value = false;
-    namedEditTarget.value = null;
-  } finally {
-    isLockMutating.value = false;
   }
+
+  soundManager.playSuccess();
+  showToast(`隧道 [${name}] 已保存`);
+  showNamedEditModal.value = false;
+  namedEditTarget.value = null;
 };
 
 // 停止服务端隧道 (普通点击音效)
@@ -3075,6 +3044,16 @@ const confirmUnbindDnsRoute = async () => {
 
   isDnsMutating.value = true;
   try {
+    // 该域名若有密码锁，先解锁再解绑：否则云端会残留一个拦截该域名的 Access 应用
+    const lock = lockOf(target.hostname);
+    if (lock && !isLockMutating.value) {
+      isLockMutating.value = true;
+      try {
+        await doUnlock(lock);
+      } finally {
+        isLockMutating.value = false;
+      }
+    }
     const res = await invoke<string>('delete_dns_route', { recordId: target.recordId });
     appendLog(`[SUCCESS] ${res} (${target.hostname})`, 'success', 'server');
     showToast(`${target.hostname} 已解除绑定`);
@@ -3358,22 +3337,25 @@ const confirmDeleteTunnel = async () => {
     if (selectedTunnel.value?.id === target.id) selectedTunnel.value = null;
     if (selectedRemoteTunnel.value?.id === target.id) selectedRemoteTunnel.value = null;
     delete remoteConfigs.value[target.id];
-    // 隧道删了，密码锁还挂在它的域名上会变成云端孤儿：顺手清掉（失败不阻断，只记日志）
-    const lock = lockOf(target.id);
-    if (lock) {
+    // 隧道删了，密码锁还挂在它的域名上会变成云端孤儿：逐域名清掉（失败不阻断，只记日志）
+    const boundHostnames = (target.hostnames || []).map(h => h.name);
+    for (const hostname of boundHostnames) {
+      const lock = lockOf(hostname);
+      if (!lock) continue;
       try {
         await invoke<string>('tunnel_unlock', {
           appUid: lock.appUid,
           tokenUid: lock.tokenUid,
+          policyUid: lock.policyUid || null,
           accessToken: accessTokenInput.value || null,
         });
-        appendLog(`[INFO] 已同步解除该隧道的密码锁 (${lock.hostname})`, 'info', 'server');
+        appendLog(`[INFO] 已同步解除域名密码锁 (${lock.hostname})`, 'info', 'server');
       } catch (err: any) {
         appendLog(`[WARN] 密码锁清理失败（${lock.hostname}）: ${errorText(err)}，可稍后在 Cloudflare 后台手动删除`, 'warn', 'server');
       }
-      delete tunnelLocks.value[target.id];
-      persistTunnelLocks();
+      delete tunnelLocks.value[hostname];
     }
+    persistTunnelLocks();
     await handleRefreshTunnels(target.scope === 'remote' ? 'remote' : 'local');
   } catch (err: any) {
     appendLog(`[ERROR] 删除隧道失败: ${err}`, 'error', 'server');
@@ -4685,6 +4667,84 @@ onUnmounted(() => {
 .chip-action-btn.danger:hover {
   background-color: #d13438;
   opacity: 1;
+}
+
+/* 域名胶囊内的锁状态标签（已上锁 🔒 / 未上锁） */
+.chip-lock-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: inherit;
+  background-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.chip-lock-tag.off {
+  background-color: rgba(255, 255, 255, 0.14);
+  opacity: 0.85;
+}
+
+/* 密码锁操作列：每个域名一行，已上锁显示账号/密码+换密码/解锁，未上锁显示「上锁」 */
+.dns-bound-table .col-bound-lock {
+  white-space: normal;
+  vertical-align: top;
+  width: 210px;
+  max-width: 210px;
+}
+
+.lock-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+  padding: 1px 0;
+}
+
+/* 锁操作列里的「上锁」按钮：加个浅色底，跟域名胶囊里的动作按钮区分开 */
+.chip-action-btn.primary {
+  width: auto;
+  height: auto;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-primary, #1a1a1a);
+  background-color: var(--chip-lock-btn-bg, #e8f3ff);
+  opacity: 1;
+  white-space: nowrap;
+}
+
+.chip-action-btn.primary:hover {
+  background-color: var(--chip-lock-btn-hover, #cfe6ff);
+}
+
+.chip-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 锁操作列里换密码/解锁按钮：脱离蓝底胶囊，需要自带可见的文字色与悬停底 */
+.col-bound-lock .chip-action-btn {
+  color: var(--text-primary, #1a1a1a);
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.col-bound-lock .chip-action-btn:hover {
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.col-bound-lock .chip-action-btn.danger {
+  color: var(--danger-color, #d13438);
+}
+
+.col-bound-lock .chip-action-btn.danger:hover {
+  background-color: #d13438;
+  color: #ffffff;
 }
 
 /* 解绑按钮：危险色描边，与行内启停按钮区分 */

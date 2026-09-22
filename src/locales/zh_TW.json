@@ -118,6 +118,11 @@
     "unlock_confirm_title": "解除密碼鎖",
     "unlock_confirm_msg": "解除後，網域 {hostname} 將恢復公開存取，任何知道網域的人都能直接連線。確定解除？",
     "unlocked_toast": "密碼鎖已解除",
+    "lock_on": "已上鎖",
+    "lock_off": "未上鎖",
+    "btn_rotate_password": "換密碼",
+    "rotate_confirm_title": "更換存取密碼",
+    "rotate_confirm_msg": "更換後，網域 {hostname} 的舊存取密碼將立即失效，正在連線的所有用戶端會被中斷。確定更換？",
     "copied_toast": "已複製到剪貼簿",
     "edit_need_config": "該隧道還沒有設定協定和連接埠，請先點擊「修改」補全",
     "edit_restart_hint": "該隧道正在執行，儲存後將自動用新設定重新啟動。",
@@ -130,7 +135,8 @@
       "hostname": "綁定域名",
       "status": "狀態",
       "actions": "操作",
-      "password": "存取密碼"
+      "password": "存取密碼",
+      "lock": "存取密碼鎖"
     },
     "errors": {
       "tunnel_invalid": "隧道名稱不能為空且只能包含純英文字母 (a-z, A-Z)",

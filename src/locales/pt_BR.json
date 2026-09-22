@@ -118,6 +118,11 @@
     "unlock_confirm_title": "Remover bloqueio",
     "unlock_confirm_msg": "Ao remover, {hostname} volta a ser público: qualquer pessoa que souber o hostname poderá conectar. Remover?",
     "unlocked_toast": "Bloqueio removido",
+    "lock_on": "Bloqueado",
+    "lock_off": "Desbloqueado",
+    "btn_rotate_password": "Rotacionar",
+    "rotate_confirm_title": "Rotacionar senha de acesso",
+    "rotate_confirm_msg": "Ao rotacionar, a senha antiga de {hostname} deixa de valer e todos os clientes conectados são desconectados. Rotacionar?",
     "copied_toast": "Copiado para a área de transferência",
     "edit_need_config": "Este túnel ainda não tem protocolo/porta. Clique em Editar para completar.",
     "edit_restart_hint": "Este túnel está em execução; ele será reiniciado automaticamente com as novas configurações ao salvar.",
@@ -130,7 +135,8 @@
       "hostname": "Domínio Vinculado",
       "status": "Status",
       "actions": "Ações",
-      "password": "Senha de acesso"
+      "password": "Senha de acesso",
+      "lock": "Bloqueio por senha"
     },
     "errors": {
       "tunnel_invalid": "O nome do túnel deve conter apenas letras (a-z, A-Z)",

@@ -118,6 +118,11 @@
     "unlock_confirm_title": "解除密码锁",
     "unlock_confirm_msg": "解除后，域名 {hostname} 将恢复公开访问，任何知道域名的人都能直接连接。确定解除？",
     "unlocked_toast": "密码锁已解除",
+    "lock_on": "已上锁",
+    "lock_off": "未上锁",
+    "btn_rotate_password": "换密码",
+    "rotate_confirm_title": "更换访问密码",
+    "rotate_confirm_msg": "更换后，域名 {hostname} 的旧访问密码将立即作废，正在连接的所有客户端会被断开。确定更换？",
     "copied_toast": "已复制到剪贴板",
     "edit_need_config": "该隧道还没有配置协议和端口，请先点击「修改」补全",
     "edit_restart_hint": "该隧道正在运行，保存后将自动用新配置重启。",
@@ -130,7 +135,8 @@
       "hostname": "绑定域名",
       "status": "状态",
       "actions": "操作",
-      "password": "访问密码"
+      "password": "访问密码",
+      "lock": "访问密码锁"
     },
     "errors": {
       "tunnel_invalid": "隧道名不能为空且只能包含纯字母 (a-z, A-Z)，不可含数字、空格或特殊字符",

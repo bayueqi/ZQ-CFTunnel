@@ -118,6 +118,11 @@
     "unlock_confirm_title": "パスワードロックを解除",
     "unlock_confirm_msg": "解除すると {hostname} は再び公開になり、ホスト名を知っている誰もが接続できます。解除しますか？",
     "unlocked_toast": "パスワードロックを解除しました",
+    "lock_on": "ロック中",
+    "lock_off": "未ロック",
+    "btn_rotate_password": "パスワード変更",
+    "rotate_confirm_title": "アクセスパスワードの変更",
+    "rotate_confirm_msg": "変更すると {hostname} の旧パスワードは直ちに無効になり、接続中のすべてのクライアントが切断されます。変更しますか？",
     "copied_toast": "クリップボードにコピーしました",
     "edit_need_config": "このトンネルにはプロトコルとポートの設定がありません。先に「編集」で入力してください",
     "edit_restart_hint": "このトンネルは実行中です。保存後、新しい設定で自動的に再起動されます。",
@@ -130,7 +135,8 @@
       "hostname": "バインドドメイン",
       "status": "状態",
       "actions": "操作",
-      "password": "アクセスパスワード"
+      "password": "アクセスパスワード",
+      "lock": "パスワードロック"
     },
     "errors": {
       "tunnel_invalid": "トンネル名は英字のみ使用できます (a-z, A-Z)",
