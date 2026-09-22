@@ -6,6 +6,14 @@
 
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen, EventCallback, UnlistenFn } from '@tauri-apps/api/event';
+import { activePack, fmt } from '../i18n';
+
+/**
+ * 演示模式的文案（与界面同语言）。
+ * 这个模块没有 Vue 实例上下文，取不到 App.vue 里那个 t computed，
+ * 所以走 i18n 的 activePack()——App.vue 在启动与切换语言时会同步当前语言。
+ */
+const L = () => activePack().logs;
 
 export const isTauriEnvironment = (): boolean => {
   return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
@@ -82,45 +90,45 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         tunnel_type: 'local',
       };
       mockTunnels.unshift(newTunnel);
-      emitMockLog(`[SUCCESS] 隧道 [${name}] 创建成功！凭证已保存至 %USERPROFILE%\\.cloudflared\\${newTunnel.id}.json`, 'success', 'server');
-      return `隧道 [${name}] 创建成功 (ID: ${newTunnel.id})` as unknown as T;
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_tunnel_created_cred, { name, id: newTunnel.id })}`, 'success', 'server');
+      return `${fmt(L().demo_tunnel_created, { name, id: newTunnel.id })}` as unknown as T;
     }
 
     case 'delete_tunnel': {
       const name = args?.name as string;
       mockTunnels = mockTunnels.filter(t => t.name !== name);
-      emitMockLog(`[INFO] 隧道 [${name}] 已从 Cloudflare 网络中注销并删除本地配置文件`, 'info', 'server');
-      return `已成功删除隧道 ${name}` as unknown as T;
+      emitMockLog(`[INFO] ${fmt(L().demo_tunnel_deleted, { name })}`, 'info', 'server');
+      return `${fmt(L().demo_tunnel_deleted_toast, { name })}` as unknown as T;
     }
 
     case 'start_server_tunnel': {
       const name = (args?.name as string) || 'mc';
       const port = (args?.port as string) || '25565';
-      emitMockLog(`[INFO] 正在与 Cloudflare 全球边缘节点建立多路复用连接 (QUIC/HTTP3)...`, 'info', 'server');
+      emitMockLog(`[INFO] ${L().demo_server_connecting}`, 'info', 'server');
       setTimeout(() => {
-        emitMockLog(`[INFO] 已在本地 127.0.0.1:${port} 建立入口代理服务`, 'info', 'server');
-        emitMockLog(`[SUCCESS] 隧道 [${name}] 已成功连接至 4 个边缘路由节点 (HKG, NRT, SJC, LAX)`, 'success', 'server');
+        emitMockLog(`[INFO] ${fmt(L().demo_server_proxy_up, { port })}`, 'info', 'server');
+        emitMockLog(`[SUCCESS] ${fmt(L().demo_server_connected, { name })}`, 'success', 'server');
       }, 500);
-      return `服务端隧道 [${name}] 启动成功 (端口: ${port})` as unknown as T;
+      return `${fmt(L().demo_server_started, { name, port })}` as unknown as T;
     }
 
     case 'stop_server_tunnel':
-      emitMockLog('[WARN] 服务端隧道连接已主动断开', 'warn', 'server');
-      return '服务端隧道已停止' as unknown as T;
+      emitMockLog(`[WARN] ${L().demo_server_closed}`, 'warn', 'server');
+      return L().demo_server_stopped_toast as unknown as T;
 
     case 'start_client_tunnel': {
       const domain = ((args?.domain as string) || 'demo.domain.com').trim();
       const port = ((args?.port as string) || '25566').trim();
       const key = `${domain}|${port}`;
       if (mockClients.some(c => c.key === key)) {
-        throw new Error(`客户端隧道 [${domain}:${port}] 已在运行，无需重复连接`);
+        throw new Error(`${fmt(L().demo_client_already, { target: `${domain}:${port}` })}`);
       }
       mockClients.push({ key, domain, port });
-      emitMockLog(`[INFO] 正在连接隧道服务: ${domain}...`, 'info', 'client');
+      emitMockLog(`[INFO] ${fmt(L().demo_client_connecting, { domain })}...`, 'info', 'client');
       setTimeout(() => {
-        emitMockLog(`[SUCCESS] 客户端反向代理建立成功！本地监听端口: 127.0.0.1:${port}`, 'success', 'client');
+        emitMockLog(`[SUCCESS] ${fmt(L().demo_client_proxy_up, { port })}`, 'success', 'client');
       }, 400);
-      return `已连接客户端隧道 [${domain}] -> 本地监听端口 [${port}]` as unknown as T;
+      return `${fmt(L().demo_client_connected, { domain, port })}` as unknown as T;
     }
 
     case 'stop_client_tunnel': {
@@ -129,11 +137,11 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       const key = `${domain}|${port}`;
       const idx = mockClients.findIndex(c => c.key === key);
       if (idx === -1) {
-        return '该客户端隧道当前未在运行' as unknown as T;
+        return L().demo_client_not_running as unknown as T;
       }
       mockClients.splice(idx, 1);
-      emitMockLog(`[INFO] 客户端隧道 [${domain}:${port}] 已断开`, 'warn', 'client');
-      return `客户端隧道 [${domain}:${port}] 已断开` as unknown as T;
+      emitMockLog(`[INFO] ${fmt(L().demo_client_closed, { target: `${domain}:${port}` })}`, 'warn', 'client');
+      return `${fmt(L().demo_client_closed, { target: `${domain}:${port}` })}` as unknown as T;
     }
 
     case 'list_client_tunnels':
@@ -144,9 +152,9 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
     // 与 Rust 侧 tunnel_lock / tunnel_unlock / tunnel_rotate_password 语义一致
     case 'tunnel_lock': {
       const hostname = ((args?.hostname as string) || '').trim();
-      if (!hostname) throw new Error('域名格式不正确，请先绑定一个合法域名');
+      if (!hostname) throw new Error(L().demo_domain_invalid);
       await new Promise(r => setTimeout(r, 700));
-      emitMockLog(`[SUCCESS] 已为域名 [${hostname}] 开启密码锁（演示模式）`, 'success', 'server');
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_lock_ok, { hostname })}`, 'success', 'server');
       return {
         hostname,
         app_uid: `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
@@ -159,14 +167,14 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
 
     case 'tunnel_unlock': {
       await new Promise(r => setTimeout(r, 500));
-      emitMockLog('[SUCCESS] 密码锁已解除，该域名恢复公开访问（演示模式）', 'success', 'server');
-      return '密码锁已解除，该域名恢复公开访问' as unknown as T;
+      emitMockLog(`[SUCCESS] ${L().demo_unlock_ok}`, 'success', 'server');
+      return L().demo_unlock_ok_toast as unknown as T;
     }
 
     case 'tunnel_rotate_password': {
       const hostname = ((args?.hostname as string) || '').trim();
       await new Promise(r => setTimeout(r, 800));
-      emitMockLog(`[SUCCESS] 访问密码已更换（演示模式）`, 'success', 'server');
+      emitMockLog(`[SUCCESS] ${L().demo_rotate_ok}`, 'success', 'server');
       return {
         hostname,
         app_uid: `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
@@ -180,23 +188,23 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
     case 'start_remote_tunnel_by_id': {
       const tunnelId = ((args?.tunnelId as string) || '').trim();
       const tunnelName = ((args?.tunnelName as string) || tunnelId).trim();
-      if (!tunnelId) throw new Error('缺少隧道 ID，无法启动云端托管');
+      if (!tunnelId) throw new Error(L().demo_missing_tunnel_id);
       if (mockRemotes.some(r => r.key === tunnelId)) {
-        throw new Error(`云端托管隧道 [${tunnelName}] 已在运行，无需重复启动`);
+        throw new Error(`${fmt(L().demo_remote_already, { tunnelName })}`);
       }
       mockRemotes.push({ key: tunnelId });
-      emitMockLog(`[INFO] 正在用 cert.pem 为隧道 [${tunnelName}] 换取运行 Token...`, 'info', 'remote');
+      emitMockLog(`[INFO] ${fmt(L().demo_remote_token, { tunnelName })}...`, 'info', 'remote');
       setTimeout(() => {
-        emitMockLog(`[SUCCESS] 云端托管隧道 [${tunnelName}] 已连接至 4 个边缘路由节点 (HKG, NRT, SJC, LAX)`, 'success', 'remote');
+        emitMockLog(`[SUCCESS] ${fmt(L().demo_remote_connected, { tunnelName })}`, 'success', 'remote');
         // 桌面端这份配置来自 cloudflared 日志，演示模式直接造一份，否则配置卡片是空的
         mockRemoteConfigListeners.forEach(l => l({
           payload: {
             key: tunnelId,
-            config: `${tunnelName}.example.com  →  http://localhost:25565\n(默认)  →  http_status:404`,
+            config: `${fmt(L().demo_default_config, { tunnelName })}`,
           },
         }));
       }, 600);
-      return `已启动云端托管 [${tunnelName}]` as unknown as T;
+      return `${fmt(L().demo_remote_started, { tunnelName })}` as unknown as T;
     }
 
     case 'stop_remote_tunnel': {
@@ -204,17 +212,17 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       const tunnelName = ((args?.tunnelName as string) || key).trim();
       const idx = mockRemotes.findIndex(r => r.key === key);
       if (idx === -1) {
-        return '指定的服务端隧道当前未在运行' as unknown as T;
+        return L().demo_server_not_running as unknown as T;
       }
       mockRemotes.splice(idx, 1);
-      emitMockLog(`[INFO] 服务端隧道 [${tunnelName}] 已停止`, 'warn', 'remote');
-      return `服务端隧道 [${tunnelName}] 已停止` as unknown as T;
+      emitMockLog(`[INFO] ${fmt(L().demo_server_closed_named, { tunnelName })}`, 'warn', 'remote');
+      return `${fmt(L().demo_server_closed_named, { tunnelName })}` as unknown as T;
     }
 
     case 'fetch_tunnel_config': {
       // 只读升级：桌面端走 Cloudflare API 读 ingress，演示模式直接造一份结构相同的数据
       const tunnelId = ((args?.tunnelId as string) || '').trim();
-      if (!tunnelId) throw new Error('隧道 ID 格式不正确');
+      if (!tunnelId) throw new Error(L().demo_tunnel_id_invalid);
       const tunnel = mockTunnels.find(t => t.id === tunnelId);
       const name = tunnel?.name || tunnelId;
       return {
@@ -232,11 +240,11 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       // （一个有数据、一个空列表），好让两种分支都能在网页端看到。
       // 注意 id 必须有：改名 / 删除都靠它定位，缺了演示端改不动。
       const tunnelId = ((args?.tunnelId as string) || '').trim();
-      if (!tunnelId) throw new Error('隧道 ID 格式不正确');
+      if (!tunnelId) throw new Error(L().demo_tunnel_id_invalid);
       const tunnel = mockTunnels.find(t => t.id === tunnelId);
       const name = tunnel?.name || tunnelId;
       return {
-        hostname_routes: [{ id: `hr-${tunnelId.slice(0, 6)}`, hostname: `${name}.internal`, comment: '演示数据' }],
+        hostname_routes: [{ id: `hr-${tunnelId.slice(0, 6)}`, hostname: `${name}.internal`, comment: L().demo_data }],
         cidr_routes: [],
         hostname_error: null,
         cidr_error: null,
@@ -248,59 +256,59 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
     case 'update_tunnel_config': {
       const ingress = (args?.ingress as unknown[]) || [];
       await new Promise(r => setTimeout(r, 400));
-      emitMockLog(`[SUCCESS] 已发布应用程序路由已写入云端（演示模式，${ingress.length} 条）`, 'success', 'server');
-      return '云端配置已更新' as unknown as T;
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_ingress_written, { count: ingress.length })}`, 'success', 'server');
+      return L().demo_config_updated as unknown as T;
     }
 
     case 'create_hostname_route': {
       const hostname = ((args?.hostname as string) || '').trim();
       await new Promise(r => setTimeout(r, 250));
-      emitMockLog(`[SUCCESS] 主机名路由 ${hostname} 已创建（演示模式）`, 'success', 'server');
-      return `主机名路由 ${hostname} 已创建` as unknown as T;
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_host_created, { hostname })}`, 'success', 'server');
+      return `${fmt(L().demo_host_created_toast, { hostname })}` as unknown as T;
     }
 
     case 'delete_hostname_route':
       await new Promise(r => setTimeout(r, 250));
-      emitMockLog('[SUCCESS] 主机名路由已删除（演示模式）', 'success', 'server');
-      return '主机名路由已删除' as unknown as T;
+      emitMockLog(`[SUCCESS] ${L().demo_host_deleted}`, 'success', 'server');
+      return L().demo_host_deleted_toast as unknown as T;
 
     case 'create_cidr_route': {
       const network = ((args?.network as string) || '').trim();
       await new Promise(r => setTimeout(r, 250));
-      emitMockLog(`[SUCCESS] CIDR 路由 ${network} 已创建（演示模式）`, 'success', 'server');
-      return `CIDR 路由 ${network} 已创建` as unknown as T;
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_cidr_created, { network })}`, 'success', 'server');
+      return `${fmt(L().demo_cidr_created_toast, { network })}` as unknown as T;
     }
 
     case 'update_cidr_route':
       await new Promise(r => setTimeout(r, 250));
-      emitMockLog('[SUCCESS] CIDR 路由已更新（演示模式）', 'success', 'server');
-      return 'CIDR 路由已更新' as unknown as T;
+      emitMockLog(`[SUCCESS] ${L().demo_cidr_updated}`, 'success', 'server');
+      return L().demo_cidr_updated_toast as unknown as T;
 
     case 'delete_cidr_route':
       await new Promise(r => setTimeout(r, 250));
-      emitMockLog('[SUCCESS] CIDR 路由已删除（演示模式）', 'success', 'server');
-      return 'CIDR 路由已删除' as unknown as T;
+      emitMockLog(`[SUCCESS] ${L().demo_cidr_deleted}`, 'success', 'server');
+      return L().demo_cidr_deleted_toast as unknown as T;
 
     // ===== DNS 路由绑定（添加 / 改名 / 解绑）演示模拟 =====
     case 'route_dns_tunnel': {
       const hostname = ((args?.hostname as string) || '').trim();
       const name = ((args?.name as string) || '').trim();
       await new Promise(r => setTimeout(r, 300));
-      emitMockLog(`[SUCCESS] 已将域名 ${hostname} 绑定到隧道 ${name}（演示模式）`, 'success', 'server');
-      return `已将域名 ${hostname} 绑定到隧道 ${name}` as unknown as T;
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_dns_bound, { hostname, name })}`, 'success', 'server');
+      return `${fmt(L().demo_dns_bound_toast, { hostname, name })}` as unknown as T;
     }
 
     case 'rename_dns_route': {
       const hostname = ((args?.hostname as string) || '').trim();
       await new Promise(r => setTimeout(r, 300));
-      emitMockLog(`[SUCCESS] 域名已改名为 ${hostname}（演示模式）`, 'success', 'server');
-      return `域名已改名为 ${hostname}` as unknown as T;
+      emitMockLog(`[SUCCESS] ${fmt(L().demo_dns_renamed, { hostname })}`, 'success', 'server');
+      return `${fmt(L().demo_dns_renamed_toast, { hostname })}` as unknown as T;
     }
 
     case 'delete_dns_route':
       await new Promise(r => setTimeout(r, 300));
-      emitMockLog('[SUCCESS] 域名绑定已解除（演示模式）', 'success', 'server');
-      return '域名绑定已解除' as unknown as T;
+      emitMockLog(`[SUCCESS] ${L().demo_dns_unbound}`, 'success', 'server');
+      return L().demo_dns_unbound_toast as unknown as T;
 
     // ===== 临时隧道（quick tunnel）演示模拟 =====
     case 'start_quick_tunnel': {
@@ -314,20 +322,20 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         : protocol === 'unix' || protocol === 'unix+tls'
           ? `${protocol}:${unixSocket}`
           : `${protocol}://127.0.0.1:${port}`;
-      emitMockLog('[INFO] 正在申请临时域名...', 'info', 'quick');
+      emitMockLog(`[INFO] ${L().demo_quick_requesting}`, 'info', 'quick');
       // 桌面端临时域名由 cloudflared 日志解析后广播 quick-tunnel-url，演示模式照做，
       // 否则列表里那条「生成中...」永远等不到域名。
       setTimeout(() => {
         const url = `https://${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36).slice(-4)}.trycloudflare.com`;
         mockQuickUrlListeners.forEach(l => l({ payload: { key, url } }));
       }, 900);
-      return `临时隧道 ${key} 已启动` as unknown as T;
+      return `${fmt(L().demo_quick_started, { key })}` as unknown as T;
     }
 
     case 'stop_quick_tunnel': {
       const key = ((args?.key as string) || '').trim();
-      emitMockLog(`[INFO] 临时隧道 ${key || '全部'} 已停止（演示模式）`, 'warn', 'quick');
-      return '临时隧道已停止' as unknown as T;
+      emitMockLog(`[INFO] ${fmt(L().demo_quick_stopped, { key: key || L().demo_all })}`, 'warn', 'quick');
+      return L().demo_quick_stopped_toast as unknown as T;
     }
 
     case 'is_quick_running':
@@ -347,32 +355,32 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       return 'cloudflared version 2024.8.3 (built 2024-08-15-1234 UTC)' as unknown as T;
 
     case 'update_cloudflared':
-      emitMockLog('[INFO] 正在检测 cloudflared 官方最新 Release 版本...', 'info', 'misc');
+      emitMockLog(`[INFO] ${L().demo_checking_version}`, 'info', 'misc');
       setTimeout(() => {
-        emitMockLog('[SUCCESS] 当前 cloudflared 版本已是最新版 (2024.8.3)', 'success', 'misc');
+        emitMockLog(`[SUCCESS] ${L().demo_version_latest}`, 'success', 'misc');
       }, 600);
-      return 'cloudflared 当前已为最新版本' as unknown as T;
+      return L().demo_version_latest_toast as unknown as T;
 
     case 'download_and_install_cloudflared': {
       const filename = (args?.filename as string) || 'cloudflared.exe';
-      emitMockLog(`[INFO] 正在从 GitHub 官方下载源拉取: ${filename}...`, 'info', 'misc');
+      emitMockLog(`[INFO] ${fmt(L().demo_downloading, { filename })}...`, 'info', 'misc');
       let progress = 10;
       const interval = setInterval(() => {
         progress += 25;
         if (progress <= 100) {
-          emitMockLog(`[下载进度] ${progress}% / 100%`, 'info', 'misc');
+          emitMockLog(`${fmt(L().demo_download_progress, { progress })}`, 'info', 'misc');
         } else {
           clearInterval(interval);
-          emitMockLog(`[SUCCESS] ${filename} 下载完成并已放置在应用目录，已具备执行权限！`, 'success', 'misc');
+          emitMockLog(`[SUCCESS] ${fmt(L().demo_download_done, { filename })}`, 'success', 'misc');
         }
       }, 350);
-      return `已启动 ${filename} 下载任务` as unknown as T;
+      return `${fmt(L().demo_download_started, { filename })}` as unknown as T;
     }
 
     case 'login_cloudflared':
       window.open('https://dash.cloudflare.com', '_blank');
-      emitMockLog('[INFO] 已在浏览器中打开 Cloudflare 授权页面', 'info', 'misc');
-      return '已打开授权页面' as unknown as T;
+      emitMockLog(`[INFO] ${L().demo_login_page}`, 'info', 'misc');
+      return L().demo_login_page_toast as unknown as T;
 
     case 'open_external_url':
       if (args?.url) {
@@ -381,7 +389,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       return 'OK' as unknown as T;
 
     case 'open_cloudflared_config_dir':
-      emitMockLog('[INFO] 模拟打开本地配置目录: %USERPROFILE%\\.cloudflared', 'info', 'misc');
+      emitMockLog(`[INFO] ${L().demo_open_config_dir}`, 'info', 'misc');
       return '%USERPROFILE%\\.cloudflared' as unknown as T;
 
     case 'minimize_window':
@@ -391,7 +399,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
       return false as unknown as T;
 
     case 'exit_app':
-      alert('【退出提示】在桌面版中，此操作将安全退出并终止后台隧道服务。');
+      alert(L().demo_exit_hint);
       return 'OK' as unknown as T;
 
     default:

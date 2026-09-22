@@ -42,23 +42,23 @@ export function getCloudflaredTarget(): CloudflaredDownloadTarget {
 
   let fileName = 'cloudflared-windows-amd64.exe';
   let isArchive = false;
-  let displayName = 'Windows x86_64 (64位)';
+  let displayName = 'Windows x86_64';
 
   // 1. Windows 系统 (OS: windows)
   if (os.includes('windows') || os === 'win32' || os === 'windows_nt') {
     if (isX86_64) {
       fileName = 'cloudflared-windows-amd64.exe';
-      displayName = 'Windows x86_64 (64位)';
+      displayName = 'Windows x86_64';
     } else if (isArm64) {
       fileName = 'cloudflared-windows-arm64.exe';
-      displayName = 'Windows ARM64 (64位)';
+      displayName = 'Windows ARM64';
     } else if (isX86_32) {
       fileName = 'cloudflared-windows-386.exe';
-      displayName = 'Windows x86 (32位)';
+      displayName = 'Windows x86';
     } else {
       // 现代 PC 默认回退 64位
       fileName = 'cloudflared-windows-amd64.exe';
-      displayName = 'Windows x86_64 (64位)';
+      displayName = 'Windows x86_64';
     }
   }
   // 2. macOS 系统 (OS: darwin 或 macos)
@@ -66,10 +66,10 @@ export function getCloudflaredTarget(): CloudflaredDownloadTarget {
     isArchive = true;
     if (isArm64) {
       fileName = 'cloudflared-darwin-arm64.tgz';
-      displayName = 'macOS Apple Silicon (M芯片 ARM64)';
+      displayName = 'macOS Apple Silicon (ARM64)';
     } else if (isX86_64) {
       fileName = 'cloudflared-darwin-amd64.tgz';
-      displayName = 'macOS Intel (x86_64 64位)';
+      displayName = 'macOS Intel (x86_64)';
     } else {
       fileName = 'cloudflared-darwin-amd64.tgz';
       displayName = 'macOS (x86_64)';
@@ -79,19 +79,19 @@ export function getCloudflaredTarget(): CloudflaredDownloadTarget {
   else if (os.includes('linux') || os.includes('android')) {
     if (isX86_64) {
       fileName = 'cloudflared-linux-amd64';
-      displayName = 'Linux x86_64 (64位)';
+      displayName = 'Linux x86_64';
     } else if (isArm64) {
       fileName = 'cloudflared-linux-arm64';
-      displayName = 'Linux ARM64 (64位)';
+      displayName = 'Linux ARM64';
     } else if (isX86_32) {
       fileName = 'cloudflared-linux-386';
-      displayName = 'Linux x86 (32位)';
+      displayName = 'Linux x86';
     } else if (isArm32) {
       fileName = 'cloudflared-linux-arm';
-      displayName = 'Linux ARMv7 (32位)';
+      displayName = 'Linux ARMv7';
     } else {
       fileName = 'cloudflared-linux-amd64';
-      displayName = 'Linux x86_64 (64位)';
+      displayName = 'Linux x86_64';
     }
   }
 

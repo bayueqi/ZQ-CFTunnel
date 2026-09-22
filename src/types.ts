@@ -44,6 +44,24 @@ export interface LangPack {
   title: string;
   header: string;
   lang_button: string;
+
+  /** 窗口外壳：标题栏按钮 / 侧边栏 / 控制台把手等非业务文案 */
+  chrome: {
+    logo_title: string;
+    sound_mute_title: string;
+    sound_unmute_title: string;
+    github_title: string;
+    theme_to_light: string;
+    theme_to_dark: string;
+    btn_minimize: string;
+    btn_restore: string;
+    btn_maximize: string;
+    btn_close: string;
+    sidebar_expand: string;
+    sidebar_collapse: string;
+    sidebar_collapse_text: string;
+    console_resize_title: string;
+  };
   tabs: {
     server: string;
     client: string;
@@ -232,6 +250,14 @@ export interface LangPack {
     copied_toast: string;
     edit_need_config: string;
     edit_restart_hint: string;
+    /** 临时隧道行内状态徽标：已运行 */
+    quick_status_online: string;
+    /** 临时隧道行内状态徽标：正在申请临时域名 */
+    quick_status_starting: string;
+    /** 固定隧道表与客户端表在刷新中的空表文案 */
+    table_refreshing: string;
+    /** 固定隧道表与客户端表的空表文案 */
+    table_empty: string;
     headers: {
       id: string;
       name: string;
@@ -320,6 +346,14 @@ export interface LangPack {
     access_token_placeholder: string;
     access_token_hint: string;
     access_token_saved: string;
+    /** 授权登录卡片说明 */
+    btn_login_desc: string;
+    /** 检查版本卡片说明 */
+    btn_check_version_desc: string;
+    /** 在线更新卡片说明 */
+    btn_update_desc: string;
+    /** 前往官方下载页卡片说明 */
+    btn_download_desc: string;
   };
   exit_modal: {
     title: string;
@@ -334,5 +368,188 @@ export interface LangPack {
     btn_copy: string;
     copy_logs_success: string;
     empty: string;
+  };
+  /**
+   * 日志与吐司文案。桌面端由 App.vue 用 t.value.logs.* 取用；
+   * 网页演示模式（utils/tauriBridge.ts）没有 Vue 上下文，经 i18n 的 activePack() 取用。
+   * 带 {xxx} 的占位符由 i18n 的 fmt() 填充。
+   */
+  logs: {
+    toast_sound_on: string;
+    toast_sound_off: string;
+    target_hello_world: string;
+    host_route_deleted: string;
+    host_route_delete_failed: string;
+    host_route_delete_failed_named: string;
+    host_route_create_failed: string;
+    cidr_route_deleted: string;
+    cidr_route_delete_failed: string;
+    cidr_route_save_failed: string;
+    route_invalid_at: string;
+    tunnel_created: string;
+    err_tunnel_id_missing: string;
+    err_tunnel_id_not_found: string;
+    ingress_written: string;
+    dns_route_create_failed: string;
+    tunnel_save_failed: string;
+    access_token_saved_log: string;
+    lock_ok: string;
+    lock_failed: string;
+    unlock_failed: string;
+    rotate_ok: string;
+    rotate_failed: string;
+    leftover_check_failed: string;
+    app_ready: string;
+    copy_logs_failed: string;
+    opened_in_browser: string;
+    open_link_failed: string;
+    config_dir_opened: string;
+    config_dir_open_failed: string;
+    tunnel_list_refreshed: string;
+    tunnel_list_refresh_failed: string;
+    tunnel_need_config: string;
+    unix_socket_required: string;
+    tunnel_port_invalid: string;
+    tunnel_started: string;
+    tunnel_start_failed: string;
+    no_tunnel_to_stop: string;
+    tunnel_stopped: string;
+    tunnel_stop_failed: string;
+    no_tunnel_for_dns: string;
+    dns_bound_ok: string;
+    dns_bind_failed: string;
+    bind_failed_toast: string;
+    refresh_hostnames_failed: string;
+    rename_lock_purge_failed: string;
+    rename_ok: string;
+    rename_ok_lock_purged: string;
+    rename_domain_failed: string;
+    rename_domain_failed_toast: string;
+    unbind_lock_purge_failed: string;
+    unbind_ok: string;
+    unbind_ok_lock_purged: string;
+    unbind_domain_failed: string;
+    unbind_domain_failed_toast: string;
+    quick_port_invalid: string;
+    quick_started: string;
+    quick_start_failed: string;
+    quick_list_refreshed: string;
+    quick_list_refresh_failed: string;
+    quick_stopped: string;
+    quick_stop_failed: string;
+    quick_url_copied: string;
+    quick_url_copy_failed: string;
+    hostname_copied: string;
+    hostname_copy_failed: string;
+    copy_failed_clipboard: string;
+    delete_bound_note: string;
+    force_deleting_tunnel: string;
+    leftover_domain_cleanup_failed: string;
+    leftover_dns_deleted: string;
+    delete_lock_purge_failed: string;
+    cascade_domains: string;
+    cascade_locks: string;
+    tunnel_deleted: string;
+    cascade_join: string;
+    cascade_note: string;
+    tunnel_delete_failed: string;
+    client_list_refreshed: string;
+    client_domain_invalid: string;
+    client_port_invalid: string;
+    client_token_pair_invalid: string;
+    client_dup_edit: string;
+    client_dup_add: string;
+    client_dup_toast: string;
+    client_updated: string;
+    client_saved: string;
+    client_created: string;
+    client_saved_hint: string;
+    client_connected: string;
+    client_connect_failed: string;
+    client_disconnected: string;
+    client_disconnect_failed: string;
+    client_deleted: string;
+    client_deleted_toast: string;
+    detected_env: string;
+    target_binary: string;
+    official_url: string;
+    download_started: string;
+    install_failed: string;
+    login_started: string;
+    login_failed: string;
+    version_current: string;
+    version_toast: string;
+    version_check_failed: string;
+    updating_cloudflared: string;
+    update_result: string;
+    update_done: string;
+    update_failed: string;
+    quick_domain_assigned: string;
+    quick_domain_ready: string;
+    demo_tunnel_created_cred: string;
+    demo_tunnel_created: string;
+    demo_tunnel_deleted: string;
+    demo_tunnel_deleted_toast: string;
+    demo_server_connecting: string;
+    demo_server_proxy_up: string;
+    demo_server_connected: string;
+    demo_server_started: string;
+    demo_server_closed: string;
+    demo_server_stopped_toast: string;
+    demo_client_already: string;
+    demo_client_connecting: string;
+    demo_client_proxy_up: string;
+    demo_client_connected: string;
+    demo_client_not_running: string;
+    demo_client_closed: string;
+    demo_domain_invalid: string;
+    demo_lock_ok: string;
+    demo_unlock_ok: string;
+    demo_unlock_ok_toast: string;
+    demo_rotate_ok: string;
+    demo_missing_tunnel_id: string;
+    demo_remote_already: string;
+    demo_remote_token: string;
+    demo_remote_connected: string;
+    demo_default_config: string;
+    demo_remote_started: string;
+    demo_server_not_running: string;
+    demo_server_closed_named: string;
+    demo_tunnel_id_invalid: string;
+    demo_data: string;
+    demo_all: string;
+    demo_ingress_written: string;
+    demo_config_updated: string;
+    demo_host_created: string;
+    demo_host_created_toast: string;
+    demo_host_deleted: string;
+    demo_host_deleted_toast: string;
+    demo_cidr_created: string;
+    demo_cidr_created_toast: string;
+    demo_cidr_updated: string;
+    demo_cidr_updated_toast: string;
+    demo_cidr_deleted: string;
+    demo_cidr_deleted_toast: string;
+    demo_dns_bound: string;
+    demo_dns_bound_toast: string;
+    demo_dns_renamed: string;
+    demo_dns_renamed_toast: string;
+    demo_dns_unbound: string;
+    demo_dns_unbound_toast: string;
+    demo_quick_requesting: string;
+    demo_quick_started: string;
+    demo_quick_stopped: string;
+    demo_quick_stopped_toast: string;
+    demo_checking_version: string;
+    demo_version_latest: string;
+    demo_version_latest_toast: string;
+    demo_downloading: string;
+    demo_download_progress: string;
+    demo_download_done: string;
+    demo_download_started: string;
+    demo_login_page: string;
+    demo_login_page_toast: string;
+    demo_open_config_dir: string;
+    demo_exit_hint: string;
   };
 }

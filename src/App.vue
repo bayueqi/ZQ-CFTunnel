@@ -8,7 +8,7 @@
           class="app-logo-wrapper"
           :class="{ shake: isLogoShaking }"
           @click.stop="onLogoClick"
-          title="Cloudflared Logo（点击触发酒狐彩蛋语音~）"
+          :title="t.chrome.logo_title"
         >
           <img src="/cloudflared.ico" alt="Cloudflared Logo" class="app-logo" />
         </div>
@@ -24,7 +24,7 @@
         <button
           class="fluent-icon-btn sound-btn"
           @click="toggleSound"
-          :title="isSoundEnabled ? '点击关闭/静音全局音效' : '点击开启全局音效'"
+          :title="isSoundEnabled ? t.chrome.sound_mute_title : t.chrome.sound_unmute_title"
         >
           <span :class="['sound-icon', { spin: isSoundSpinning }]">
             {{ isSoundEnabled ? '🔊' : '🔇' }}
@@ -35,7 +35,7 @@
         <button
           class="fluent-icon-btn github-btn"
           @click="openUrl('https://github.com/bayueqi/ZQ-CFTunnel')"
-          title="前往 GitHub 仓库 (bayueqi/ZQ-CFTunnel)"
+          :title="t.chrome.github_title"
         >
           <svg class="github-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
             <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
@@ -76,7 +76,7 @@
         <button
           class="fluent-icon-btn theme-btn"
           @click="toggleTheme"
-          :title="isDarkMode ? '切换到浅色模式' : '切换到深色模式'"
+          :title="isDarkMode ? t.chrome.theme_to_light : t.chrome.theme_to_dark"
         >
           <span :class="['theme-icon', { spin: isThemeSpinning }]">
             {{ isDarkMode ? '☀' : '🌙' }}
@@ -87,7 +87,7 @@
         <button
           class="fluent-icon-btn win-ctrl-btn minimize-btn"
           @click.stop="handleMinimize"
-          title="最小化"
+          :title="t.chrome.btn_minimize"
         >
           <svg class="win-ctrl-icon" width="10" height="1" viewBox="0 0 10 1">
             <rect width="10" height="1" fill="currentColor" />
@@ -98,7 +98,7 @@
         <button
           class="fluent-icon-btn win-ctrl-btn maximize-btn"
           @click.stop="handleToggleMaximize"
-          :title="isMaximized ? '还原' : '最大化'"
+          :title="isMaximized ? t.chrome.btn_restore : t.chrome.btn_maximize"
         >
           <svg v-if="!isMaximized" class="win-ctrl-icon" width="10" height="10" viewBox="0 0 10 10">
             <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
@@ -112,7 +112,7 @@
         <button
           class="fluent-icon-btn win-ctrl-btn close-btn"
           @click.stop="handleCloseWindow"
-          title="关闭窗口 (自动隐藏到系统托盘)"
+          :title="t.chrome.btn_close"
         >
           <svg class="win-ctrl-icon" width="10" height="10" viewBox="0 0 10 10">
             <line x1="0.5" y1="0.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -130,10 +130,10 @@
         <button
           class="sidebar-toggle"
           @click="sidebarCollapsed = !sidebarCollapsed"
-          :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+          :title="sidebarCollapsed ? t.chrome.sidebar_expand : t.chrome.sidebar_collapse"
         >
           <span class="toggle-icon">{{ sidebarCollapsed ? '☰' : '⟨⟨' }}</span>
-          <span v-if="!sidebarCollapsed" class="toggle-text">收起</span>
+          <span v-if="!sidebarCollapsed" class="toggle-text">{{ t.chrome.sidebar_collapse_text }}</span>
         </button>
 
         <!-- 1. 服务端（含子级：临时链接 / 固定域名 / 云端托管） -->
@@ -239,7 +239,7 @@
                 <div class="quick-item-head">
                   <span class="quick-item-target mono">{{ quickTargetLabel(qt) }}</span>
                   <span class="type-badge" :class="qt.status === 'running' ? 'type-local' : 'type-remote'">
-                    {{ qt.status === 'running' ? '在线' : '生成中...' }}
+                    {{ qt.status === 'running' ? t.server_tab.quick_status_online : t.server_tab.quick_status_starting }}
                   </span>
                 </div>
                 <div class="quick-item-url">
@@ -357,7 +357,7 @@
                   </tr>
                   <tr v-if="serverTunnelList.length === 0">
                     <td colspan="7" class="empty-table">
-                      {{ refreshingTunnels.local ? '正在刷新列表...' : '未发现隧道' }}
+                      {{ refreshingTunnels.local ? t.server_tab.table_refreshing : t.server_tab.table_empty }}
                     </td>
                   </tr>
                 </tbody>
@@ -604,8 +604,8 @@
             <button class="tile-btn" @click="handleInstallCloudflared" :disabled="isDownloadingCloudflared">
               <span class="tile-icon">📦</span>
               <div class="tile-info">
-                <span class="tile-title">{{ t.misc_tab.btn_install || '安装 cloudflared' }}</span>
-                <span class="tile-desc">{{ t.misc_tab.btn_install_desc || '自动检测操作系统与CPU架构并下载至应用目录' }}</span>
+                <span class="tile-title">{{ t.misc_tab.btn_install }}</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_install_desc }}</span>
               </div>
             </button>
 
@@ -613,8 +613,8 @@
             <button class="tile-btn" @click="handleOpenConfigDir">
               <span class="tile-icon">📂</span>
               <div class="tile-info">
-                <span class="tile-title">{{ t.misc_tab.btn_open_config_dir || '打开本地配置文件目录' }}</span>
-                <span class="tile-desc">{{ t.misc_tab.btn_open_config_dir_desc || '在文件资源管理器中查看凭证目录（%USERPROFILE%\\.cloudflared）' }}</span>
+                <span class="tile-title">{{ t.misc_tab.btn_open_config_dir }}</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_open_config_dir_desc }}</span>
               </div>
             </button>
 
@@ -623,7 +623,7 @@
               <span class="tile-icon">🔑</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_login }}</span>
-                <span class="tile-desc">打开浏览器进行 Cloudflare 账户授权</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_login_desc }}</span>
               </div>
             </button>
 
@@ -632,7 +632,7 @@
               <span class="tile-icon">ℹ️</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_check_version }}</span>
-                <span class="tile-desc">查看项目目录下当前生效的 cloudflared 版本</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_check_version_desc }}</span>
               </div>
             </button>
 
@@ -641,7 +641,7 @@
               <span class="tile-icon">⚡</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_update }}</span>
-                <span class="tile-desc">检测项目目录下的 cloudflared 并执行升级</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_update_desc }}</span>
               </div>
             </button>
 
@@ -650,7 +650,7 @@
               <span class="tile-icon">⬇️</span>
               <div class="tile-info">
                 <span class="tile-title">{{ t.misc_tab.btn_download }}</span>
-                <span class="tile-desc">前往官方 GitHub 仓库查看最新 Releases</span>
+                <span class="tile-desc">{{ t.misc_tab.btn_download_desc }}</span>
               </div>
             </button>
           </div>
@@ -658,7 +658,7 @@
           <!-- 醒目的敏感凭证安全防泄露警告提示 (正下方红色醒目提示) -->
           <div class="config-warning-banner">
             <span class="warning-icon">⚠️</span>
-            <span class="warning-text">{{ t.misc_tab.config_dir_warning || '提示：请不要将 cert.pem 证书文件和 .json 隧道配置文件展示或分享给任何人，以免造成隐私泄露和隧道被盗用！' }}</span>
+            <span class="warning-text">{{ t.misc_tab.config_dir_warning }}</span>
           </div>
         </div>
 
@@ -675,7 +675,7 @@
       <div
         class="console-resizer"
         @mousedown="startConsoleResize"
-        title="按住上下拖拽调整控制台高度"
+        :title="t.chrome.console_resize_title"
       ></div>
 
       <div class="console-header">
@@ -1208,7 +1208,7 @@
           </div>
 
           <div v-if="tunnelFormLoadError" class="modal-hint warn">
-            {{ t.server_tab.form_load_failed }}：{{ tunnelFormLoadError }}
+            {{ t.server_tab.form_load_failed }}: {{ tunnelFormLoadError }}
           </div>
         </div>
         <div class="modal-footer">
@@ -1396,7 +1396,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
-import { LANG_ORDER, LANG_DATA } from './i18n';
+import { LANG_ORDER, LANG_DATA, fmt, setActiveLang } from './i18n';
 import { LangKey, TunnelInfo, QuickTunnelItem, ClientTunnelItem, LogEntry, DnsBinding } from './types';
 import { isTunnelNameValid, isPortValid, isDomainValid } from './utils/validation';
 import { getCloudflaredTarget } from './utils/cloudflaredDownloader';
@@ -1459,9 +1459,9 @@ const toggleSound = () => {
   localStorage.setItem('app_sound_enabled', isSoundEnabled.value ? 'true' : 'false');
   if (isSoundEnabled.value) {
     soundManager.playSuccess();
-    showToast('UI 提示音效已开启');
+    showToast(t.value.logs.toast_sound_on);
   } else {
-    showToast('UI 提示音效已静音');
+    showToast(t.value.logs.toast_sound_off);
   }
   setTimeout(() => {
     isSoundSpinning.value = false;
@@ -1486,6 +1486,10 @@ const syncThemeToDocument = () => {
 // 语言状态与自定义下拉菜单
 const savedLang = (localStorage.getItem('app_lang') as LangKey) || 'zh_CN';
 const currentLang = ref<LangKey>(LANG_DATA[savedLang] ? savedLang : 'zh_CN');
+// 同步给非 Vue 上下文（网页演示模式的 mock）取文案用
+setActiveLang(currentLang.value);
+// 同步给非 Vue 上下文（网页演示模式的 mock）取文案用
+setActiveLang(currentLang.value);
 const isLangDropdownOpen = ref(false);
 const langDropdownRef = ref<HTMLDivElement | null>(null);
 
@@ -1801,7 +1805,7 @@ const parseQuickKey = (key: string): { protocol: string; port: string } => {
 
 // 临时链接目标描述：hello_world / unix / unix+tls 与普通协议显示格式不同
 const quickTargetLabel = (qt: QuickTunnelItem) => {
-  if (qt.protocol === 'hello_world') return 'hello_world 内置测试服务器';
+  if (qt.protocol === 'hello_world') return t.value.logs.target_hello_world;
   if (qt.protocol === 'unix' || qt.protocol === 'unix+tls') return `${qt.protocol}:${qt.port}`;
   return `${qt.protocol}://127.0.0.1:${qt.port}`;
 };
@@ -2115,12 +2119,12 @@ const syncHostnameRoutes = async (tunnelId: string, name: string) => {
     try {
       await invoke<string>('delete_hostname_route', { routeId: id });
       appendLog(
-        `[SUCCESS] 已删除主机名路由 ${originalHostRoutes.value[id]} (${name})`,
+        `[SUCCESS] ${fmt(t.value.logs.host_route_deleted, { route: originalHostRoutes.value[id], name })}`,
         'success',
         'server',
       );
     } catch (err: any) {
-      appendLog(`[WARN] 主机名路由删除失败: ${errorText(err)}`, 'warn', 'server');
+      appendLog(`[WARN] ${fmt(t.value.logs.host_route_delete_failed, { err: errorText(err) })}`, 'warn', 'server');
     }
   }
   for (const r of tunnelFormHostRoutes.value) {
@@ -2131,7 +2135,7 @@ const syncHostnameRoutes = async (tunnelId: string, name: string) => {
       try {
         await invoke<string>('delete_hostname_route', { routeId: r.id });
       } catch (err: any) {
-        appendLog(`[WARN] 主机名路由 ${originalHostRoutes.value[r.id]} 删除失败: ${errorText(err)}`, 'warn', 'server');
+        appendLog(`[WARN] ${fmt(t.value.logs.host_route_delete_failed_named, { route: originalHostRoutes.value[r.id], err: errorText(err) })}`, 'warn', 'server');
         continue;
       }
     }
@@ -2143,7 +2147,7 @@ const syncHostnameRoutes = async (tunnelId: string, name: string) => {
       });
       appendLog(`[SUCCESS] ${res}`, 'success', 'server');
     } catch (err: any) {
-      appendLog(`[WARN] 主机名路由 ${host} 创建失败: ${errorText(err)}`, 'warn', 'server');
+      appendLog(`[WARN] ${fmt(t.value.logs.host_route_create_failed, { route: host, err: errorText(err) })}`, 'warn', 'server');
     }
   }
 };
@@ -2156,12 +2160,12 @@ const syncCidrRoutes = async (tunnelId: string, name: string) => {
     try {
       await invoke<string>('delete_cidr_route', { routeId: id });
       appendLog(
-        `[SUCCESS] 已删除 CIDR 路由 ${originalCidrRoutes.value[id].network} (${name})`,
+        `[SUCCESS] ${fmt(t.value.logs.cidr_route_deleted, { network: originalCidrRoutes.value[id].network, name })}`,
         'success',
         'server',
       );
     } catch (err: any) {
-      appendLog(`[WARN] CIDR 路由删除失败: ${errorText(err)}`, 'warn', 'server');
+      appendLog(`[WARN] ${fmt(t.value.logs.cidr_route_delete_failed, { err: errorText(err) })}`, 'warn', 'server');
     }
   }
   for (const r of tunnelFormCidrRoutes.value) {
@@ -2178,7 +2182,7 @@ const syncCidrRoutes = async (tunnelId: string, name: string) => {
         appendLog(`[SUCCESS] ${res}`, 'success', 'server');
       }
     } catch (err: any) {
-      appendLog(`[WARN] CIDR 路由 ${network} 保存失败: ${errorText(err)}`, 'warn', 'server');
+      appendLog(`[WARN] ${fmt(t.value.logs.cidr_route_save_failed, { network, err: errorText(err) })}`, 'warn', 'server');
     }
   }
 };
@@ -2199,7 +2203,7 @@ const confirmTunnelForm = async () => {
 
   const badRow = tunnelFormRows.value.findIndex((row, i) => ingressRowErrorKey(row, i));
   if (badRow >= 0) {
-    appendLog(`[ERROR] 第 ${badRow + 1} 条路由填写有误，请检查`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.route_invalid_at, { index: badRow + 1 })}`, 'error', 'server');
     return;
   }
   // 同一个域名出现两次：云端按顺序只认第一条，第二条永远不会命中，属于白写
@@ -2223,20 +2227,20 @@ const confirmTunnelForm = async () => {
     let tunnelId = tunnelFormTarget.value?.id || '';
     if (isCreate) {
       const res = await invoke<string>('create_tunnel', { name });
-      appendLog(`[SUCCESS] 成功创建隧道 [${name}]: ${res}`, 'success', 'server');
+      appendLog(`[SUCCESS] ${fmt(t.value.logs.tunnel_created, { name, res })}`, 'success', 'server');
       // 新隧道要拿它的 ID 才能写云端配置，而 ID 只能从刷新后的列表里取
       await handleRefreshTunnels();
       // 注意别把这个 lambda 参数叫 t —— 会遮住 i18n 的 t，自检脚本也会误判成文案键
       tunnelId = tunnelList.value.find(tn => tn.name.trim() === name)?.id || '';
       if (!tunnelId) {
-        throw new Error('隧道已创建，但未取到它的 ID；请点「刷新」后再打开「修改」补配置');
+        throw new Error(t.value.logs.err_tunnel_id_missing);
       }
     }
-    if (!tunnelId) throw new Error('未找到隧道 ID，无法写入云端配置');
+    if (!tunnelId) throw new Error(t.value.logs.err_tunnel_id_not_found);
 
     // ① 已发布应用程序路由
     await invoke<string>('update_tunnel_config', { tunnelId, ingress: buildIngress() });
-    appendLog(`[SUCCESS] 已发布应用程序路由已写入云端 (${name})`, 'success', 'server');
+    appendLog(`[SUCCESS] ${fmt(t.value.logs.ingress_written, { name })}`, 'success', 'server');
 
     // ② 新增的域名补 DNS 路由。
     //    只补不删：删域名不连带删 DNS 记录，免得误删别处在用的 CNAME，
@@ -2250,7 +2254,7 @@ const confirmTunnelForm = async () => {
         const dnsRes = await invoke<string>('route_dns_tunnel', { name, hostname: host });
         appendLog(`[SUCCESS] ${dnsRes}`, 'success', 'server');
       } catch (err: any) {
-        appendLog(`[WARN] 域名 ${host} 的 DNS 路由创建失败: ${errorText(err)}`, 'warn', 'server');
+        appendLog(`[WARN] ${fmt(t.value.logs.dns_route_create_failed, { host, err: errorText(err) })}`, 'warn', 'server');
       }
     }
 
@@ -2277,7 +2281,7 @@ const confirmTunnelForm = async () => {
     showToast(t.value.server_tab.form_saved);
     showTunnelModal.value = false;
   } catch (err: any) {
-    appendLog(`[ERROR] 保存隧道配置失败: ${errorText(err)}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_save_failed, { err: errorText(err) })}`, 'error', 'server');
     showToast(`${errorText(err)}`);
   } finally {
     tunnelFormSaving.value = false;
@@ -2390,7 +2394,7 @@ const accessTokenInput = ref(localStorage.getItem('access_api_token') || '');
 const saveAccessToken = () => {
   accessTokenInput.value = accessTokenInput.value.trim();
   localStorage.setItem('access_api_token', accessTokenInput.value);
-  appendLog('[INFO] 访问密码锁凭证（Access Token）已保存', 'info', 'misc');
+  appendLog(`[INFO] ${t.value.logs.access_token_saved_log}`, 'info', 'misc');
   showToast(t.value.misc_tab.access_token_saved);
 };
 
@@ -2413,10 +2417,10 @@ const doLock = async (hostname: string): Promise<boolean> => {
     persistTunnelLocks();
     lockInfoDraft.value = { hostname: res.hostname, clientId: res.client_id, clientSecret: res.client_secret };
     showLockInfoModal.value = true;
-    appendLog(`[SUCCESS] 已为域名 [${res.hostname}] 开启密码锁，只有携带访问密码的客户端能连接`, 'success', 'server');
+    appendLog(`[SUCCESS] ${fmt(t.value.logs.lock_ok, { host: res.hostname })}`, 'success', 'server');
     return true;
   } catch (err: any) {
-    appendLog(`[ERROR] 上锁失败: ${errorText(err)}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.lock_failed, { err: errorText(err) })}`, 'error', 'server');
     showToast(`${errorText(err)}`);
     return false;
   }
@@ -2437,7 +2441,7 @@ const doUnlock = async (entry: TunnelLockEntry, opts: { quiet?: boolean } = {}):
     appendLog(`[SUCCESS] ${res} (${entry.hostname})`, 'success', 'server');
     return true;
   } catch (err: any) {
-    appendLog(`[ERROR] 解锁失败: ${errorText(err)}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.unlock_failed, { err: errorText(err) })}`, 'error', 'server');
     if (!opts.quiet) showToast(`${errorText(err)}`);
     return false;
   }
@@ -2468,10 +2472,10 @@ const doRotatePassword = async (entry: TunnelLockEntry): Promise<boolean> => {
     persistTunnelLocks();
     lockInfoDraft.value = { hostname: res.hostname, clientId: res.client_id, clientSecret: res.client_secret };
     showLockInfoModal.value = true;
-    appendLog(`[SUCCESS] 已为域名 [${res.hostname}] 更换访问密码，旧密码作废`, 'success', 'server');
+    appendLog(`[SUCCESS] ${fmt(t.value.logs.rotate_ok, { host: res.hostname })}`, 'success', 'server');
     return true;
   } catch (err: any) {
-    appendLog(`[ERROR] 更换密码失败: ${errorText(err)}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.rotate_failed, { err: errorText(err) })}`, 'error', 'server');
     showToast(`${errorText(err)}`);
     return false;
   }
@@ -2606,7 +2610,7 @@ const findLeftoverDomains = async (domains: BoundDomain[]): Promise<BoundDomain[
     for (const list of Object.values(map)) for (const b of list) alive.add(b.id);
     return domains.filter(d => alive.has(d.recordId));
   } catch (err: any) {
-    appendLog(`[WARN] 核对残留域名失败，将直接尝试补删: ${errorText(err)}`, 'warn', 'server');
+    appendLog(`[WARN] ${fmt(t.value.logs.leftover_check_failed, { err: errorText(err) })}`, 'warn', 'server');
     return domains;
   }
 };
@@ -2705,7 +2709,7 @@ const logs = ref<LogEntry[]>([
   {
     id: 'init-1',
     timestamp: new Date().toLocaleTimeString(),
-    message: 'CFTunnel (Windows 11 Fluent) 已启动就绪',
+    message: t.value.logs.app_ready,
     level: 'info',
     source: 'system',
   },
@@ -2802,7 +2806,7 @@ const copyLogs = async () => {
     await navigator.clipboard.writeText(fullText);
     showToast(t.value.console.copy_logs_success);
   } catch {
-    appendLog('复制日志失败，请检查剪贴板权限', 'error');
+    appendLog(t.value.logs.copy_logs_failed, 'error');
   }
 };
 
@@ -2810,9 +2814,9 @@ const copyLogs = async () => {
 const openUrl = async (url: string) => {
   try {
     await invoke('open_external_url', { url });
-    appendLog(`[INFO] 已在默认浏览器中打开: ${url}`, 'info', 'misc');
+    appendLog(`[INFO] ${fmt(t.value.logs.opened_in_browser, { url })}`, 'info', 'misc');
   } catch (err) {
-    appendLog(`打开链接失败: ${err}`, 'error', 'misc');
+    appendLog(`${fmt(t.value.logs.open_link_failed, { err })}`, 'error', 'misc');
   }
 };
 
@@ -2820,9 +2824,9 @@ const openUrl = async (url: string) => {
 const handleOpenConfigDir = async () => {
   try {
     const dir = await invoke<string>('open_cloudflared_config_dir');
-    showToast(`已打开配置目录: ${dir}`);
+    showToast(`${fmt(t.value.logs.config_dir_opened, { dir })}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 打开配置文件目录失败: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] ${fmt(t.value.logs.config_dir_open_failed, { err })}`, 'error', 'misc');
   }
 };
 
@@ -2866,9 +2870,9 @@ const handleRefreshTunnels = async () => {
     // 与后端对账固定隧道的运行状态（多开后靠这里把已退出的进程同步掉）
     await reconcileServerRunning();
 
-    appendLog(`[INFO] 已刷新隧道列表，共获取到 ${res.length} 条隧道`, 'info', 'server');
+    appendLog(`[INFO] ${fmt(t.value.logs.tunnel_list_refreshed, { count: res.length })}`, 'info', 'server');
   } catch (err: any) {
-    appendLog(`[ERROR] 刷新隧道列表失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_list_refresh_failed, { err })}`, 'error', 'server');
   } finally {
     refreshingTunnels.value.local = false;
   }
@@ -2876,7 +2880,7 @@ const handleRefreshTunnels = async () => {
 
 // 源站目标描述文案（日志 / 提示用）
 const describeServerTarget = (protocol: string, port: string, unixSocket: string) => {
-  if (protocol === 'hello_world') return 'hello_world 内置测试服务器';
+  if (protocol === 'hello_world') return t.value.logs.target_hello_world;
   if (protocol === 'unix' || protocol === 'unix+tls') return `${protocol}:${unixSocket}`;
   return `${protocol}://127.0.0.1:${port}`;
 };
@@ -2919,18 +2923,18 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
   const saved = loadTunnelCfg(name);
   if (!saved) {
     soundManager.playClick();
-    appendLog(`[WARN] 隧道 [${name}] 还没有配置协议和端口，请先点击「修改」补全`, 'warn', 'server');
+    appendLog(`[WARN] ${fmt(t.value.logs.tunnel_need_config, { name })}`, 'warn', 'server');
     showToast(t.value.server_tab.edit_need_config);
     openTunnelEditModal(tunnel);
     return;
   }
   if (saved.protocol === 'unix' || saved.protocol === 'unix+tls') {
     if (!saved.unixSocket) {
-      appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'server');
+      appendLog(`[ERROR] ${t.value.logs.unix_socket_required}`, 'error', 'server');
       return;
     }
   } else if (saved.protocol !== 'hello_world' && !isPortValid(saved.port)) {
-    appendLog(`[ERROR] 隧道 [${name}] 保存的端口不合法，请点击「修改」更正`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_port_invalid, { name })}`, 'error', 'server');
     openTunnelEditModal(tunnel);
     return;
   }
@@ -2944,9 +2948,9 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
       unixSocket: saved.unixSocket,
     });
     markServerRunning(name);
-    showToast(`隧道 [${name}] 已启动 (${describeServerTarget(saved.protocol, saved.port, saved.unixSocket)})`);
+    showToast(`${fmt(t.value.logs.tunnel_started, { name, target: describeServerTarget(saved.protocol, saved.port, saved.unixSocket) })}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 启动服务端隧道失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_start_failed, { err })}`, 'error', 'server');
   }
 };
 
@@ -2955,7 +2959,7 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
 const handleStopServer = async (name?: string) => {
   const target = (typeof name === 'string' ? name : serverConfig.value.name).trim();
   if (!target) {
-    appendLog(`[ERROR] 未指定要停止的隧道名`, 'error', 'server');
+    appendLog(`[ERROR] ${t.value.logs.no_tunnel_to_stop}`, 'error', 'server');
     return;
   }
   soundManager.playClick();
@@ -2963,9 +2967,9 @@ const handleStopServer = async (name?: string) => {
     // 停止成功的日志由 Rust 侧统一广播，这里不再重复打印
     await invoke<string>('stop_server_tunnel', { name: target });
     markServerStopped(target);
-    showToast(`隧道 [${target}] 已停止`);
+    showToast(`${fmt(t.value.logs.tunnel_stopped, { name: target })}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 停止隧道 [${target}] 失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_stop_failed, { name: target, err })}`, 'error', 'server');
   }
 };
 
@@ -2974,7 +2978,7 @@ const openDnsAddModal = () => {
   // 没有任何固定域名隧道时无处可绑：直接提示，不弹空下拉框
   if (serverTunnelList.value.length === 0) {
     soundManager.playClick();
-    appendLog('[ERROR] 未发现隧道，请先创建固定域名隧道再绑定域名', 'error', 'server');
+    appendLog(`[ERROR] ${t.value.logs.no_tunnel_for_dns}`, 'error', 'server');
     showToast(t.value.server_tab.quick_list_empty);
     return;
   }
@@ -3022,13 +3026,13 @@ const handleRouteDns = async (): Promise<boolean> => {
   try {
     const res = await invoke<string>('route_dns_tunnel', { name, hostname: domain });
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
-    showToast(`DNS 路由绑定成功: ${domain} → ${name}`);
+    showToast(`${fmt(t.value.logs.dns_bound_ok, { domain, name })}`);
     // 绑定后立即刷新域名列表，新域名马上出现在「已绑定域名」里
     await refreshHostnamesOnly();
     return true;
   } catch (err: any) {
-    appendLog(`[ERROR] 绑定 DNS 路由失败: ${err}`, 'error', 'server');
-    showToast(`绑定失败: ${err}`);
+    appendLog(`[ERROR] ${fmt(t.value.logs.dns_bind_failed, { err })}`, 'error', 'server');
+    showToast(`${fmt(t.value.logs.bind_failed_toast, { err })}`);
     return false;
   }
 };
@@ -3040,7 +3044,7 @@ const refreshHostnamesOnly = async () => {
     const map = await invoke<Record<string, DnsBinding[]>>('get_tunnel_hostnames');
     for (const t of tunnelList.value) t.hostnames = map[t.id] || [];
   } catch (err: any) {
-    appendLog(`[WARN] 刷新绑定域名失败: ${err}`, 'warn', 'server');
+    appendLog(`[WARN] ${fmt(t.value.logs.refresh_hostnames_failed, { err })}`, 'warn', 'server');
   }
 };
 
@@ -3093,20 +3097,20 @@ const confirmEditDnsRoute = async () => {
     ]);
     if (failed.length) {
       appendLog(
-        `[WARN] 旧域名 [${target.hostname}] 的密码锁未能清除，云端可能残留拦截它的 Access 应用，可稍后到 Cloudflare 面板手动删除`,
+        `[WARN] ${fmt(t.value.logs.rename_lock_purge_failed, { host: target.hostname })}`,
         'warn',
         'server',
       );
     }
 
     showToast(
-      `${target.hostname} → ${next}${done.length ? '，旧域名的密码锁已删除' : ''}`,
+      `${fmt(t.value.logs.rename_ok, { from: target.hostname, to: next })}${done.length ? t.value.logs.rename_ok_lock_purged : ''}`,
     );
     cancelEditDnsRoute();
     await refreshHostnamesOnly();
   } catch (err: any) {
-    appendLog(`[ERROR] 修改绑定域名失败: ${err}`, 'error', 'server');
-    showToast(`修改域名失败: ${err}`);
+    appendLog(`[ERROR] ${fmt(t.value.logs.rename_domain_failed, { err })}`, 'error', 'server');
+    showToast(`${fmt(t.value.logs.rename_domain_failed_toast, { err })}`);
   } finally {
     isDnsMutating.value = false;
   }
@@ -3137,7 +3141,7 @@ const confirmUnbindDnsRoute = async () => {
     ]);
     if (failed.length) {
       appendLog(
-        `[WARN] 域名 [${target.hostname}] 的密码锁未能清除，云端可能残留拦截该域名的 Access 应用，可稍后到 Cloudflare 面板手动删除`,
+        `[WARN] ${fmt(t.value.logs.unbind_lock_purge_failed, { host: target.hostname })}`,
         'warn',
         'server',
       );
@@ -3146,13 +3150,13 @@ const confirmUnbindDnsRoute = async () => {
     const res = await invoke<string>('delete_dns_route', { recordId: target.recordId });
     appendLog(`[SUCCESS] ${res} (${target.hostname})`, 'success', 'server');
     showToast(
-      `${target.hostname} 已解除绑定${done.length ? '，密码锁已一并删除' : ''}`,
+      `${fmt(t.value.logs.unbind_ok, { host: target.hostname })}${done.length ? t.value.logs.unbind_ok_lock_purged : ''}`,
     );
     cancelUnbindDnsRoute();
     await refreshHostnamesOnly();
   } catch (err: any) {
-    appendLog(`[ERROR] 解除域名绑定失败: ${err}`, 'error', 'server');
-    showToast(`解除绑定失败: ${err}`);
+    appendLog(`[ERROR] ${fmt(t.value.logs.unbind_domain_failed, { err })}`, 'error', 'server');
+    showToast(`${fmt(t.value.logs.unbind_domain_failed_toast, { err })}`);
   } finally {
     isDnsMutating.value = false;
   }
@@ -3166,12 +3170,12 @@ const handleStartQuick = async (): Promise<boolean> => {
 
   if (protocol === 'unix' || protocol === 'unix+tls') {
     if (!unixSocket) {
-      appendLog(`[ERROR] unix / unix+tls 协议必须填写套接字路径`, 'error', 'quick');
+      appendLog(`[ERROR] ${t.value.logs.unix_socket_required}`, 'error', 'quick');
       return false;
     }
   } else if (protocol !== 'hello_world' && !isPortValid(port)) {
     quickPortHasError.value = true;
-    appendLog(`[ERROR] 本地端口错误`, 'error', 'quick');
+    appendLog(`[ERROR] ${t.value.logs.quick_port_invalid}`, 'error', 'quick');
     return false;
   }
   soundManager.playSuccess();
@@ -3191,10 +3195,10 @@ const handleStartQuick = async (): Promise<boolean> => {
     // 移除同 key 的旧条目，新增一条「启动中」状态的条目
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
     quickTunnels.value.push({ key, protocol, port: displayPort, url: '', status: 'starting' });
-    showToast('临时链接已启动，临时域名生成中...');
+    showToast(t.value.logs.quick_started);
     return true;
   } catch (err: any) {
-    appendLog(`[ERROR] 启动临时链接失败: ${err}`, 'error', 'quick');
+    appendLog(`[ERROR] ${fmt(t.value.logs.quick_start_failed, { err })}`, 'error', 'quick');
     return false;
   }
 };
@@ -3234,9 +3238,9 @@ const refreshQuickTunnels = async () => {
       };
     });
     quickTunnels.value = merged;
-    appendLog(`[INFO] 已刷新临时链接列表，共获取到 ${merged.length} 条隧道`, 'info', 'quick');
+    appendLog(`[INFO] ${fmt(t.value.logs.quick_list_refreshed, { count: merged.length })}`, 'info', 'quick');
   } catch (err: any) {
-    appendLog(`[ERROR] 刷新临时链接列表失败: ${err}`, 'error', 'quick');
+    appendLog(`[ERROR] ${fmt(t.value.logs.quick_list_refresh_failed, { err })}`, 'error', 'quick');
   } finally {
     refreshingTunnels.value.quick = false;
   }
@@ -3264,9 +3268,9 @@ const confirmStopQuick = async () => {
     // 停止成功的日志由 Rust 侧统一广播（含「临时域名已失效」），这里不再重复打印
     await invoke<string>('stop_quick_tunnel', { key });
     quickTunnels.value = quickTunnels.value.filter(t => t.key !== key);
-    showToast('临时链接已停止');
+    showToast(t.value.logs.quick_stopped);
   } catch (err: any) {
-    appendLog(`[ERROR] 停止临时链接失败: ${err}`, 'error', 'quick');
+    appendLog(`[ERROR] ${fmt(t.value.logs.quick_stop_failed, { err })}`, 'error', 'quick');
   }
 };
 
@@ -3274,9 +3278,9 @@ const confirmStopQuick = async () => {
 const copyQuickUrl = async (url: string) => {
   try {
     await navigator.clipboard.writeText(url);
-    showToast('临时链接已复制到剪贴板');
+    showToast(t.value.logs.quick_url_copied);
   } catch {
-    appendLog('复制临时链接失败，请检查剪贴板权限', 'error', 'quick');
+    appendLog(t.value.logs.quick_url_copy_failed, 'error', 'quick');
   }
 };
 
@@ -3284,9 +3288,9 @@ const copyQuickUrl = async (url: string) => {
 const copyHostname = async (hostname: string) => {
   try {
     await navigator.clipboard.writeText(hostname);
-    showToast(`域名已复制: ${hostname}`);
+    showToast(`${fmt(t.value.logs.hostname_copied, { hostname })}`);
   } catch {
-    appendLog(`复制域名失败: ${hostname}（请检查剪贴板权限）`, 'error', 'server');
+    appendLog(`${fmt(t.value.logs.hostname_copy_failed, { hostname })}`, 'error', 'server');
   }
 };
 
@@ -3297,7 +3301,7 @@ const copyText = async (text: string) => {
     await navigator.clipboard.writeText(text);
     showToast(t.value.server_tab.copied_toast);
   } catch {
-    appendLog('复制失败，请检查剪贴板权限', 'error', 'server');
+    appendLog(t.value.logs.copy_failed_clipboard, 'error', 'server');
   }
 };
 
@@ -3342,8 +3346,8 @@ const confirmDeleteTunnel = async () => {
     // 停不掉也不影响强制删除，继续往下走
   }
 
-  const domainNote = bound.length ? `（含 ${bound.length} 条绑定域名）` : '';
-  appendLog(`[INFO] 正在强制删除隧道 [${target.name}]${domainNote}...`, 'info', 'server');
+  const domainNote = bound.length ? `${fmt(t.value.logs.delete_bound_note, { count: bound.length })}` : '';
+  appendLog(`[INFO] ${fmt(t.value.logs.force_deleting_tunnel, { name: target.name, note: domainNote })}...`, 'info', 'server');
   try {
     const res = await invoke<string>('delete_tunnel', { name: target.name });
     appendLog(`[SUCCESS] ${res}`, 'success', 'server');
@@ -3356,33 +3360,33 @@ const confirmDeleteTunnel = async () => {
         await invoke<string>('delete_dns_route', { recordId: d.recordId });
         dnsDeleted += 1;
       } catch (err: any) {
-        appendLog(`[WARN] 残留域名 [${d.hostname}] 清理失败: ${errorText(err)}`, 'warn', 'server');
+        appendLog(`[WARN] ${fmt(t.value.logs.leftover_domain_cleanup_failed, { host: d.hostname, err: errorText(err) })}`, 'warn', 'server');
       }
     }
-    if (dnsDeleted) appendLog(`[INFO] 已补删 ${dnsDeleted} 条残留在云端的域名绑定`, 'info', 'server');
+    if (dnsDeleted) appendLog(`[INFO] ${fmt(t.value.logs.leftover_dns_deleted, { count: dnsDeleted })}`, 'info', 'server');
 
     // 2. 密码锁：逐域名删掉云端的 Access 应用 / 策略 / Service Token（含本地记录），
     //    否则域名没了、锁还在云端拦着，软件里也再定位不到它。
     const { done, failed } = await purgeDomainLocks(bound);
     if (failed.length) {
       appendLog(
-        `[WARN] 以下域名的密码锁未能清除，云端可能残留 Access 应用，可稍后到 Cloudflare 面板手动删除: ${failed.join('、')}`,
+        `[WARN] ${fmt(t.value.logs.delete_lock_purge_failed, { list: failed.join(t.value.logs.cascade_join) })}`,
         'warn',
         'server',
       );
     }
 
     const noteParts: string[] = [];
-    if (bound.length || dnsDeleted) noteParts.push(`域名 ${Math.max(bound.length, dnsDeleted)} 条`);
-    if (done.length) noteParts.push(`密码锁 ${done.length} 把`);
+    if (bound.length || dnsDeleted) noteParts.push(`${fmt(t.value.logs.cascade_domains, { count: Math.max(bound.length, dnsDeleted) })}`);
+    if (done.length) noteParts.push(`${fmt(t.value.logs.cascade_locks, { count: done.length })}`);
     showToast(
-      `隧道 [${target.name}] 已删除${noteParts.length ? `，已连带清理${noteParts.join('、')}` : ''}`,
+      `${fmt(t.value.logs.tunnel_deleted, { name: target.name, note: noteParts.length ? fmt(t.value.logs.cascade_note, { list: noteParts.join(t.value.logs.cascade_join) }) : '' })}`,
     );
 
     if (selectedTunnel.value?.id === target.id) selectedTunnel.value = null;
     await handleRefreshTunnels();
   } catch (err: any) {
-    appendLog(`[ERROR] 删除隧道失败: ${err}`, 'error', 'server');
+    appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_delete_failed, { err })}`, 'error', 'server');
   }
 };
 
@@ -3412,7 +3416,7 @@ const refreshClientTunnels = async (withLog = false) => {
   await refreshClientConnections();
   if (withLog) {
     appendLog(
-      `[INFO] 已刷新客户端隧道列表，共获取到 ${clientRunningKeys.value.length} 条隧道`,
+      `[INFO] ${fmt(t.value.logs.client_list_refreshed, { count: clientRunningKeys.value.length })}`,
       'info',
       'client',
     );
@@ -3463,16 +3467,16 @@ const confirmClientAdd = async () => {
 
   if (!isDomainValid(domain)) {
     clientFormDomainHasError.value = true;
-    appendLog(`[ERROR] 客户端域名格式错误`, 'error', 'client');
+    appendLog(`[ERROR] ${t.value.logs.client_domain_invalid}`, 'error', 'client');
     return;
   }
   if (!isPortValid(port)) {
     clientFormPortHasError.value = true;
-    appendLog(`[ERROR] 本地监听端口错误`, 'error', 'client');
+    appendLog(`[ERROR] ${t.value.logs.client_port_invalid}`, 'error', 'client');
     return;
   }
   if (tokenId.length > 0 !== tokenSecret.length > 0) {
-    appendLog(`[ERROR] 访问账号与访问密码必须同时填写或同时留空`, 'error', 'client');
+    appendLog(`[ERROR] ${t.value.logs.client_token_pair_invalid}`, 'error', 'client');
     return;
   }
 
@@ -3487,16 +3491,16 @@ const confirmClientAdd = async () => {
       t => t.key === key && t.key !== editingClientKey.value,
     );
     if (dup) {
-      appendLog(`[ERROR] 客户端隧道 [${key}] 已存在，请勿重复`, 'error', 'client');
-      showToast('该隧道已存在');
+      appendLog(`[ERROR] ${fmt(t.value.logs.client_dup_edit, { key })}`, 'error', 'client');
+      showToast(t.value.logs.client_dup_toast);
       return;
     }
     const idx = savedClientTunnels.value.findIndex(t => t.key === editingClientKey.value);
     if (idx !== -1) savedClientTunnels.value[idx] = entry;
     persistClientTunnels();
     soundManager.playSuccess();
-    appendLog(`[SUCCESS] 客户端隧道配置已更新为 [${domain}:${port}]`, 'success', 'client');
-    showToast('客户端隧道已保存');
+    appendLog(`[SUCCESS] ${fmt(t.value.logs.client_updated, { target: `${domain}:${port}` })}`, 'success', 'client');
+    showToast(t.value.logs.client_saved);
     showClientAddModal.value = false;
     editingClientKey.value = '';
     return;
@@ -3504,16 +3508,16 @@ const confirmClientAdd = async () => {
 
   // 新增模式：重复直接拦掉，只落库保存，不自动启动（由用户点行内「启动」再连）
   if (savedClientTunnels.value.some(t => t.key === key)) {
-    appendLog(`[ERROR] 客户端隧道 [${key}] 已存在，请勿重复添加`, 'error', 'client');
-    showToast('该隧道已存在');
+    appendLog(`[ERROR] ${fmt(t.value.logs.client_dup_add, { key })}`, 'error', 'client');
+    showToast(t.value.logs.client_dup_toast);
     return;
   }
 
   savedClientTunnels.value.push(entry);
   persistClientTunnels();
   soundManager.playSuccess();
-  appendLog(`[SUCCESS] 客户端隧道配置已保存 [${domain}:${port}]`, 'success', 'client');
-  showToast('已保存，点「启动」后连接');
+  appendLog(`[SUCCESS] ${fmt(t.value.logs.client_created, { target: `${domain}:${port}` })}`, 'success', 'client');
+  showToast(t.value.logs.client_saved_hint);
   showClientAddModal.value = false;
 };
 
@@ -3528,9 +3532,9 @@ const handleStartClient = async (row: SavedClientTunnel) => {
       serviceTokenId: row.tokenId || null,
       serviceTokenSecret: row.tokenSecret || null,
     });
-    showToast(`客户端隧道 ${row.domain}:${row.port} 已连接`);
+    showToast(`${fmt(t.value.logs.client_connected, { target: `${row.domain}:${row.port}` })}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 启动客户端隧道失败: ${err}`, 'error', 'client');
+    appendLog(`[ERROR] ${fmt(t.value.logs.client_connect_failed, { err })}`, 'error', 'client');
     showToast(`${err}`);
   } finally {
     await refreshClientConnections();
@@ -3546,9 +3550,9 @@ const handleStopClient = async (conn: SavedClientTunnel) => {
       domain: conn.domain,
       port: conn.port,
     });
-    showToast(`已断开 ${conn.domain}:${conn.port}`);
+    showToast(`${fmt(t.value.logs.client_disconnected, { target: `${conn.domain}:${conn.port}` })}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 断开客户端连接失败: ${err}`, 'error', 'client');
+    appendLog(`[ERROR] ${fmt(t.value.logs.client_disconnect_failed, { err })}`, 'error', 'client');
   } finally {
     await refreshClientConnections();
   }
@@ -3579,17 +3583,17 @@ const confirmDeleteClient = async () => {
   }
   savedClientTunnels.value = savedClientTunnels.value.filter(t => t.key !== row.key);
   persistClientTunnels();
-  appendLog(`[INFO] 已删除客户端隧道 [${row.domain}:${row.port}]`, 'warn', 'client');
-  showToast(`已删除 ${row.domain}:${row.port}`);
+  appendLog(`[INFO] ${fmt(t.value.logs.client_deleted, { target: `${row.domain}:${row.port}` })}`, 'warn', 'client');
+  showToast(`${fmt(t.value.logs.client_deleted_toast, { target: `${row.domain}:${row.port}` })}`);
   await refreshClientConnections();
 };
 
 // 安装 cloudflared 流程 (根据系统与架构获取官方直链并下载至应用目录)
 const handleInstallCloudflared = async () => {
   const target = getCloudflaredTarget();
-  appendLog(`[INFO] 检测到当前系统环境: ${target.displayName} (系统: ${target.os}, 架构: ${target.arch})`, 'info', 'misc');
-  appendLog(`[INFO] 目标二进制文件: ${target.fileName}`, 'info', 'misc');
-  appendLog(`[INFO] 官方直链: ${target.downloadUrl}`, 'info', 'misc');
+  appendLog(`[INFO] ${fmt(t.value.logs.detected_env, { display: target.displayName, os: target.os, arch: target.arch })}`, 'info', 'misc');
+  appendLog(`[INFO] ${fmt(t.value.logs.target_binary, { file: target.fileName })}`, 'info', 'misc');
+  appendLog(`[INFO] ${fmt(t.value.logs.official_url, { url: target.downloadUrl })}`, 'info', 'misc');
 
   isDownloadingCloudflared.value = true;
   try {
@@ -3597,10 +3601,10 @@ const handleInstallCloudflared = async () => {
       downloadUrl: target.downloadUrl,
       filename: target.fileName,
     });
-    showToast('已启动 cloudflared 下载，请观察控制台进度');
+    showToast(t.value.logs.download_started);
     appendLog(`[INFO] ${res}`, 'info', 'misc');
   } catch (err: any) {
-    appendLog(`[ERROR] 启动安装流程失败: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] ${fmt(t.value.logs.install_failed, { err })}`, 'error', 'misc');
   } finally {
     isDownloadingCloudflared.value = false;
   }
@@ -3610,30 +3614,30 @@ const handleInstallCloudflared = async () => {
 const handleCloudflaredLogin = async () => {
   try {
     await invoke<string>('login_cloudflared');
-    showToast('已启动 Cloudflared 授权流程');
+    showToast(t.value.logs.login_started);
   } catch (err: any) {
-    appendLog(`[ERROR] 启动授权失败: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] ${fmt(t.value.logs.login_failed, { err })}`, 'error', 'misc');
   }
 };
 
 const handleCheckVersion = async () => {
   try {
     const ver = await invoke<string>('check_cloudflared_version');
-    appendLog(`[INFO] 当前生效的 Cloudflared 版本: ${ver}`, 'info', 'misc');
-    showToast(`版本: ${ver}`);
+    appendLog(`[INFO] ${fmt(t.value.logs.version_current, { version: ver })}`, 'info', 'misc');
+    showToast(`${fmt(t.value.logs.version_toast, { version: ver })}`);
   } catch (err: any) {
-    appendLog(`[ERROR] 检查版本失败: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] ${fmt(t.value.logs.version_check_failed, { err })}`, 'error', 'misc');
   }
 };
 
 const handleUpdateCloudflared = async () => {
-  appendLog('[INFO] 正在检查并更新 cloudflared...', 'info', 'misc');
+  appendLog(`[INFO] ${t.value.logs.updating_cloudflared}`, 'info', 'misc');
   try {
     const res = await invoke<string>('update_cloudflared');
-    appendLog(`[INFO] 更新结果: ${res}`, 'info', 'misc');
-    showToast('Cloudflared 更新检查完成');
+    appendLog(`[INFO] ${fmt(t.value.logs.update_result, { result: res })}`, 'info', 'misc');
+    showToast(t.value.logs.update_done);
   } catch (err: any) {
-    appendLog(`[ERROR] 更新失败: ${err}`, 'error', 'misc');
+    appendLog(`[ERROR] ${fmt(t.value.logs.update_failed, { err })}`, 'error', 'misc');
   }
 };
 
@@ -3723,8 +3727,8 @@ onMounted(async () => {
         const { protocol, port } = parseQuickKey(key);
         quickTunnels.value.push({ key, protocol, port, url, status: 'running' });
       }
-      appendLog(`[SUCCESS] 临时域名已分配: ${url}`, 'success', 'quick');
-      showToast('临时域名已生成');
+      appendLog(`[SUCCESS] ${fmt(t.value.logs.quick_domain_assigned, { url })}`, 'success', 'quick');
+      showToast(t.value.logs.quick_domain_ready);
     });
   } catch (e) {
     console.error('Listen event error:', e);
