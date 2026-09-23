@@ -190,7 +190,10 @@
                   {{ t.server_tab.btn_create }}
                 </button>
                 <button class="fluent-btn small" @click="refreshQuickTunnels" :disabled="refreshingTunnels.quick">
-                  <span class="btn-icon" :class="{ spinning: refreshingTunnels.quick }">🔄</span>
+                  <svg class="ico btn-icon" :class="{ spinning: refreshingTunnels.quick }" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
                   {{ refreshingTunnels.quick ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
                 </button>
                 <div class="status-pill" :class="quickRunning ? 'online' : 'offline'">
@@ -247,7 +250,10 @@
                   :disabled="refreshingTunnels.local"
                   @click="handleRefreshTunnels()"
                 >
-                  <span class="btn-icon" :class="{ spinning: refreshingTunnels.local }">🔄</span>
+                  <svg class="ico btn-icon" :class="{ spinning: refreshingTunnels.local }" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
                   {{ refreshingTunnels.local ? t.server_tab.btn_refreshing : t.server_tab.btn_refresh }}
                 </button>
                 <div class="status-pill" :class="localRunningCount > 0 ? 'online' : 'offline'">
@@ -301,19 +307,36 @@
                         :title="isTunnelRunning(tunnel.name) ? t.server_tab.btn_stop : t.server_tab.btn_start"
                         @click.stop="isTunnelRunning(tunnel.name) ? handleStopServer(tunnel.name) : handleRowStart(tunnel)"
                       >
-                        <span v-if="isTunnelRunning(tunnel.name)" class="icon-square"></span>
-                        <span v-else class="icon-triangle"></span>
+                        <svg v-if="isTunnelRunning(tunnel.name)" class="ico ico-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <rect x="7" y="7" width="10" height="10" rx="1.5" />
+                        </svg>
+                        <svg v-else class="ico ico-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M9 6.4v11.2L18.5 12z" />
+                        </svg>
                       </button>
                       <button
                         class="row-action-btn"
                         :title="t.server_tab.named_edit_title"
                         @click.stop="openTunnelEditModal(tunnel)"
-                      >✎</button>
+                      >
+                        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+                          <path d="m15 5 4 4" />
+                        </svg>
+                      </button>
                       <button
                         class="row-action-btn danger"
                         :title="t.server_tab.btn_delete"
                         @click.stop="promptDeleteTunnel(tunnel)"
-                      >🗑</button>
+                      >
+                        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
                     </td>
                     <td class="col-created">{{ formatCreated(tunnel.created) }}</td>
                     <td class="col-connections">{{ formatConnections(tunnel.connections) }}</td>
@@ -373,12 +396,22 @@
                         class="dns-icon-btn"
                         :title="t.server_tab.dns_edit_title"
                         @click.stop="promptEditDnsRoute(rec)"
-                      >✎</button>
+                      >
+                        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+                          <path d="m15 5 4 4" />
+                        </svg>
+                      </button>
                       <button
                         class="dns-icon-btn danger"
                         :title="t.server_tab.btn_unbind"
                         @click.stop="promptUnbindDnsRoute(rec)"
-                      >✕</button>
+                      >
+                        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M18 6 6 18" />
+                          <path d="m6 6 12 12" />
+                        </svg>
+                      </button>
                     </span>
                   </div>
 
@@ -396,13 +429,23 @@
                           :title="t.server_tab.btn_rotate_password"
                           :disabled="isLockMutating"
                           @click.stop="promptRotatePassword(rec.hostname)"
-                        >🔄</button>
+                        >
+                          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                            <path d="M21 3v5h-5" />
+                          </svg>
+                        </button>
                         <button
                           class="dns-icon-btn danger"
                           :title="t.server_tab.btn_unlock"
                           :disabled="isLockMutating"
                           @click.stop="promptUnlockHostname(rec.hostname)"
-                        >🔓</button>
+                        >
+                          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                          </svg>
+                        </button>
                       </span>
                     </template>
 
@@ -414,7 +457,12 @@
                           :title="t.server_tab.btn_lock"
                           :disabled="isLockMutating"
                           @click.stop="promptLockHostname(rec.hostname)"
-                        >🔒</button>
+                        >
+                          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                        </button>
                       </span>
                     </template>
                   </div>
@@ -428,7 +476,18 @@
                         class="dns-cred-eye"
                         :title="isLockCredFieldExpanded(rec.hostname, 'id') ? '隐藏' : '显示明文'"
                         @click.stop="toggleLockCredField(rec.hostname, 'id')"
-                      >👁</button>
+                      >
+                        <svg v-if="isLockCredFieldExpanded(rec.hostname, 'id')" class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+                          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+                          <path d="m2 2 20 20" />
+                        </svg>
+                        <svg v-else class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
@@ -441,7 +500,18 @@
                         class="dns-cred-eye"
                         :title="isLockCredFieldExpanded(rec.hostname, 'secret') ? '隐藏' : '显示明文'"
                         @click.stop="toggleLockCredField(rec.hostname, 'secret')"
-                      >👁</button>
+                      >
+                        <svg v-if="isLockCredFieldExpanded(rec.hostname, 'secret')" class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+                          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+                          <path d="m2 2 20 20" />
+                        </svg>
+                        <svg v-else class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
@@ -474,7 +544,10 @@
                 {{ t.client_tab.add_btn }}
               </button>
               <button class="fluent-btn small" @click="refreshClientTunnels(true)">
-                <span class="btn-icon">🔄</span>
+                <svg class="ico btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg>
                 {{ t.client_tab.refresh_btn }}
               </button>
               <div class="status-pill" :class="clientRunningCount > 0 ? 'online' : 'offline'">
@@ -522,7 +595,12 @@
                       :title="c.running ? t.client_tab.btn_stop : t.client_tab.btn_start"
                       @click.stop="c.running ? handleStopClient(c) : handleStartClient(c)"
                     >
-                      {{ c.running ? '⏹' : '▶' }}
+                      <svg v-if="c.running" class="ico ico-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <rect x="7" y="7" width="10" height="10" rx="1.5" />
+                      </svg>
+                      <svg v-else class="ico ico-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M9 6.4v11.2L18.5 12z" />
+                      </svg>
                     </button>
                     <button
                       class="row-action-btn"
@@ -530,14 +608,23 @@
                       :disabled="c.running"
                       @click.stop="openClientEditModal(c)"
                     >
-                      ✎
+                      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+                        <path d="m15 5 4 4" />
+                      </svg>
                     </button>
                     <button
                       class="row-action-btn danger"
                       :title="t.client_tab.btn_delete"
                       @click.stop="handleDeleteClient(c)"
                     >
-                      🗑
+                      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                      </svg>
                     </button>
                   </td>
                   <td class="col-password">
@@ -550,7 +637,18 @@
                               class="cred-eye-inline"
                               :title="credVisible[c.key + '_id'] ? '隐藏' : '显示明文'"
                               @click.stop="toggleCredVisibility(c.key + '_id')"
-                            >👁</button>
+                            >
+                              <svg v-if="credVisible[c.key + '_id']" class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+                                <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                                <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+                                <path d="m2 2 20 20" />
+                              </svg>
+                              <svg v-else class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            </button>
                             <span
                               class="cred-value mono"
                               :title="t.server_tab.click_to_copy"
@@ -563,7 +661,18 @@
                               class="cred-eye-inline"
                               :title="credVisible[c.key + '_secret'] ? '隐藏' : '显示明文'"
                               @click.stop="toggleCredVisibility(c.key + '_secret')"
-                            >👁</button>
+                            >
+                              <svg v-if="credVisible[c.key + '_secret']" class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+                                <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                                <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+                                <path d="m2 2 20 20" />
+                              </svg>
+                              <svg v-else class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            </button>
                             <span
                               class="cred-value mono"
                               :title="t.server_tab.click_to_copy"
@@ -4760,9 +4869,12 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-/* 域名本身：等宽字体，点击即复制（沿用本面板的既有约定，不额外放复制按钮） */
+/* 域名本身：等宽字体，点击即复制（沿用本面板的既有约定，不额外放复制按钮）。
+   flex 用 `0 1 auto` 而不是 `1`：撑满整行的话，鼠标落在这一行任意空白处都算「悬停在域名上」，
+   原生 tooltip「点击复制」与手型光标会铺满整行 —— 只有真的贴到文字上才该出现。
+   操作按钮靠右由 .dns-row-actions 的 margin-left: auto 负责，不依赖这里占满剩余宽度。 */
 .dns-domain-host {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4883,9 +4995,30 @@ onUnmounted(() => {
   text-decoration: underline;
 }
 
-/* 行内小按钮（改名 / 解绑 / 显示凭据 / 换密码 / 解锁 / 上锁）。
-   一律用文字而不是 ✎ 🗑 🔁 🔓 图标：浅色底上 ✎ 是细线条字、🗑 是彩色 emoji，
-   同一行里两种字形大小与质感都不一致（实测截图确认），文字按钮宽度统一、语义也更直白。 */
+/* 图标基线：全项目的 SVG 图标统一走 .ico。
+   24 视框的描边图标装进固定 15px 的盒子里，同排几个图标必然等宽等高、垂直居中；
+   颜色一律用 currentColor 跟随按钮的 color —— 所以 hover / disabled / 危险色
+   只需要改按钮自己的颜色，图标不用写第二套规则。
+   （早前用 ✎ ✕ 🔄 🔓 混排文字字符与彩色 emoji：字形大小、基线、甚至方块底色
+   都各不相同，实测在同一行里根本对不齐，故全部换成 SVG。） */
+.ico {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 实心图标（播放 / 停止）：填充 currentColor，不走描边 */
+.ico-fill {
+  fill: currentColor;
+  stroke: none;
+}
+
 /* DNS 操作图标按钮：无边框、无背景，hover 才显 */
 .dns-icon-btn {
   flex-shrink: 0;
