@@ -4912,13 +4912,6 @@ onUnmounted(() => {
   color: #dc3545;
 }
 .dns-icon-btn.primary:hover {
-  background-color: rgba(0, 95, 184, 0.1);
-  color: #005fb8;
-}
-  color: var(--danger-color);
-  background-color: rgba(220, 53, 69, 0.08);
-}
-.dns-icon-btn.primary:hover {
   color: var(--accent-color);
   background-color: rgba(0, 95, 184, 0.08);
 }
