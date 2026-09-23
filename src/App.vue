@@ -420,33 +420,33 @@
                   </div>
 
                   <!-- 凭据：整行、账号与密码各占一行（标签 + 眼睛 + 值，点击即复制）。
-                       默认脱敏，点眼睛切换明文 -->
+                       默认脱敏，每个字段独立眼睛切换明文 -->
                   <div v-if="lockOf(rec.hostname)" class="dns-cred-block">
                     <div class="dns-cred-item">
                       <span class="dns-cred-key">账号</span>
                       <button
                         class="dns-cred-eye"
-                        :title="isLockCredExpanded(rec.hostname) ? '隐藏' : '显示明文'"
-                        @click.stop="toggleLockCred(rec.hostname)"
+                        :title="isLockCredFieldExpanded(rec.hostname, 'id') ? '隐藏' : '显示明文'"
+                        @click.stop="toggleLockCredField(rec.hostname, 'id')"
                       >👁</button>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
                         @click="copyText(lockOf(rec.hostname)?.clientId || '')"
-                      >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
+                      >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname, 'id') }}</span>
                     </div>
                     <div class="dns-cred-item">
                       <span class="dns-cred-key">密码</span>
                       <button
                         class="dns-cred-eye"
-                        :title="isLockCredExpanded(rec.hostname) ? '隐藏' : '显示明文'"
-                        @click.stop="toggleLockCred(rec.hostname)"
+                        :title="isLockCredFieldExpanded(rec.hostname, 'secret') ? '隐藏' : '显示明文'"
+                        @click.stop="toggleLockCredField(rec.hostname, 'secret')"
                       >👁</button>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
                         @click="copyText(lockOf(rec.hostname)?.clientSecret || '')"
-                      >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname) }}</span>
+                      >{{ credDisplay(lockOf(rec.hostname)?.clientSecret || '', rec.hostname, 'secret') }}</span>
                     </div>
                   </div>
                 </div>
@@ -546,26 +546,31 @@
                         <div class="cred-lines">
                           <div class="cred-line">
                             <span class="cred-label">账号</span>
+                            <button
+                              class="cred-eye-inline"
+                              :title="credVisible[c.key + '_id'] ? '隐藏' : '显示明文'"
+                              @click.stop="toggleCredVisibility(c.key + '_id')"
+                            >👁</button>
                             <span
                               class="cred-value mono"
                               :title="t.server_tab.click_to_copy"
                               @click.stop="copyText(c.tokenId || '')"
-                            >{{ credVisible[c.key] ? (c.tokenId || '—') : maskToken(c.tokenId) }}</span>
+                            >{{ credVisible[c.key + '_id'] ? (c.tokenId || '—') : maskToken(c.tokenId) }}</span>
                           </div>
                           <div class="cred-line">
                             <span class="cred-label">密码</span>
+                            <button
+                              class="cred-eye-inline"
+                              :title="credVisible[c.key + '_secret'] ? '隐藏' : '显示明文'"
+                              @click.stop="toggleCredVisibility(c.key + '_secret')"
+                            >👁</button>
                             <span
                               class="cred-value mono"
                               :title="t.server_tab.click_to_copy"
                               @click.stop="copyText(c.tokenSecret || '')"
-                            >{{ credVisible[c.key] ? (c.tokenSecret || '—') : maskToken(c.tokenSecret) }}</span>
+                            >{{ credVisible[c.key + '_secret'] ? (c.tokenSecret || '—') : maskToken(c.tokenSecret) }}</span>
                           </div>
                         </div>
-                        <button
-                          class="cred-eye"
-                          :title="credVisible[c.key] ? '隐藏' : '显示明文'"
-                          @click.stop="toggleCredVisibility(c.key)"
-                        >👁</button>
                       </div>
                     </template>
                     <span v-else class="lock-cred-empty">—</span>
@@ -2489,21 +2494,22 @@ const initDnsGroups = (groups: Array<{ tunnelId: string }>) => {
 const toggleDnsGroup = (tunnelId: string) => { dnsGroupOpen[tunnelId] = !dnsGroupOpen[tunnelId]; };
 
 // 密码锁凭据默认掩码显示：client id 32 位 + secret 40 位，明文会把域名行撑破。
-// 想核对全文时点眼睛图标切换；状态按域名记，纯临时 UI 态，不落盘。
-const expandedLockCreds = ref<Record<string, boolean>>({});
-const isLockCredExpanded = (hostname: string): boolean => !!expandedLockCreds.value[hostname];
-const toggleLockCred = (hostname: string) => {
-  // 整体替换对象而不是改属性：record 里新增的 key 不是响应式的，直接赋值不会触发重渲染
+// 想核对全文时点眼睛图标切换；状态按「域名+字段」记（账号/密码独立），纯临时 UI 态，不落盘。
+const expandedLockCreds = ref<Record<string, { id?: boolean; secret?: boolean }>>({});
+const isLockCredFieldExpanded = (hostname: string, field: 'id' | 'secret'): boolean =>
+  !!expandedLockCreds.value[hostname]?.[field];
+const toggleLockCredField = (hostname: string, field: 'id' | 'secret') => {
+  const prev = expandedLockCreds.value[hostname] || {};
   expandedLockCreds.value = {
     ...expandedLockCreds.value,
-    [hostname]: !expandedLockCreds.value[hostname],
+    [hostname]: { ...prev, [field]: !prev[field] },
   };
 };
 /** 凭据展示文本。掩码时保留开头几位（secret 的 cfast_ 前缀、client id 前 4 位），
  *  这样一眼能分清哪个是账号、哪个是密码；点击复制拿到的始终是完整值，不受掩码影响。 */
-const credDisplay = (value: string, hostname: string): string => {
+const credDisplay = (value: string, hostname: string, field: 'id' | 'secret'): string => {
   if (!value) return '';
-  if (isLockCredExpanded(hostname)) return value;
+  if (isLockCredFieldExpanded(hostname, field)) return value;
   return value.slice(0, value.startsWith('cfast_') ? 6 : 4) + '••••••••••••';
 };
 
@@ -4843,13 +4849,16 @@ onUnmounted(() => {
   border: none;
   padding: 0 2px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
-  opacity: 0.5;
+  opacity: 0.65;
   flex-shrink: 0;
+  color: var(--text-secondary);
 }
 .dns-cred-eye:hover {
   opacity: 1;
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 .dns-cred-key {
@@ -4880,20 +4889,32 @@ onUnmounted(() => {
 /* DNS 操作图标按钮：无边框、无背景，hover 才显 */
 .dns-icon-btn {
   flex-shrink: 0;
-  padding: 2px 4px;
+  padding: 3px 5px;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
-  color: var(--text-disabled);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 26px;
 }
 .dns-icon-btn:hover {
   background-color: var(--bg-subtle);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .dns-icon-btn.danger:hover {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+}
+.dns-icon-btn.primary:hover {
+  background-color: rgba(0, 95, 184, 0.1);
+  color: #005fb8;
+}
   color: var(--danger-color);
   background-color: rgba(220, 53, 69, 0.08);
 }
@@ -5355,21 +5376,23 @@ onUnmounted(() => {
 }
 .cred-value:hover {
   color: var(--text-primary);
+  text-decoration: underline;
 }
-.cred-eye {
+.cred-eye-inline {
   background: none;
   border: none;
-  padding: 1px 3px;
+  padding: 0 2px;
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  opacity: 0.5;
+  opacity: 0.65;
   flex-shrink: 0;
-  border-radius: 3px;
+  color: var(--text-secondary);
 }
-.cred-eye:hover {
+.cred-eye-inline:hover {
   opacity: 1;
-  background: var(--bg-subtle);
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 /* 名称列：状态点 + 隧道名 + 连接摘要（原「连接状态 / 状态」两列都并进这里） */
