@@ -248,7 +248,7 @@
                 <button
                   class="fluent-btn small"
                   :disabled="refreshingTunnels.local"
-                  @click="handleRefreshTunnels()"
+                  @click="handleRefreshTunnels(false, true)"
                 >
                   <svg class="ico btn-icon" :class="{ spinning: refreshingTunnels.local }" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
@@ -838,7 +838,7 @@
       <div class="fluent-modal-dialog">
         <div class="modal-header">
           <h3 class="modal-title">
-            ⚠️ {{ t.server_tab.errors.delete_confirm_title }}
+            {{ t.server_tab.errors.delete_confirm_title }}
           </h3>
         </div>
         <div class="modal-body">
@@ -860,7 +860,7 @@
     <div v-if="showDnsAddModal" class="fluent-modal-overlay">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">🏷️ {{ t.server_tab.dns_add_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.dns_add_title }}</h3>
         </div>
         <div class="modal-body">
           <div class="fluent-form-group">
@@ -923,7 +923,7 @@
     <div v-if="showDnsEditModal" class="fluent-modal-overlay" @click.self="cancelEditDnsRoute">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">✎ {{ t.server_tab.dns_edit_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.dns_edit_title }}</h3>
         </div>
         <div class="modal-body">
           <p class="modal-context">{{ dnsEditTarget?.tunnelName }} · {{ dnsEditTarget?.hostname }}</p>
@@ -961,7 +961,7 @@
     <div v-if="showDnsUnbindModal" class="fluent-modal-overlay" @click.self="cancelUnbindDnsRoute">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">⚠️ {{ t.server_tab.errors.dns_unbind_confirm_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.errors.dns_unbind_confirm_title }}</h3>
         </div>
         <div class="modal-body">
           <p>{{ t.server_tab.errors.dns_unbind_confirm_msg.replace('{name}', dnsUnbindTarget?.hostname || '').replace('{tunnel}', dnsUnbindTarget?.tunnelName || '') }}</p>
@@ -983,7 +983,7 @@
       <div class="fluent-modal-dialog">
         <div class="modal-header">
           <h3 class="modal-title">
-            {{ editingClientKey ? `✎ ${t.client_tab.edit_title}` : `🔗 ${t.client_tab.add_title}` }}
+            {{ editingClientKey ? t.client_tab.edit_title : t.client_tab.add_title }}
           </h3>
         </div>
         <div class="modal-body">
@@ -1076,7 +1076,7 @@
     <div v-if="showClientDeleteModal" class="fluent-modal-overlay" @click.self="cancelDeleteClient">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">⚠️ {{ t.client_tab.delete_confirm_title }}</h3>
+          <h3 class="modal-title">{{ t.client_tab.delete_confirm_title }}</h3>
         </div>
         <div class="modal-body">
           <p>{{ t.client_tab.delete_confirm_msg.replace('{target}', `${pendingDeleteClient?.domain || ''}:${pendingDeleteClient?.port || ''}`) }}</p>
@@ -1092,7 +1092,7 @@
     <div v-if="showQuickStopModal" class="fluent-modal-overlay" @click.self="cancelStopQuick">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">⚠️ {{ t.server_tab.errors.quick_stop_confirm_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.errors.quick_stop_confirm_title }}</h3>
         </div>
         <div class="modal-body">
           <p v-if="quickStopTarget" class="modal-context">{{ quickTargetLabel(quickStopTarget) }}</p>
@@ -1355,7 +1355,7 @@
     <div v-if="showLockInfoModal" class="fluent-modal-overlay">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">🔐 {{ t.server_tab.lock_success_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.lock_success_title }}</h3>
         </div>
         <div class="modal-body">
           <p class="modal-hint">{{ t.server_tab.lock_success_msg }}</p>
@@ -1402,7 +1402,7 @@
     <div v-if="showUnlockModal" class="fluent-modal-overlay" @click.self="showUnlockModal = false">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">⚠️ {{ t.server_tab.unlock_confirm_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.unlock_confirm_title }}</h3>
         </div>
         <div class="modal-body">
           <p>{{ t.server_tab.unlock_confirm_msg.replace('{hostname}', unlockTarget || '') }}</p>
@@ -1420,7 +1420,7 @@
     <div v-if="showRotateModal" class="fluent-modal-overlay" @click.self="showRotateModal = false">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">🔁 {{ t.server_tab.rotate_confirm_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.rotate_confirm_title }}</h3>
         </div>
         <div class="modal-body">
           <p>{{ t.server_tab.rotate_confirm_msg.replace('{hostname}', rotateTarget || '') }}</p>
@@ -1438,7 +1438,7 @@
     <div v-if="showQuickCreateModal" class="fluent-modal-overlay">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">⚡ {{ t.server_tab.quick_create_title }}</h3>
+          <h3 class="modal-title">{{ t.server_tab.quick_create_title }}</h3>
         </div>
         <div class="modal-body">
           <div class="fluent-form-group">
@@ -1498,7 +1498,7 @@
     <div v-if="showExitConfirmModal" class="fluent-modal-overlay" @click.self="showExitConfirmModal = false">
       <div class="fluent-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">🚪 {{ t.exit_modal.title }}</h3>
+          <h3 class="modal-title">{{ t.exit_modal.title }}</h3>
         </div>
         <div class="modal-body">
           <p>{{ t.exit_modal.message }}</p>
@@ -3109,7 +3109,11 @@ const fillTunnelHostnames = async (log = false) => {
 //
 // `skipHostnameRefresh`：调用方自己马上要 await 一次 fillTunnelHostnames 时传 true，
 // 免得后台那次和它自己的那次同时发出 —— 这是最贵的一个接口（要分页遍历 zone 下 DNS 记录）。
-const handleRefreshTunnels = async (skipHostnameRefresh = false) => {
+//
+// `manualRefresh`：只表示「用户亲手点了固定隧道那个刷新按钮」。
+// 启动时的自动加载、以及创建 / 保存 / 删除后的自动对账都不算 —— 那些属于泛指的一次隧道列表刷新；
+// 只有按钮才是「只刷固定隧道」这个动作，日志文案要跟着分开。
+const handleRefreshTunnels = async (skipHostnameRefresh = false, manualRefresh = false) => {
   // 防重入：连点不做第二次
   if (refreshingTunnels.value.local) return;
   refreshingTunnels.value.local = true;
@@ -3123,7 +3127,10 @@ const handleRefreshTunnels = async (skipHostnameRefresh = false) => {
     // 与后端对账固定隧道的运行状态（多开后靠这里把已退出的进程同步掉）
     await reconcileServerRunning();
 
-    appendLog(`[INFO] ${fmt(t.value.logs.tunnel_list_refreshed, { count: res.length })}`, 'info', 'server');
+    const refreshedMsg = manualRefresh
+      ? t.value.logs.tunnel_list_refreshed_fixed
+      : t.value.logs.tunnel_list_refreshed;
+    appendLog(`[INFO] ${fmt(refreshedMsg, { count: res.length })}`, 'info', 'server');
   } catch (err: any) {
     appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_list_refresh_failed, { err })}`, 'error', 'server');
   } finally {

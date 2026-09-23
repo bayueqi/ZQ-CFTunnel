@@ -409,6 +409,7 @@ export interface LangPack {
     config_dir_opened: string;
     config_dir_open_failed: string;
     tunnel_list_refreshed: string;
+    tunnel_list_refreshed_fixed: string;
     tunnel_list_refresh_failed: string;
     tunnel_need_config: string;
     unix_socket_required: string;
