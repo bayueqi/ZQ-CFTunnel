@@ -93,6 +93,10 @@ export interface LangPack {
     status_running: string;
     status_stopped: string;
     status_not_running: string;
+    /** 名称旁状态点 hover 提示：本机没跑但云端还有活跃连接 */
+    status_abnormal_hint: string;
+    /** 连接摘要模板（名称后的浅色小字）：{count} 条 · {colos} */
+    conn_summary: string;
     mode_local: string;
     mode_remote: string;
     sub_mode_quick: string;

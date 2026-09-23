@@ -22,19 +22,22 @@ export const isTauriEnvironment = (): boolean => {
 // 浏览器演示模式下的内存隧道数据
 // tunnel_type 仍然保留（Rust 侧会返回），但界面已不再按它分列表 ——
 // 固定隧道列表展示的是账号下的全部隧道。
+// connections 必须是后端的真实格式（每条连接 `1x{colo}`，见 lib.rs 的 read_list_tunnels）：
+// 隧道行名称旁的状态点按「本地进程在跑 / 云端还有连接 / 都没有」判三色，
+// 以前这里写的 '4x Connections (…)' / 'Inactive' 前端解析不出机房，摘要会显示成乱码。
 let mockTunnels = [
   {
     id: 'f83a21b4-49c0-4e2a-b7e1-893d11b0e91a',
     name: 'mc-server',
     created: '2026-08-20 14:32:10',
-    connections: '4x Connections (HKG, NRT, SJC, LAX)',
+    connections: '1xhkg13, 1xhkg01, 1xhkg09, 1xhkg11',
     tunnel_type: 'local',
   },
   {
     id: '7a19c53e-1082-4411-9a77-4402ebcf8821',
     name: 'web-demo',
     created: '2026-08-28 09:15:00',
-    connections: '2x Connections (HKG, NRT)',
+    connections: '1xnrt01, 1xnrt07',
     tunnel_type: 'remote',
   },
 ];
@@ -85,7 +88,7 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>)
         id: `${Math.random().toString(16).substr(2, 8)}-${Math.random().toString(16).substr(2, 4)}-4${Math.random().toString(16).substr(2, 3)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 12)}`,
         name,
         created: new Date().toISOString().replace('T', ' ').substr(0, 19),
-        connections: 'Inactive',
+        connections: '',
         // 本机新建的隧道带凭据文件，属于「固定域名」那一类
         tunnel_type: 'local',
       };

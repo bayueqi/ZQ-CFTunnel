@@ -262,46 +262,37 @@
               <table class="fluent-table">
                 <thead>
                   <tr>
-                    <th class="col-id">{{ t.server_tab.headers.id }}</th>
                     <th class="col-name">{{ t.server_tab.headers.name }}</th>
-                    <th class="col-created">{{ t.server_tab.headers.created }}</th>
-                    <th class="col-hostname">{{ t.server_tab.headers.hostname }}</th>
-                    <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
-                    <th class="col-status">{{ t.server_tab.headers.status }}</th>
                     <th class="col-actions">{{ t.server_tab.headers.actions }}</th>
+                    <th class="col-created">{{ t.server_tab.headers.created }}</th>
+                    <th class="col-connections">{{ t.server_tab.headers.connections }}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <!-- 这一份是账号下的全部隧道：不再按「本机有没有凭据文件」拆成两个列表 ——
                        那个判定跟「是不是云端托管」是两回事，会让同一条隧道出现在两处、
                        或明明云端托管却标成「本地」。 -->
+                  <!-- 行内只留「名称 / 创建时间 / 操作」三列：
+                       隧道 ID 只有拿去跑 CLI 时才有用，绑定域名在下方的「DNS 路由绑定」卡片里
+                       本来就有完整的管理界面，两列都已移除；
+                       「连接状态」与「状态」两列合并成名称旁的一个点（绿=本机在跑、
+                       黄=云端还有活跃连接但本机没跑、灰=两边都没连接），
+                       连接数 / 机房代码压成名字后面的浅色小字，不再单独占一列。 -->
                   <tr
                     v-for="tunnel in serverTunnelList"
                     :key="tunnel.id"
                     :class="{ selected: selectedTunnel?.id === tunnel.id }"
                     @click="selectTunnel(tunnel)"
                   >
-                    <td class="col-id mono" :title="tunnel.id">{{ tunnel.id }}</td>
-                    <td class="col-name font-bold">{{ tunnel.name }}</td>
-                    <td class="col-created mono">{{ tunnel.created }}</td>
-                    <td class="col-hostname">
-                      <template v-if="tunnel.hostnames && tunnel.hostnames.length">
+                    <td class="col-name">
+                      <div class="tunnel-name-cell">
                         <span
-                          class="hostname-tag"
-                          v-for="h in tunnel.hostnames"
-                          :key="h.id"
-                          :title="t.server_tab.click_to_copy"
-                          @click.stop="copyHostname(h.name)"
-                        >{{ h.name }}</span>
-                      </template>
-                      <span v-else class="hostname-empty">{{ t.server_tab.hostname_unbound }}</span>
-                    </td>
-                    <td class="col-connections">{{ tunnel.connections || '-' }}</td>
-                    <td class="col-status">
-                      <span class="tunnel-status" :class="{ online: isTunnelRunning(tunnel.name) }">
-                        <span class="status-dot" :class="isTunnelRunning(tunnel.name) ? 'green' : 'gray'"></span>
-                        {{ isTunnelRunning(tunnel.name) ? t.server_tab.status_running : t.server_tab.status_not_running }}
-                      </span>
+                          class="status-dot"
+                          :class="tunnelDotClass(tunnel)"
+                          :title="tunnelDotTitle(tunnel)"
+                        ></span>
+                        <span class="tunnel-name-text font-bold">{{ tunnel.name }}</span>
+                      </div>
                     </td>
                     <td class="col-actions">
                       <button
@@ -324,9 +315,11 @@
                         @click.stop="promptDeleteTunnel(tunnel)"
                       >🗑</button>
                     </td>
+                    <td class="col-created">{{ formatCreated(tunnel.created) }}</td>
+                    <td class="col-connections">{{ formatConnections(tunnel.connections) }}</td>
                   </tr>
                   <tr v-if="serverTunnelList.length === 0">
-                    <td colspan="7" class="empty-table">
+                    <td colspan="4" class="empty-table">
                       {{ refreshingTunnels.local ? t.server_tab.table_refreshing : t.server_tab.table_empty }}
                     </td>
                   </tr>
@@ -353,12 +346,15 @@
             <!-- 已绑定域名管理：只列出固定域名的绑定记录，按隧道分组 -->
             <div class="dns-group-list">
               <div v-for="group in dnsBoundGroups" :key="group.tunnelId" class="dns-group">
-                <div class="dns-group-head">
+                <div class="dns-group-head" @click="toggleDnsGroup(group.tunnelId)">
+                  <span class="dns-group-toggle">{{ dnsGroupOpen[group.tunnelId] ? '▼' : '▶' }}</span>
                   <span class="dns-group-name" :title="group.tunnelName">{{ group.tunnelName }}</span>
                   <span class="dns-group-count">
                     {{ t.server_tab.dns_group_count.replace('{count}', String(group.records.length)) }}
                   </span>
                 </div>
+
+                <div v-show="dnsGroupOpen[group.tunnelId]" class="dns-group-body">
 
                 <div
                   v-for="rec in group.records"
@@ -374,15 +370,15 @@
                     >{{ rec.hostname }}</span>
                     <span class="dns-row-actions">
                       <button
-                        class="dns-mini-btn"
+                        class="dns-icon-btn"
                         :title="t.server_tab.dns_edit_title"
                         @click.stop="promptEditDnsRoute(rec)"
-                      >{{ t.server_tab.dns_btn_rename }}</button>
+                      >✎</button>
                       <button
-                        class="dns-mini-btn danger"
+                        class="dns-icon-btn danger"
                         :title="t.server_tab.btn_unbind"
                         @click.stop="promptUnbindDnsRoute(rec)"
-                      >{{ t.server_tab.dns_btn_unbind }}</button>
+                      >✕</button>
                     </span>
                   </div>
 
@@ -396,21 +392,17 @@
                       <span class="dns-lock-state on">{{ t.server_tab.lock_on }}</span>
                       <span class="dns-row-actions">
                         <button
-                          class="dns-mini-btn"
-                          @click.stop="toggleLockCred(rec.hostname)"
-                        >{{ isLockCredExpanded(rec.hostname) ? t.server_tab.lock_cred_hide : t.server_tab.lock_cred_show }}</button>
-                        <button
-                          class="dns-mini-btn"
+                          class="dns-icon-btn"
                           :title="t.server_tab.btn_rotate_password"
                           :disabled="isLockMutating"
                           @click.stop="promptRotatePassword(rec.hostname)"
-                        >{{ t.server_tab.btn_rotate_password }}</button>
+                        >🔄</button>
                         <button
-                          class="dns-mini-btn danger"
+                          class="dns-icon-btn danger"
                           :title="t.server_tab.btn_unlock"
                           :disabled="isLockMutating"
                           @click.stop="promptUnlockHostname(rec.hostname)"
-                        >{{ t.server_tab.btn_unlock }}</button>
+                        >🔓</button>
                       </span>
                     </template>
 
@@ -418,22 +410,25 @@
                       <span class="dns-lock-state off">{{ t.server_tab.lock_off }}</span>
                       <span class="dns-row-actions">
                         <button
-                          class="dns-mini-btn primary"
+                          class="dns-icon-btn primary"
                           :title="t.server_tab.btn_lock"
                           :disabled="isLockMutating"
                           @click.stop="promptLockHostname(rec.hostname)"
-                        >{{ t.server_tab.btn_lock }}</button>
+                        >🔒</button>
                       </span>
                     </template>
                   </div>
 
-                  <!-- 凭据：整行、账号与密码各占一行（标签 + 值，点击即复制）。
-                       **常驻两行**：隐藏态只是把值换成掩码，不收起这两行 —— 否则整块一会儿两行
-                       一会儿一行、上面按钮的位置跟着跳。放在锁行下面而不是行内，按钮就不会被
-                       超长凭据挤到第三、四行 -->
+                  <!-- 凭据：整行、账号与密码各占一行（标签 + 眼睛 + 值，点击即复制）。
+                       默认脱敏，点眼睛切换明文 -->
                   <div v-if="lockOf(rec.hostname)" class="dns-cred-block">
                     <div class="dns-cred-item">
-                      <span class="dns-cred-key">{{ t.server_tab.lock_account_label }}</span>
+                      <span class="dns-cred-key">账号</span>
+                      <button
+                        class="dns-cred-eye"
+                        :title="isLockCredExpanded(rec.hostname) ? '隐藏' : '显示明文'"
+                        @click.stop="toggleLockCred(rec.hostname)"
+                      >👁</button>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
@@ -441,7 +436,12 @@
                       >{{ credDisplay(lockOf(rec.hostname)?.clientId || '', rec.hostname) }}</span>
                     </div>
                     <div class="dns-cred-item">
-                      <span class="dns-cred-key">{{ t.server_tab.lock_secret_label }}</span>
+                      <span class="dns-cred-key">密码</span>
+                      <button
+                        class="dns-cred-eye"
+                        :title="isLockCredExpanded(rec.hostname) ? '隐藏' : '显示明文'"
+                        @click.stop="toggleLockCred(rec.hostname)"
+                      >👁</button>
                       <span
                         class="dns-cred-val mono"
                         :title="t.server_tab.click_to_copy"
@@ -450,6 +450,7 @@
                     </div>
                   </div>
                 </div>
+                </div><!-- /dns-group-body -->
               </div>
 
               <div v-if="dnsBoundGroups.length === 0" class="dns-empty">
@@ -491,35 +492,28 @@
                 <tr>
                   <th class="col-hostname">{{ t.client_tab.col_domain }}</th>
                   <th class="col-port">{{ t.client_tab.col_port }}</th>
-                  <th class="col-password">{{ t.client_tab.col_password }}</th>
-                  <th class="col-status">{{ t.client_tab.col_status }}</th>
                   <th class="col-actions">{{ t.client_tab.col_action }}</th>
+                  <th class="col-password">{{ t.client_tab.col_password }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="c in clientRows" :key="c.key">
-                  <td class="col-hostname font-bold" :title="c.domain">{{ c.domain }}</td>
-                  <td class="col-port mono">{{ c.port }}</td>
-                  <!-- 已保存的访问凭据：明文展示，点击复制；未配置显示占位符 -->
-                  <td class="col-password">
-                    <div v-if="c.tokenId || c.tokenSecret" class="lock-cred">
+                  <td class="col-hostname">
+                    <div class="tunnel-name-cell">
                       <span
-                        class="lock-cred-line mono"
-                        :title="t.server_tab.lock_account_label + ' · ' + t.server_tab.click_to_copy"
-                        @click="copyText(c.tokenId || '')"
-                      >{{ c.tokenId || '—' }}</span>
-                      <span
-                        class="lock-cred-line mono"
-                        :title="t.server_tab.lock_secret_label + ' · ' + t.server_tab.click_to_copy"
-                        @click="copyText(c.tokenSecret || '')"
-                      >{{ c.tokenSecret || '—' }}</span>
+                        class="status-dot"
+                        :class="clientDotClass(c)"
+                        :title="c.running ? t.client_tab.status_connected : t.client_tab.status_disconnected"
+                      ></span>
+                      <span class="font-bold" :title="c.domain">{{ c.domain }}</span>
                     </div>
-                    <span v-else class="lock-cred-empty">—</span>
                   </td>
-                  <td class="col-status">
-                    <span class="tunnel-status" :class="{ online: c.running }">
-                      {{ c.running ? t.client_tab.status_connected : t.client_tab.status_disconnected }}
-                    </span>
+                  <td class="col-port mono">
+                    <span
+                      class="copyable-path"
+                      :title="t.server_tab.click_to_copy"
+                      @click.stop="copyText('127.0.0.1:' + c.port)"
+                    >127.0.0.1:{{ c.port }}</span>
                   </td>
                   <td class="col-actions">
                     <button
@@ -546,9 +540,39 @@
                       🗑
                     </button>
                   </td>
+                  <td class="col-password">
+                    <template v-if="c.tokenId || c.tokenSecret">
+                      <div class="cred-cell">
+                        <div class="cred-lines">
+                          <div class="cred-line">
+                            <span class="cred-label">账号</span>
+                            <span
+                              class="cred-value mono"
+                              :title="t.server_tab.click_to_copy"
+                              @click.stop="copyText(c.tokenId || '')"
+                            >{{ credVisible[c.key] ? (c.tokenId || '—') : maskToken(c.tokenId) }}</span>
+                          </div>
+                          <div class="cred-line">
+                            <span class="cred-label">密码</span>
+                            <span
+                              class="cred-value mono"
+                              :title="t.server_tab.click_to_copy"
+                              @click.stop="copyText(c.tokenSecret || '')"
+                            >{{ credVisible[c.key] ? (c.tokenSecret || '—') : maskToken(c.tokenSecret) }}</span>
+                          </div>
+                        </div>
+                        <button
+                          class="cred-eye"
+                          :title="credVisible[c.key] ? '隐藏' : '显示明文'"
+                          @click.stop="toggleCredVisibility(c.key)"
+                        >👁</button>
+                      </div>
+                    </template>
+                    <span v-else class="lock-cred-empty">—</span>
+                  </td>
                 </tr>
                 <tr v-if="clientRows.length === 0">
-                  <td colspan="5" class="empty-table">{{ t.client_tab.empty }}</td>
+                  <td colspan="4" class="empty-table">{{ t.client_tab.empty }}</td>
                 </tr>
               </tbody>
             </table>
@@ -1383,7 +1407,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
 import { LANG_DATA, fmt } from './i18n';
 import { TunnelInfo, QuickTunnelItem, ClientTunnelItem, LogEntry, DnsBinding } from './types';
@@ -2346,6 +2370,52 @@ const localRunningCount = computed(() =>
   serverTunnelList.value.filter(x => isTunnelRunning(x.name)).length,
 );
 
+// ============================ 行状态点（名称旁） ============================
+//
+// 固定隧道表把原来的「连接状态」「状态」两列合并成名称旁的一个圆点：
+//   绿  = 本机 cloudflared 进程正在跑（本地视角，跟操作列的启停按钮同一份数据）；
+//   黄  = 本机没跑，但云端仍显示有活跃连接 —— 别的机器 / 上次没停干净 / 未被本软件纳管的
+//         cloudflared 进程还连着这条隧道，属于「需要看一眼」的状态；
+//   灰  = 本机没跑，云端也没有连接，正常停止。
+// 判定只用现有的两个数据源：serverRunningNames（本地）与隧道列表里的 connections（云端），
+// 不再额外发请求。注意云端那份是**上一次刷新时**的快照，刚启停完要等刷新才对得上。
+const hasCloudConnection = (tunnel: TunnelInfo) => (tunnel.connections || '').trim().length > 0;
+
+const tunnelDotClass = (tunnel: TunnelInfo) => {
+  if (isTunnelRunning(tunnel.name)) return 'green';
+  return hasCloudConnection(tunnel) ? 'yellow' : 'gray';
+};
+
+const tunnelDotTitle = (tunnel: TunnelInfo) => {
+  if (isTunnelRunning(tunnel.name)) return t.value.server_tab.status_running;
+  return hasCloudConnection(tunnel)
+    ? t.value.server_tab.status_abnormal_hint
+    : t.value.server_tab.status_stopped;
+};
+
+// 把 ISO 时间转成「2026-09-22 21:21」这种本地可读格式；解析失败原样返回。
+const formatCreated = (iso: string) => {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${day} ${h}:${min}`;
+  } catch {
+    return iso;
+  }
+};
+
+// 去掉后端给每个 colo_name 拼的 "1x" 前缀，其余原样保留。
+const formatConnections = (connStr: string) => {
+  if (!connStr || !connStr.trim()) return '-';
+  return connStr.split(',').map(s => s.trim().replace(/^1x/i, '')).filter(Boolean).join(', ') || '-';
+};
+
 // ============================ 隧道密码锁（Cloudflare Access） ============================
 //
 // 锁本质是绑在「域名」上的（Access 应用按域名建），所以锁记录按 hostname 存，
@@ -2410,8 +2480,16 @@ const lockOf = (hostname: string): TunnelLockEntry | null => tunnelLocks.value[h
 // 锁操作进行中：所有锁按钮统一禁用，防止并发重复建锁
 const isLockMutating = ref(false);
 
+// DNS 隧道分组折叠状态：默认全部展开（key = tunnelId）
+const dnsGroupOpen = reactive<Record<string, boolean>>({});
+// 初始化：首次渲染时把已有 group 全部设为 true（展开）
+const initDnsGroups = (groups: Array<{ tunnelId: string }>) => {
+  for (const g of groups) { if (!(g.tunnelId in dnsGroupOpen)) dnsGroupOpen[g.tunnelId] = true; }
+};
+const toggleDnsGroup = (tunnelId: string) => { dnsGroupOpen[tunnelId] = !dnsGroupOpen[tunnelId]; };
+
 // 密码锁凭据默认掩码显示：client id 32 位 + secret 40 位，明文会把域名行撑破。
-// 想核对全文时点「显示凭据」展开；展开状态按域名记，纯临时 UI 态，不落盘。
+// 想核对全文时点眼睛图标切换；状态按域名记，纯临时 UI 态，不落盘。
 const expandedLockCreds = ref<Record<string, boolean>>({});
 const isLockCredExpanded = (hostname: string): boolean => !!expandedLockCreds.value[hostname];
 const toggleLockCred = (hostname: string) => {
@@ -2617,6 +2695,9 @@ const dnsBoundGroups = computed<DnsBoundGroup[]>(() =>
     }))
     .filter(g => g.records.length > 0),
 );
+
+// 首次及每次列表变化时，新出现的隧道分组默认展开
+watch(dnsBoundGroups, (g) => initDnsGroups(g), { immediate: true });
 
 // ================ 域名清理：解绑单个域名 / 删除整条隧道共用 ================
 //
@@ -2935,6 +3016,13 @@ const handleRefreshTunnels = async (skipHostnameRefresh = false) => {
   }
 };
 
+// 启停隧道后，云端那份「连接数」快照就过期了：cloudflared 建立 / 断开连接在 Cloudflare
+// 侧要几秒才反映到 `tunnel list` 里。延迟对账一次，免得名称旁的状态点卡在黄色
+// （刚点完停止还一直显示「异常：仍有活跃连接」）。只刷列表、不刷域名绑定。
+const scheduleCloudConnRefresh = () => {
+  window.setTimeout(() => { void handleRefreshTunnels(true); }, 3000);
+};
+
 // 源站目标描述文案（日志 / 提示用）
 const describeServerTarget = (protocol: string, port: string, unixSocket: string) => {
   if (protocol === 'hello_world') return t.value.logs.target_hello_world;
@@ -3005,6 +3093,7 @@ const handleRowStart = async (tunnel: TunnelInfo) => {
       unixSocket: saved.unixSocket,
     });
     markServerRunning(name);
+    scheduleCloudConnRefresh();
     showToast(`${fmt(t.value.logs.tunnel_started, { name, target: describeServerTarget(saved.protocol, saved.port, saved.unixSocket) })}`);
   } catch (err: any) {
     appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_start_failed, { err })}`, 'error', 'server');
@@ -3023,6 +3112,7 @@ const handleStopServer = async (name: string) => {
     // 停止成功的日志由 Rust 侧统一广播，这里不再重复打印
     await invoke<string>('stop_server_tunnel', { name: target });
     markServerStopped(target);
+    scheduleCloudConnRefresh();
     showToast(`${fmt(t.value.logs.tunnel_stopped, { name: target })}`);
   } catch (err: any) {
     appendLog(`[ERROR] ${fmt(t.value.logs.tunnel_stop_failed, { name: target, err })}`, 'error', 'server');
@@ -3393,6 +3483,20 @@ const copyText = async (text: string) => {
     appendLog(t.value.logs.copy_failed_clipboard, 'error', 'server');
   }
 };
+
+// 凭据明文/脱敏切换状态（按 clientRow.key 索引）
+const credVisible = reactive<Record<string, boolean>>({});
+const toggleCredVisibility = (key: string) => { credVisible[key] = !credVisible[key]; };
+
+// 脱敏：默认只显示前 8 位 + ... + 后 4 位，跟截图效果一致
+const maskToken = (val?: string) => {
+  if (!val) return '—';
+  if (val.length <= 14) return val.slice(0, 6) + '...';
+  return val.slice(0, 8) + '...' + val.slice(-4);
+};
+
+// 客户端行状态点：绿=已连接，灰=未连接（客户端无云端连接概念，暂不触发黄）
+const clientDotClass = (c: { running: boolean }) => c.running ? 'green' : 'gray';
 
 // 删除隧道确认流程（固定域名隧道 / 云端托管隧道共用）。
 // 固定域名列表的删除按钮在每一行里，直接把该行隧道传进来；
@@ -4411,6 +4515,16 @@ onUnmounted(() => {
   box-shadow: 0 0 6px var(--success-color);
 }
 
+.status-dot.yellow {
+  background-color: var(--warning-color);
+  box-shadow: 0 0 6px var(--warning-color);
+}
+
+.status-dot.gray {
+  background-color: var(--text-disabled);
+  box-shadow: none;
+}
+
 /* 主体内容区 (取消页面整体上下滚动) */
 .fluent-body {
   position: relative;
@@ -4583,6 +4697,18 @@ onUnmounted(() => {
   gap: 8px;
   padding: 5px 10px;
   background-color: var(--bg-table-header);
+  cursor: pointer;
+  user-select: none;
+}
+.dns-group-head:hover {
+  background-color: var(--bg-subtle);
+}
+.dns-group-toggle {
+  font-size: 10px;
+  color: var(--text-disabled);
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .dns-group-name {
@@ -4599,6 +4725,10 @@ onUnmounted(() => {
   flex-shrink: 0;
   font-size: 11.5px;
   color: var(--text-secondary);
+}
+
+.dns-group-body {
+  overflow: hidden;
 }
 
 /* 一个域名 = 组内一个区块，含两排：域名行 + 密码锁行。
@@ -4708,6 +4838,20 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.dns-cred-eye {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.dns-cred-eye:hover {
+  opacity: 1;
+}
+
 .dns-cred-key {
   flex-shrink: 0;
   font-size: 11px;
@@ -4733,6 +4877,35 @@ onUnmounted(() => {
 /* 行内小按钮（改名 / 解绑 / 显示凭据 / 换密码 / 解锁 / 上锁）。
    一律用文字而不是 ✎ 🗑 🔁 🔓 图标：浅色底上 ✎ 是细线条字、🗑 是彩色 emoji，
    同一行里两种字形大小与质感都不一致（实测截图确认），文字按钮宽度统一、语义也更直白。 */
+/* DNS 操作图标按钮：无边框、无背景，hover 才显 */
+.dns-icon-btn {
+  flex-shrink: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-disabled);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dns-icon-btn:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.dns-icon-btn.danger:hover {
+  color: var(--danger-color);
+  background-color: rgba(220, 53, 69, 0.08);
+}
+.dns-icon-btn.primary:hover {
+  color: var(--accent-color);
+  background-color: rgba(0, 95, 184, 0.08);
+}
+.dns-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .dns-mini-btn {
   flex-shrink: 0;
   padding: 1px 8px;
@@ -5135,31 +5308,99 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 运行状态列（多开时逐条显示哪条在跑） */
-.col-status {
-  white-space: nowrap;
+/* 路径列：127.0.0.1:port，可点击复制 */
+.copyable-path {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.copyable-path:hover {
+  color: var(--accent-color);
+  text-decoration: underline;
 }
 
-.tunnel-status {
-  display: inline-flex;
+/* 凭据单元格：两行 + 眼睛图标 */
+.cred-cell {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
+}
+.cred-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.cred-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.cred-label {
   color: var(--text-disabled);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 10.5px;
+}
+.cred-value {
+  cursor: pointer;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+.cred-value:hover {
+  color: var(--text-primary);
+}
+.cred-eye {
+  background: none;
+  border: none;
+  padding: 1px 3px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.5;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+.cred-eye:hover {
+  opacity: 1;
+  background: var(--bg-subtle);
 }
 
-.tunnel-status.online {
-  color: var(--success-color);
+/* 名称列：状态点 + 隧道名 + 连接摘要（原「连接状态 / 状态」两列都并进这里） */
+.tunnel-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.status-dot.gray {
-  background-color: var(--text-disabled);
-  box-shadow: none;
+/* 圆点是固定尺寸的 flex 子项：不加这句，长隧道名会把它压成椭圆 */
+.tunnel-name-cell .status-dot {
+  flex: 0 0 auto;
 }
+
+/* 连接摘要（4 条 · HKG）：比隧道名弱一档，不抢视线 */
 
 /* 行内启停按钮（多开时逐条控制） */
 .col-actions {
   white-space: nowrap;
+}
+
+.col-created {
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.col-connections {
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .row-action-btn {
@@ -5260,30 +5501,6 @@ onUnmounted(() => {
 .col-password {
   min-width: 180px;
   max-width: 260px;
-}
-
-/* 明文凭据：账号 / 密码各一行，小号等宽字体，溢出省略（点击复制全文） */
-.lock-cred {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.lock-cred-line {
-  font-size: 10.5px;
-  line-height: 1.3;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 210px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.lock-cred-line:hover {
-  color: var(--text-primary);
 }
 
 /* 弹窗里的凭据输入框：点击即复制（无独立复制按钮），鼠标呈手型提示可点 */
@@ -5526,7 +5743,7 @@ onUnmounted(() => {
 .quick-url-value {
   font-size: 14px;
   font-weight: 600;
-  color: var(--accent-color);
+  color: var(--text-primary);
   word-break: break-all;
   padding: 6px 0;
   /* 点击即复制 */
