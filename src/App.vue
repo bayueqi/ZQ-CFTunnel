@@ -1522,7 +1522,8 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { safeInvoke as invoke, safeListen as listen } from './utils/tauriBridge';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { LANG_DATA, fmt } from './i18n';
 import { TunnelInfo, QuickTunnelItem, ClientTunnelItem, LogEntry, DnsBinding } from './types';
 import { isTunnelNameValid, isPortValid, isDomainValid } from './utils/validation';

@@ -108,7 +108,6 @@
 
 ```bash
 npm install
-npm run dev           # 仅运行前端，浏览器中为演示模式
 npm run tauri dev     # 桌面端开发
 npm run tauri build   # 本地打包，产物位于 src-tauri/target/release/bundle/
 ```

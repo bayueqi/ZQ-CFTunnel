@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CFTunnel — Cloudflare Tunnel 图形客户端</title>
+    <meta
+      name="description"
+      content="CFTunnel 是基于 Tauri 2 + Vue 3 + Rust 的 Cloudflare Tunnel 图形客户端，把 cloudflared 的命令行操作收进一个窗口。"
+    />
+    <link rel="icon" href="assets/favicon-32.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/icon-256.png" />
+    <meta property="og:title" content="CFTunnel — Cloudflare Tunnel 图形客户端" />
+    <meta property="og:description" content="把 cloudflared 的命令行操作收进一个窗口。" />
+    <meta property="og:image" content="assets/icon-256.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true">
+      <defs>
+        <symbol id="i-bolt" viewBox="0 0 24 24">
+          <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />
+        </symbol>
+        <symbol id="i-link" viewBox="0 0 24 24">
+          <path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 0 0-5.7-5.7L11.7 6.6" />
+          <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 0 0 5.7 5.7l1.4-1.4" />
+        </symbol>
+        <symbol id="i-globe" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18" />
+          <path d="M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9Z" />
+        </symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24">
+          <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />
+          <path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3" />
+          <path d="M12 14.5v2" />
+        </symbol>
+        <symbol id="i-plug" viewBox="0 0 24 24">
+          <path d="M9 3v5" />
+          <path d="M15 3v5" />
+          <path d="M7 8h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V8Z" />
+          <path d="M12 16v5" />
+        </symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24">
+          <path d="m12 3 8.5 4.5L12 12 3.5 7.5 12 3Z" />
+          <path d="m3.5 12.5 8.5 4.5 8.5-4.5" />
+          <path d="m3.5 17 8.5 4.5 8.5-4.5" />
+        </symbol>
+        <symbol id="i-download" viewBox="0 0 24 24">
+          <path d="M12 3v11" />
+          <path d="m7.5 10 4.5 4.5L16.5 10" />
+          <path d="M4.5 19.5h15" />
+        </symbol>
+        <symbol id="i-theme" viewBox="0 0 24 24">
+          <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z" />
+        </symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24">
+          <path d="M5 12h13" />
+          <path d="m12.5 6 6 6-6 6" />
+        </symbol>
+        <symbol id="i-github" viewBox="0 0 16 16">
+          <path
+            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+          />
+        </symbol>
+      </defs>
+    </svg>
+
+    <header class="nav" id="nav">
+      <div class="nav-inner">
+        <a class="brand" href="#top">
+          <img src="assets/icon-64.png" width="26" height="26" alt="" />
+          <span>CFTunnel</span>
+        </a>
+        <nav class="nav-links">
+          <a href="#features">功能</a>
+          <a href="#start">快速开始</a>
+          <a href="#download">下载</a>
+        </nav>
+        <a class="nav-github" href="https://github.com/bayueqi/ZQ-CFTunnel" target="_blank" rel="noreferrer">
+          <svg viewBox="0 0 16 16"><use href="#i-github" /></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">
+            <span class="tag">v1.0.1</span>
+            <span>Tauri 2 · Vue 3 · Rust</span>
+          </div>
+          <h1>把 cloudflared<br />收进一个窗口</h1>
+          <p class="lede">
+            临时隧道、固定域名、DNS 路由与密码锁，建、改、启停都在界面上完成，不必再翻命令行与配置文件。
+          </p>
+          <div class="hero-actions">
+            <a class="btn primary lg" href="#download">下载</a>
+            <a class="btn ghost lg" href="https://github.com/bayueqi/ZQ-CFTunnel" target="_blank" rel="noreferrer">
+              <svg viewBox="0 0 16 16"><use href="#i-github" /></svg>
+              查看源码
+            </a>
+          </div>
+          <p class="hero-meta">Windows · macOS · Linux</p>
+        </div>
+
+        <div class="window" aria-hidden="true">
+          <div class="win-bar">
+            <img src="assets/icon-64.png" width="18" height="18" alt="" />
+            <span class="win-title">CFTunnel</span>
+            <div class="win-actions">
+              <span class="win-ico">🔊</span>
+              <span class="win-ico">
+                <svg viewBox="0 0 16 16"><use href="#i-github" /></svg>
+              </span>
+              <span class="win-ico">🌙</span>
+              <span class="win-sep"></span>
+              <span class="win-btn">−</span>
+              <span class="win-btn">□</span>
+              <span class="win-btn close">✕</span>
+            </div>
+          </div>
+
+          <div class="win-body">
+            <aside class="win-side">
+              <div class="side-toggle"><span class="side-menu">☰</span><span>折叠</span></div>
+              <div class="side-item active"><span class="side-emoji">🖥️</span><span>服务端</span><span class="side-arrow">▸</span></div>
+              <div class="side-sub">
+                <div class="side-sub-item"><i class="dot quick"></i>临时隧道</div>
+                <div class="side-sub-item active"><i class="dot named"></i>固定隧道</div>
+              </div>
+              <div class="side-item"><span class="side-emoji">💻</span><span>客户端</span></div>
+              <div class="side-item"><span class="side-emoji">⚙️</span><span>配置</span></div>
+            </aside>
+
+            <div class="win-main">
+              <div class="pane-head">
+                <h4>固定隧道</h4>
+                <div class="pane-actions">
+                  <span class="mini-btn primary">＋ 创建</span>
+                  <span class="mini-btn">↻ 刷新</span>
+                  <span class="pill">运行中 (1)</span>
+                </div>
+              </div>
+
+              <div class="rows">
+                <div class="row">
+                  <span class="row-dot"></span>
+                  <div class="row-text">
+                    <b>mc-server</b>
+                    <small>f83a21b4-49c0-4e2a-b7e1-893d11b0e91a</small>
+                  </div>
+                  <span class="badge">固定</span>
+                  <span class="badge running">运行中</span>
+                  <span class="play">▶</span>
+                </div>
+                <div class="row">
+                  <span class="row-dot idle"></span>
+                  <div class="row-text">
+                    <b>nas</b>
+                    <small>7a19c53e-1082-4411-9a77-4402ebcf8821</small>
+                  </div>
+                  <span class="badge">固定</span>
+                  <span class="play">▶</span>
+                </div>
+                <div class="row">
+                  <span class="row-dot idle"></span>
+                  <div class="row-text">
+                    <b>web-demo</b>
+                    <small>c2d0e814-6e35-4c62-9f1b-4a0d2b7f19c3</small>
+                  </div>
+                  <span class="badge">固定</span>
+                  <span class="play">▶</span>
+                </div>
+              </div>
+
+              <div class="logs">
+                <div class="logs-head"><span>运行日志</span><span class="logs-clear">清空</span></div>
+                <pre>INF Registered tunnel connection connIndex=0 location=hkg13
+INF Requesting new quick Tunnel on trycloudflare.com...
+INF |  https://quiet-river-4821.trycloudflare.com  |
+INF Updated to new configuration config="{\"ingress\":[{\"hostname\":\"play.example.com\"}]}"</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="section-head reveal">
+          <span class="eyebrow-text">FEATURES</span>
+          <h2>功能</h2>
+        </div>
+
+        <div class="grid reveal">
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-bolt" /></svg></span>
+            <h3>临时隧道</h3>
+            <p>免登录、免凭证，启动后得到一个 <code>*.trycloudflare.com</code> 地址。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-link" /></svg></span>
+            <h3>固定隧道</h3>
+            <p>使用自己的域名，隧道与配置保存在本地，可随时修改 ingress 规则。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-globe" /></svg></span>
+            <h3>DNS 路由</h3>
+            <p>按隧道列出已绑定的域名，点击复制，可改名或解绑。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-lock" /></svg></span>
+            <h3>密码锁</h3>
+            <p>为域名加一层 Cloudflare Access 校验，未带凭据的连接返回 403。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-plug" /></svg></span>
+            <h3>客户端桥接</h3>
+            <p>把远端隧道映射到本机端口，多条连接可同时运行。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-layers" /></svg></span>
+            <h3>协议覆盖</h3>
+            <p>HTTP、HTTPS、TCP、UNIX、UNIX + TLS 与 Hello World。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-download" /></svg></span>
+            <h3>安装 cloudflared</h3>
+            <p>识别系统与 CPU 架构，从官方 Release 下载对应版本。</p>
+          </article>
+          <article class="card">
+            <span class="card-ico"><svg viewBox="0 0 24 24"><use href="#i-theme" /></svg></span>
+            <h3>深浅主题</h3>
+            <p>Win11 风格界面，深色与浅色主题随时切换。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="start">
+        <div class="section-head reveal">
+          <span class="eyebrow-text">QUICK START</span>
+          <h2>快速开始</h2>
+        </div>
+
+        <ol class="steps reveal">
+          <li>
+            <span class="step-no">1</span>
+            <div class="step-body">
+              <h3>安装 cloudflared</h3>
+              <p>配置 → 安装 cloudflared</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-no">2</span>
+            <div class="step-body">
+              <h3>授权登录</h3>
+              <p>配置 → Cloudflared 授权登录，选中要授权的域名</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-no">3</span>
+            <div class="step-body">
+              <h3>创建隧道</h3>
+              <p>服务端 → 固定 / 临时隧道 → 创建，填协议与本机端口</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-no">4</span>
+            <div class="step-body">
+              <h3>启动</h3>
+              <p>点列表行的 ▶，临时隧道给出临时域名，固定隧道使用自己的域名</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="proto reveal">
+          <div class="proto-head">
+            <h3>协议</h3>
+            <span>按服务类型选择</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>协议</th>
+                <th>适用服务</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>HTTP</td><td>网站</td></tr>
+              <tr><td>HTTPS</td><td>本机已启用 TLS 的服务</td></tr>
+              <tr><td>TCP</td><td>游戏服务、SSH、数据库</td></tr>
+              <tr><td>UNIX</td><td>本机套接字（仅 Linux / macOS）</td></tr>
+              <tr><td>UNIX + TLS</td><td>本机套接字，叠加 TLS（仅 Linux / macOS）</td></tr>
+              <tr><td>Hello World</td><td>cloudflared 自带的测试服务</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="download">
+        <div class="section-head reveal">
+          <span class="eyebrow-text">DOWNLOAD</span>
+          <h2>下载</h2>
+        </div>
+
+        <div class="os-grid reveal">
+          <article class="os-card">
+            <div class="os-head">
+              <h3>Windows</h3>
+              <span class="os-ver">x64 · arm64</span>
+            </div>
+            <p class="os-formats">安装版<br />便携版</p>
+            <a class="btn primary block" href="https://github.com/bayueqi/ZQ-CFTunnel/releases" target="_blank" rel="noreferrer">
+              下载
+            </a>
+          </article>
+
+          <article class="os-card">
+            <div class="os-head">
+              <h3>macOS</h3>
+              <span class="os-ver">Intel · Apple 芯片</span>
+            </div>
+            <p class="os-formats">DMG<br />两份安装包</p>
+            <a class="btn primary block" href="https://github.com/bayueqi/ZQ-CFTunnel/releases" target="_blank" rel="noreferrer">
+              下载
+            </a>
+          </article>
+
+          <article class="os-card">
+            <div class="os-head">
+              <h3>Linux</h3>
+              <span class="os-ver">x64 · arm64</span>
+            </div>
+            <p class="os-formats">AppImage · deb · rpm</p>
+            <a class="btn primary block" href="https://github.com/bayueqi/ZQ-CFTunnel/releases" target="_blank" rel="noreferrer">
+              下载
+            </a>
+          </article>
+        </div>
+
+        <a class="releases reveal" href="https://github.com/bayueqi/ZQ-CFTunnel/releases" target="_blank" rel="noreferrer">
+          <span>全部版本与历史安装包</span>
+          <svg viewBox="0 0 24 24"><use href="#i-arrow" /></svg>
+        </a>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <img src="assets/icon-64.png" width="22" height="22" alt="" />
+          <span>CFTunnel</span>
+        </div>
+        <nav class="footer-links">
+          <a href="https://github.com/bayueqi/ZQ-CFTunnel" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://github.com/bayueqi/ZQ-CFTunnel/releases" target="_blank" rel="noreferrer">Releases</a>
+          <a href="https://github.com/bayueqi/ZQ-CFTunnel/issues" target="_blank" rel="noreferrer">Issues</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script src="main.js"></script>
+  </body>
+</html>

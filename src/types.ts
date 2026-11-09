@@ -370,8 +370,7 @@ export interface LangPack {
     empty: string;
   };
   /**
-   * 日志与吐司文案。桌面端由 App.vue 用 t.value.logs.* 取用；
-   * 网页演示模式（utils/tauriBridge.ts）没有 Vue 上下文，经 i18n 的 activePack() 取用。
+   * 日志与吐司文案，由 App.vue 用 t.value.logs.* 取用。
    * 带 {xxx} 的占位符由 i18n 的 fmt() 填充。
    */
   logs: {
@@ -493,70 +492,5 @@ export interface LangPack {
     update_failed: string;
     quick_domain_assigned: string;
     quick_domain_ready: string;
-    demo_tunnel_created_cred: string;
-    demo_tunnel_created: string;
-    demo_tunnel_deleted: string;
-    demo_tunnel_deleted_toast: string;
-    demo_server_connecting: string;
-    demo_server_proxy_up: string;
-    demo_server_connected: string;
-    demo_server_started: string;
-    demo_server_closed: string;
-    demo_server_stopped_toast: string;
-    demo_client_already: string;
-    demo_client_connecting: string;
-    demo_client_proxy_up: string;
-    demo_client_connected: string;
-    demo_client_not_running: string;
-    demo_client_closed: string;
-    demo_domain_invalid: string;
-    demo_lock_ok: string;
-    demo_unlock_ok: string;
-    demo_unlock_ok_toast: string;
-    demo_rotate_ok: string;
-    demo_missing_tunnel_id: string;
-    demo_remote_already: string;
-    demo_remote_token: string;
-    demo_remote_connected: string;
-    demo_default_config: string;
-    demo_remote_started: string;
-    demo_server_not_running: string;
-    demo_server_closed_named: string;
-    demo_tunnel_id_invalid: string;
-    demo_data: string;
-    demo_all: string;
-    demo_ingress_written: string;
-    demo_config_updated: string;
-    demo_host_created: string;
-    demo_host_created_toast: string;
-    demo_host_deleted: string;
-    demo_host_deleted_toast: string;
-    demo_cidr_created: string;
-    demo_cidr_created_toast: string;
-    demo_cidr_updated: string;
-    demo_cidr_updated_toast: string;
-    demo_cidr_deleted: string;
-    demo_cidr_deleted_toast: string;
-    demo_dns_bound: string;
-    demo_dns_bound_toast: string;
-    demo_dns_renamed: string;
-    demo_dns_renamed_toast: string;
-    demo_dns_unbound: string;
-    demo_dns_unbound_toast: string;
-    demo_quick_requesting: string;
-    demo_quick_started: string;
-    demo_quick_stopped: string;
-    demo_quick_stopped_toast: string;
-    demo_checking_version: string;
-    demo_version_latest: string;
-    demo_version_latest_toast: string;
-    demo_downloading: string;
-    demo_download_progress: string;
-    demo_download_done: string;
-    demo_download_started: string;
-    demo_login_page: string;
-    demo_login_page_toast: string;
-    demo_open_config_dir: string;
-    demo_exit_hint: string;
   };
 }
