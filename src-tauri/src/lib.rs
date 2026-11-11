@@ -3173,41 +3173,46 @@ fn cf_access_json(
 
 /// 取 Access 操作用的 `(apiToken, accountID)`。
 ///
-/// 配置页填了自定义 Access Token 就用它（此时 accountID 仍从 cert.pem 取；
-/// 连 cert.pem 都没有的机器，退而用该 Token 调 `/accounts` 取第一个账号），
-/// 没填则直接用「授权登录」凭证 —— 与 DNS / 配置读取共用同一份。
+/// Access 接口需要 Access: Apps and Policies 与 Access: Service Tokens 的编辑权限，
+/// 而「授权登录」签发的 cert.pem 凭证不带这两项，所以必须由用户在配置页填入专用 Token。
+/// 未填写时直接报错，不再退回 cert.pem 凭证。
+///
+/// accountID 优先从 cert.pem 取；没有 cert.pem 的机器退而用该 Token 调 `/accounts`
+/// 取第一个账号。
 fn access_api_credentials(custom_token: Option<&str>) -> Result<(String, String), String> {
-    let custom = custom_token.map(str::trim).filter(|s| !s.is_empty());
-    match custom {
-        None => cloudflare_account_credentials(),
-        Some(token) => match read_origin_cert_json() {
-            Ok(json) => {
-                let account_id = cert_json_str(&json, &["accountID"], "accountID")?;
-                Ok((token.to_string(), account_id))
-            }
-            Err(_) => {
-                let body = cf_api_request(
-                    "GET",
-                    "https://api.cloudflare.com/client/v4/accounts",
-                    token,
-                    None,
-                )?;
-                let json: serde_json::Value = serde_json::from_str(&body)
-                    .map_err(|e| format!("解析账号列表响应失败: {}", e))?;
-                let account_id = json
-                    .get("result")
-                    .and_then(|r| r.as_array())
-                    .and_then(|a| a.first())
-                    .and_then(|x| x.get("id"))
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        "无法确定账号 ID：该 Access Token 没有关联的账号权限".to_string()
-                    })?
-                    .to_string();
-                Ok((token.to_string(), account_id))
-            }
-        },
+    let token = custom_token
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            "未填写 Access Token（密码锁凭证），请先在「⚙️ 配置」页获取并保存".to_string()
+        })?;
+
+    if let Ok(json) = read_origin_cert_json() {
+        if let Ok(account_id) = cert_json_str(&json, &["accountID"], "accountID") {
+            return Ok((token.to_string(), account_id));
+        }
     }
+
+    Ok((token.to_string(), access_account_id_from_api(token)?))
+}
+
+/// 用给定的 Access Token 调 `/accounts`，取第一个账号 ID（本机没有 cert.pem 时使用）。
+fn access_account_id_from_api(token: &str) -> Result<String, String> {
+    let body = cf_api_request(
+        "GET",
+        "https://api.cloudflare.com/client/v4/accounts",
+        token,
+        None,
+    )?;
+    let json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("解析账号列表响应失败: {}", e))?;
+    json.get("result")
+        .and_then(|r| r.as_array())
+        .and_then(|a| a.first())
+        .and_then(|x| x.get("id"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| "无法确定账号 ID：该 Access Token 没有关联的账号权限".to_string())
 }
 
 /// 用一个短的随机后缀给云端资源命名，避免同域名重复上锁时撞名。

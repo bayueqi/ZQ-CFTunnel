@@ -762,12 +762,15 @@
         </div>
 
         <!-- 访问密码锁凭证：上锁 / 解锁 / 换密码走 Cloudflare Access API 时使用。
-             留空 = 使用「授权登录」的凭证；获取方式见项目 README。
+             标签右侧的按钮直接跳到 Cloudflare 的令牌创建页，权限与名称已预填。
              摆在快捷操作卡片下面 —— 它是低频的进阶配置，不该压在最常用的一排按钮上面。 -->
         <div class="fluent-card form-card access-token-card">
           <div class="access-token-row">
             <div class="fluent-form-group access-token-field">
-              <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
+              <div class="access-token-label">
+                <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
+                <button class="link-btn" @click="openAccessTokenPage">{{ t.misc_tab.access_token_get }}</button>
+              </div>
               <div class="input-container">
                 <input
                   type="text"
@@ -781,7 +784,6 @@
               {{ t.server_tab.btn_save }}
             </button>
           </div>
-          <div class="modal-hint">{{ t.misc_tab.access_token_hint }}</div>
         </div>
 
       </section>
@@ -2627,8 +2629,8 @@ const credDisplay = (value: string, hostname: string, field: 'id' | 'secret'): s
 const showLockInfoModal = ref(false);
 const lockInfoDraft = ref<{ hostname: string; clientId: string; clientSecret: string } | null>(null);
 
-// 配置页的 Access Token：留空 = 用「授权登录」凭证。
-// 该凭证需要 Access: Apps and Policies 与 Access: Service Tokens 两个编辑权限（见 README）。
+// 配置页的 Access Token：密码锁专用凭证，必须具备 Access: Apps and Policies
+// 与 Access: Service Tokens 两个编辑权限。「授权登录」签发的 cert.pem 不带这两项，所以必须单独填。
 const accessTokenInput = ref(localStorage.getItem('access_api_token') || '');
 const saveAccessToken = () => {
   accessTokenInput.value = accessTokenInput.value.trim();
@@ -2636,6 +2638,14 @@ const saveAccessToken = () => {
   appendLog(`[INFO] ${t.value.logs.access_token_saved_log}`, 'info', 'misc');
   showToast(t.value.misc_tab.access_token_saved);
 };
+
+// 令牌创建页：两项权限与名称已预填，accountId 用 * 表示使用当前登录账号，不绑定任何具体账号。
+const ACCESS_TOKEN_URL =
+  'https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=' +
+  '%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C' +
+  '%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%5D' +
+  '&accountId=*&zoneId=all&name=CFTunnel';
+const openAccessTokenPage = () => openUrl(ACCESS_TOKEN_URL);
 
 // 上锁（底层）：调后端创建 Access 应用 + Service Token，成功后按域名落库并展示凭据
 const doLock = async (hostname: string): Promise<boolean> => {
@@ -5885,6 +5895,26 @@ onUnmounted(() => {
 .access-token-field {
   flex: 1;
   margin-bottom: 0;
+}
+
+.access-token-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-color);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 
 .access-token-save {

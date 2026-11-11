@@ -343,8 +343,8 @@ export interface LangPack {
     btn_download: string;
     // 访问密码锁凭证（Cloudflare Access API 用）
     access_token_label: string;
+    access_token_get: string;
     access_token_placeholder: string;
-    access_token_hint: string;
     access_token_saved: string;
     /** 授权登录卡片说明 */
     btn_login_desc: string;
