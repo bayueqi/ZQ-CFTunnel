@@ -394,7 +394,6 @@ export interface LangPack {
     dns_route_delete_failed: string;
     dns_failed_kept_in_ingress: string;
     tunnel_save_failed: string;
-    access_token_saved_log: string;
     lock_ok: string;
     lock_failed: string;
     unlock_failed: string;

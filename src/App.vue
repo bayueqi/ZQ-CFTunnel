@@ -762,27 +762,33 @@
         </div>
 
         <!-- 访问密码锁凭证：上锁 / 解锁 / 换密码走 Cloudflare Access API 时使用。
-             标签右侧的按钮直接跳到 Cloudflare 的令牌创建页，权限与名称已预填。
-             摆在快捷操作卡片下面 —— 它是低频的进阶配置，不该压在最常用的一排按钮上面。 -->
+             标签右侧的图标直接跳到 Cloudflare 的令牌创建页，权限与名称已预填。 -->
         <div class="fluent-card form-card access-token-card">
-          <div class="access-token-row">
-            <div class="fluent-form-group access-token-field">
-              <div class="access-token-label">
-                <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
-                <button class="link-btn" @click="openAccessTokenPage">{{ t.misc_tab.access_token_get }}</button>
-              </div>
-              <div class="input-container">
-                <input
-                  type="text"
-                  v-model="accessTokenInput"
-                  :placeholder="t.misc_tab.access_token_placeholder"
-                  class="fluent-input mono"
-                />
-              </div>
+          <div class="fluent-form-group access-token-field">
+            <div class="access-token-label">
+              <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
+              <button
+                class="link-btn"
+                :title="t.misc_tab.access_token_get"
+                :aria-label="t.misc_tab.access_token_get"
+                @click="openAccessTokenPage"
+              >
+                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14 21 3" />
+                </svg>
+              </button>
             </div>
-            <button class="fluent-btn primary access-token-save" @click="saveAccessToken">
-              {{ t.server_tab.btn_save }}
-            </button>
+            <div class="input-container">
+              <input
+                type="text"
+                v-model="accessTokenInput"
+                :placeholder="t.misc_tab.access_token_placeholder"
+                class="fluent-input mono"
+                @change="saveAccessToken"
+              />
+            </div>
           </div>
         </div>
 
@@ -2631,11 +2637,11 @@ const lockInfoDraft = ref<{ hostname: string; clientId: string; clientSecret: st
 
 // 配置页的 Access Token：密码锁专用凭证，必须具备 Access: Apps and Policies
 // 与 Access: Service Tokens 两个编辑权限。「授权登录」签发的 cert.pem 不带这两项，所以必须单独填。
+// 输入框失焦即落盘，不再单独提供保存按钮。
 const accessTokenInput = ref(localStorage.getItem('access_api_token') || '');
 const saveAccessToken = () => {
   accessTokenInput.value = accessTokenInput.value.trim();
   localStorage.setItem('access_api_token', accessTokenInput.value);
-  appendLog(`[INFO] ${t.value.logs.access_token_saved_log}`, 'info', 'misc');
   showToast(t.value.misc_tab.access_token_saved);
 };
 
@@ -2646,7 +2652,7 @@ const ACCESS_TOKEN_URL = (accountId?: string) =>
   '%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C' +
   '%7B%22key%22%3A%22access_service_token%22%2C%22type%22%3A%22edit%22%7D%5D' +
   (accountId ? `&accountId=${accountId}` : '') +
-  '&name=CFTunnel';
+  '&name=CFTunnel-Access';
 const openAccessTokenPage = async () => {
   let accountId: string | undefined;
   try {
