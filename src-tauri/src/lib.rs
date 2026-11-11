@@ -3215,6 +3215,12 @@ fn access_account_id_from_api(token: &str) -> Result<String, String> {
         .ok_or_else(|| "无法确定账号 ID：该 Access Token 没有关联的账号权限".to_string())
 }
 
+/// 读取本机 cert.pem 里的账号 ID，供「获取 Access Token」按钮把创建页定位到当前账号。
+#[tauri::command]
+fn get_account_id() -> Result<String, String> {
+    cloudflare_account_credentials().map(|(_, account_id)| account_id)
+}
+
 /// 用一个短的随机后缀给云端资源命名，避免同域名重复上锁时撞名。
 fn lock_resource_suffix() -> String {
     let nanos = std::time::SystemTime::now()
@@ -3644,7 +3650,8 @@ pub fn run() {
             delete_dns_route,
             tunnel_lock,
             tunnel_unlock,
-            tunnel_rotate_password
+            tunnel_rotate_password,
+            get_account_id
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

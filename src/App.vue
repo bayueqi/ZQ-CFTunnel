@@ -2639,13 +2639,23 @@ const saveAccessToken = () => {
   showToast(t.value.misc_tab.access_token_saved);
 };
 
-// 令牌创建页：两项权限与名称已预填，accountId 用 * 表示使用当前登录账号，不绑定任何具体账号。
-const ACCESS_TOKEN_URL =
+// 令牌创建页：两项权限与名称已预填。key 用 dash 内部短名，下划线风格。
+// accountId 从本机 cert.pem 读，创建页直接定位到已授权的账号。
+const ACCESS_TOKEN_URL = (accountId?: string) =>
   'https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=' +
   '%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C' +
-  '%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%5D' +
-  '&accountId=*&zoneId=all&name=CFTunnel';
-const openAccessTokenPage = () => openUrl(ACCESS_TOKEN_URL);
+  '%7B%22key%22%3A%22access_service_token%22%2C%22type%22%3A%22edit%22%7D%5D' +
+  (accountId ? `&accountId=${accountId}` : '') +
+  '&name=CFTunnel';
+const openAccessTokenPage = async () => {
+  let accountId: string | undefined;
+  try {
+    accountId = await invoke<string>('get_account_id');
+  } catch {
+    accountId = undefined;
+  }
+  openUrl(ACCESS_TOKEN_URL(accountId));
+};
 
 // 上锁（底层）：调后端创建 Access 应用 + Service Token，成功后按域名落库并展示凭据
 const doLock = async (hostname: string): Promise<boolean> => {
