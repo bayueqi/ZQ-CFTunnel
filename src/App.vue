@@ -768,12 +768,12 @@
             <div class="access-token-label">
               <label class="form-label">{{ t.misc_tab.access_token_label }}</label>
               <button
-                class="link-btn"
+                class="fluent-btn small access-token-jump"
                 :title="t.misc_tab.access_token_get"
                 :aria-label="t.misc_tab.access_token_get"
                 @click="openAccessTokenPage"
               >
-                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <svg class="ico btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                   <path d="M15 3h6v6" />
                   <path d="M10 14 21 3" />
@@ -5902,40 +5902,29 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-.access-token-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-}
-
 .access-token-field {
-  flex: 1;
   margin-bottom: 0;
 }
 
 .access-token-label {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
-.link-btn {
-  padding: 0;
-  border: none;
-  background: none;
+.access-token-jump {
+  padding: 4px 8px;
   color: var(--accent-color);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
 }
 
-.link-btn:hover {
-  text-decoration: underline;
+.access-token-jump .ico {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.18s ease;
 }
 
-.access-token-save {
-  height: 34px;
-  flex-shrink: 0;
+.access-token-jump:hover:not(:disabled) .ico {
+  transform: translate(1px, -1px);
 }
 
 .hostname-empty {
